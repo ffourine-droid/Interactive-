@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Experiment Explorer</title>
+    <!-- Supabase JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Modern Minimal Styles */
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg: #f9fafb;
+            --card-bg: #ffffff;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --border: #e5e7eb;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 2rem 1rem;
+        }
+
+        .container { max-width: 800px; margin: 0 auto; }
+
+        header { text-align: center; margin-bottom: 2rem; }
+        h1 { font-weight: 800; color: var(--primary); font-size: 2.5rem; letter-spacing: -0.025em; }
+        
+        .search-container {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            background: var(--card-bg);
+            padding: 0.5rem;
+            border-radius: 1rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            outline: none;
+            font-size: 1rem;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .results-list { list-style: none; display: grid; gap: 1rem; }
+        .result-item {
+            background: var(--card-bg);
+            padding: 1.25rem;
+            border-radius: 1rem;
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            animation: slideIn 0.3s ease-out forwards;
+            opacity: 0;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .result-item:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .result-title { font-weight: 700; font-size: 1.1rem; }
+        .result-keywords { font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+        #preview-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: white;
+            z-index: 1000;
+            flex-direction: column;
+        }
+
+        .modal-content {
+            background: white;
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            background: #f9fafb;
+        }
+
+        iframe { width: 100%; height: 100%; border: none; flex: 1; background: white; }
+        .status-msg { text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic; }
+
+        /* Spinner Styles */
+        .spinner {
+            display: none;
+            width: 40px;
+            height: 40px;
+            margin: 2rem auto;
+            border: 4px solid rgba(79, 70, 229, 0.1);
+            border-left-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Skeleton Loader Styles */
+        .skeleton-item {
+            background: var(--card-bg);
+            padding: 1.25rem;
+            border-radius: 1rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            pointer-events: none;
+        }
+        .skeleton-line {
+            height: 1rem;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+            border-radius: 0.25rem;
+        }
+        .skeleton-title { width: 60%; margin-bottom: 0.75rem; height: 1.25rem; }
+        .skeleton-text { width: 40%; }
+
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ExpExplorer</h1>
+            <p>Search and preview experiments from Supabase</p>
+        </header>
+
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="Search keywords (e.g. physics, light)...">
+            <button id="search-btn">Search</button>
+        </div>
+
+        <div id="loading-spinner" class="spinner"></div>
+
+        <ul id="results-list" class="results-list">
+            <div class="status-msg">Enter a keyword to begin.</div>
+        </ul>
+    </div>
+
+    <div id="preview-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <button onclick="closeModal()" style="background: transparent; color: var(--text-main); padding: 0.5rem; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; hover:bg-gray-100;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <h2 id="modal-title" style="font-size: 1.25rem; font-weight: 700;">Preview</h2>
+                </div>
+                <div style="color: var(--text-muted); font-size: 0.875rem; font-weight: 500;">Experiment Preview</div>
+            </div>
+            <iframe id="modal-iframe" sandbox="allow-scripts allow-modals"></iframe>
+        </div>
+    </div>
+
+    <script>
+        // These will be replaced by the server if environment variables are set
+        let SUPABASE_URL = '__SUPABASE_URL_PLACEHOLDER__';
+        let SUPABASE_ANON_KEY = '__SUPABASE_KEY_PLACEHOLDER__';
+
+        // Fallback logic
+        if (!SUPABASE_URL || SUPABASE_URL.includes('_PLACEHOLDER__') || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+            SUPABASE_URL = 'https://nfttlgbkdvuutrgmthkz.supabase.co';
+        }
+
+        let _supabase;
+        let initError = null;
+        
+        // Check if we have a real key (not a placeholder or empty)
+        const hasKey = SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('_PLACEHOLDER__') && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+        const hasValidUrl = SUPABASE_URL && SUPABASE_URL.startsWith('http');
+
+        function initSupabase() {
+            if (!hasKey || !hasValidUrl) return;
+            
+            try {
+                if (typeof supabase === 'undefined') {
+                    throw new Error("Supabase library (CDN) failed to load. Check your internet connection or ad-blocker.");
+                }
+                
+                _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log("Supabase initialized successfully with URL:", SUPABASE_URL);
+                initError = null;
+            } catch (e) {
+                console.error("Supabase initialization error:", e);
+                initError = e.message;
+            }
+        }
+
+        // Run initialization
+        initSupabase();
+
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+        const resultsList = document.getElementById('results-list');
+        const previewModal = document.getElementById('preview-modal');
+        const modalIframe = document.getElementById('modal-iframe');
+        const modalTitle = document.getElementById('modal-title');
+        const spinner = document.getElementById('loading-spinner');
+
+        // Debounce helper
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Sanitize helper
+        function sanitizeInput(str) {
+            return str.replace(/[<>]/g, '').trim();
+        }
+
+        async function performSearch() {
+            const query = sanitizeInput(searchInput.value);
+            
+            if (!query) {
+                resultsList.innerHTML = '<div class="status-msg">Enter a keyword to begin.</div>';
+                spinner.style.display = 'none';
+                return;
+            }
+
+            if (!hasKey) {
+                resultsList.innerHTML = `
+                    <div class="status-msg" style="color: #ef4444; background: #fee2e2; padding: 1.5rem; border-radius: 1rem; border: 1px solid #fecaca;">
+                        <strong style="display: block; margin-bottom: 0.5rem;">⚠️ Supabase Key Missing</strong>
+                        Please add your <strong>VITE_SUPABASE_ANON_KEY</strong> to the <strong>Secrets</strong> panel in AI Studio.
+                    </div>`;
+                return;
+            }
+
+            if (!hasValidUrl) {
+                resultsList.innerHTML = `
+                    <div class="status-msg" style="color: #ef4444; background: #fee2e2; padding: 1.5rem; border-radius: 1rem; border: 1px solid #fecaca;">
+                        <strong style="display: block; margin-bottom: 0.5rem;">❌ Invalid Supabase URL</strong>
+                        The URL "${SUPABASE_URL}" is not valid.
+                    </div>`;
+                return;
+            }
+
+            // Try to re-initialize if it failed previously
+            if (!_supabase) initSupabase();
+
+            if (initError) {
+                resultsList.innerHTML = `
+                    <div class="status-msg" style="color: #ef4444; background: #fee2e2; padding: 1.5rem; border-radius: 1rem; border: 1px solid #fecaca;">
+                        <strong style="display: block; margin-bottom: 0.5rem;">❌ Initialization Error</strong>
+                        ${initError}
+                        <button onclick="location.reload()" style="margin-top: 1rem; display: block; background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer;">Reload Page</button>
+                    </div>`;
+                return;
+            }
+
+            // Show Skeletons immediately for perceived performance
+            showSkeletons();
+            spinner.style.display = 'none'; // We use skeletons instead of a central spinner now
+
+            try {
+                const { data, error } = await _supabase
+                    .from('experiments')
+                    .select('*')
+                    .ilike('keywords', `%${query}%`);
+
+                if (error) throw error;
+                renderResults(data);
+            } catch (err) {
+                resultsList.innerHTML = `
+                    <div class="status-msg" style="color: #ef4444; border: 1px solid #fecaca; background: #fee2e2; padding: 1rem; border-radius: 0.75rem;">
+                        <strong>Search Failed:</strong><br>${err.message}
+                    </div>`;
+            }
+        }
+
+        function showSkeletons() {
+            resultsList.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const li = document.createElement('li');
+                li.className = 'skeleton-item';
+                li.innerHTML = `
+                    <div class="skeleton-line skeleton-title"></div>
+                    <div class="skeleton-line skeleton-text"></div>
+                `;
+                resultsList.appendChild(li);
+            }
+        }
+
+        function renderResults(experiments) {
+            if (!experiments || experiments.length === 0) {
+                resultsList.innerHTML = `
+                    <div class="status-msg">
+                        <p>No results found for "${sanitizeInput(searchInput.value)}".</p>
+                        <p style="font-size: 0.875rem; margin-top: 0.5rem;">Try different keywords or check your database.</p>
+                    </div>`;
+                return;
+            }
+            resultsList.innerHTML = '';
+            experiments.forEach(exp => {
+                const li = document.createElement('li');
+                li.className = 'result-item';
+                li.innerHTML = `<div class="result-title">${exp.title}</div><div class="result-keywords">${exp.keywords}</div>`;
+                li.onclick = () => {
+                    modalTitle.textContent = exp.title;
+                    modalIframe.srcdoc = exp.html_content;
+                    previewModal.style.display = 'flex';
+                };
+                resultsList.appendChild(li);
+            });
+        }
+
+        function closeModal() {
+            previewModal.style.display = 'none';
+            modalIframe.srcdoc = '';
+        }
+
+        const debouncedSearch = debounce(performSearch, 500);
+
+        searchBtn.onclick = performSearch;
+        searchInput.oninput = debouncedSearch;
+        searchInput.onkeydown = (e) => { if (e.key === 'Enter') performSearch(); };
+    </script>
+</body>
+</html>

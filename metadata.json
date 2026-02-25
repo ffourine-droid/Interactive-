@@ -1,0 +1,5 @@
+{
+  "name": "Experiment Explorer",
+  "description": "A clean, modern interface to search and preview experiments stored in Supabase.",
+  "requestFramePermissions": []
+}
