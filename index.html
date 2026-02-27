@@ -303,8 +303,8 @@
             if (!hasKey) {
                 resultsList.innerHTML = `
                     <div class="status-msg" style="color: #ef4444; background: #fee2e2; padding: 1.5rem; border-radius: 1rem; border: 1px solid #fecaca;">
-                        <strong style="display: block; margin-bottom: 0.5rem;">⚠️ Supabase Key Missing</strong>
-                        Please add your <strong>VITE_SUPABASE_ANON_KEY</strong> to the <strong>Secrets</strong> panel in AI Studio.
+                                <strong style="display: block; margin-bottom: 0.5rem;">⚠️ Supabase Key Missing</strong>
+                        Please set your <strong>VITE_SUPABASE_ANON_KEY</strong> (and <strong>VITE_SUPABASE_URL</strong>) as environment variables in your deployment platform.
                     </div>`;
                 return;
             }
