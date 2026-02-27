@@ -9,10 +9,27 @@ import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, X, ChevronLef
 import { motion, AnimatePresence } from 'motion/react';
 
 // Supabase configuration using Vite environment variables
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://nfttlgbkdvuutrgmthkz.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const getSupabaseUrl = () => {
+  let url = (import.meta.env.VITE_SUPABASE_URL || 'https://nfttlgbkdvuutrgmthkz.supabase.co').trim();
+  // If it's just a project ref (e.g. "nfttlgbkdvuutrgmthkz"), convert to full URL
+  if (url && !url.includes('.') && !url.startsWith('http')) {
+    return `https://${url}.supabase.co`;
+  }
+  return url;
+};
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_URL = getSupabaseUrl();
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+// Safe initialization to prevent app crash on invalid URL
+let supabase: any = null;
+try {
+  if (SUPABASE_URL && (SUPABASE_URL.startsWith('http://') || SUPABASE_URL.startsWith('https://'))) {
+    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || 'no-key-provided');
+  }
+} catch (err) {
+  console.error('Supabase initialization error:', err);
+}
 
 interface Experiment {
   id: string | number;
@@ -35,6 +52,12 @@ export default function App() {
     if (e) e.preventDefault();
     const query = searchQuery.trim();
     if (!query) return;
+
+    if (!supabase) {
+      setError('Supabase client failed to initialize. Please check if VITE_SUPABASE_URL is a valid URL (e.g., https://your-project.supabase.co).');
+      setLoading(false);
+      return;
+    }
 
     if (!isConfigured) {
       setError('Supabase Key Missing. Please set VITE_SUPABASE_ANON_KEY in your environment variables.');
