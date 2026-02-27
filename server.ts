@@ -19,8 +19,10 @@ app.get('/', (req, res) => {
   try {
     let html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
     
-    // Inject environment variables into the HTML
-    let supabaseUrl = (process.env.VITE_SUPABASE_URL || '').trim();
+    // Get Supabase configuration from environment variables
+    // Support both VITE_ prefixed and non-prefixed variants
+    let supabaseUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
+    let supabaseKey = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
     
     // If it's just the project ref (no dots or slashes), construct the full URL
     if (supabaseUrl && !supabaseUrl.includes('.') && !supabaseUrl.startsWith('http')) {
@@ -32,13 +34,14 @@ app.get('/', (req, res) => {
       supabaseUrl = 'https://nfttlgbkdvuutrgmthkz.supabase.co';
     }
     
-    let supabaseKey = (process.env.VITE_SUPABASE_ANON_KEY || '').trim();
     if (!supabaseKey || supabaseKey === 'YOUR_SUPABASE_ANON_KEY') {
       supabaseKey = '__SUPABASE_KEY_PLACEHOLDER__'; // Keep placeholder if no key provided
     }
     
-    console.log(`Injecting URL: ${supabaseUrl}`);
+    console.log(`[Supabase Config] URL: ${supabaseUrl}`);
+    console.log(`[Supabase Config] Key provided: ${supabaseKey !== '__SUPABASE_KEY_PLACEHOLDER__' ? 'Yes' : 'No'}`);
     
+    // Replace placeholders in HTML
     html = html.replace(/__SUPABASE_URL_PLACEHOLDER__/g, supabaseUrl);
     html = html.replace(/__SUPABASE_KEY_PLACEHOLDER__/g, supabaseKey);
     
@@ -51,4 +54,10 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`Server is running on http://${HOST}:${PORT}`);
+  console.log('\n📌 ENVIRONMENT SETUP:');
+  console.log('  - VITE_SUPABASE_URL:', process.env.VITE_SUPABASE_URL ? '✓ Set' : '✗ Not set');
+  console.log('  - VITE_SUPABASE_ANON_KEY:', process.env.VITE_SUPABASE_ANON_KEY ? '✓ Set' : '✗ Not set');
+  console.log('\n💡 To fix the "Supabase Key Missing" error:');
+  console.log('  Environment variables should be set in your deployment platform.');
+  console.log('  For local development, add them to the .env file.');
 });
