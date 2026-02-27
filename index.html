@@ -187,8 +187,6 @@
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
         }
-        /* Modal close button hover fix: use CSS hover, not an inline Tailwind-like token */
-        .modal-close:hover { background: #f3f4f6; }
     </style>
 </head>
 <body>
@@ -217,7 +215,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <div style="display: flex; align-items: center; gap: 1rem;">
-                    <button onclick="closeModal()" class="modal-close" style="background: transparent; color: var(--text-main); padding: 0.5rem; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%;">
+                    <button onclick="closeModal()" style="background: transparent; color: var(--text-main); padding: 0.5rem; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; hover:bg-gray-100;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
                     </button>
                     <h2 id="modal-title" style="font-size: 1.25rem; font-weight: 700;">Preview</h2>
@@ -229,13 +227,12 @@
     </div>
 
     <script>
-        // These values are replaced by Vite's define config during build
-        // See vite.config.ts for the define configuration
-        let SUPABASE_URL = __VITE_SUPABASE_URL__ || '__SUPABASE_URL_PLACEHOLDER__';
-        let SUPABASE_ANON_KEY = __VITE_SUPABASE_KEY__ || '__SUPABASE_KEY_PLACEHOLDER__';
+        // These will be replaced by the server if environment variables are set
+        let SUPABASE_URL = '__SUPABASE_URL_PLACEHOLDER__';
+        let SUPABASE_ANON_KEY = '__SUPABASE_KEY_PLACEHOLDER__';
 
-        // Fallback to known working project if values are empty
-        if (!SUPABASE_URL || SUPABASE_URL === '' || SUPABASE_URL.includes('_PLACEHOLDER__') || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+        // Fallback logic
+        if (!SUPABASE_URL || SUPABASE_URL.includes('_PLACEHOLDER__') || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
             SUPABASE_URL = 'https://nfttlgbkdvuutrgmthkz.supabase.co';
         }
 
@@ -243,19 +240,11 @@
         let initError = null;
         
         // Check if we have a real key (not a placeholder or empty)
-        const hasKey = SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== '' && !SUPABASE_ANON_KEY.includes('_PLACEHOLDER__') && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+        const hasKey = SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('_PLACEHOLDER__') && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
         const hasValidUrl = SUPABASE_URL && SUPABASE_URL.startsWith('http');
 
-        console.log('[Supabase] Config Status:');
-        console.log('  URL:', SUPABASE_URL ? SUPABASE_URL.substring(0, 40) + '...' : 'EMPTY');
-        console.log('  Key present:', !!SUPABASE_ANON_KEY);
-        console.log('  Ready:', hasKey && hasValidUrl);
-
         function initSupabase() {
-            if (!hasKey || !hasValidUrl) {
-                console.warn('[Supabase] Skipping initialization - missing configuration');
-                return;
-            }
+            if (!hasKey || !hasValidUrl) return;
             
             try {
                 if (typeof supabase === 'undefined') {
@@ -263,10 +252,10 @@
                 }
                 
                 _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                console.log("✅ Supabase initialized successfully");
+                console.log("Supabase initialized successfully with URL:", SUPABASE_URL);
                 initError = null;
             } catch (e) {
-                console.error("❌ Supabase initialization error:", e);
+                console.error("Supabase initialization error:", e);
                 initError = e.message;
             }
         }
@@ -311,19 +300,24 @@
 
             if (!hasKey) {
                 resultsList.innerHTML = `
-                    <div class="status-msg" style="color: #ef4444; background: #fee2e2; padding: 1.5rem; border-radius: 1rem; border: 1px solid #fecaca;">
-                        <strong style="display: block; margin-bottom: 0.5rem;">⚠️ Supabase Key Missing</strong>
-                        <div style="font-size: 0.875rem; margin: 0.5rem 0; line-height: 1.5;">
-                            <p>Please set your <strong>VITE_SUPABASE_ANON_KEY</strong> and <strong>VITE_SUPABASE_URL</strong> as environment variables in your deployment platform.</p>
-                            <details style="margin-top: 1rem; padding: 0.5rem; background: rgba(0,0,0,0.1); border-radius: 0.25rem; cursor: pointer;">
-                                <summary style="cursor: pointer; font-weight: 500;">Debug Info</summary>
-                                <code style="display: block; white-space: pre-wrap; word-break: break-all; margin-top: 0.5rem; font-size: 0.75rem;">URL: ${SUPABASE_URL.substring(0, 50)}...
-Key Present: ${!!SUPABASE_ANON_KEY}
-Key Length: ${SUPABASE_ANON_KEY.length}
-Is Placeholder: ${SUPABASE_ANON_KEY.includes('_PLACEHOLDER__')}
-</code>
-                            </details>
+                    <div class="status-msg" style="color: #ef4444; background: #fee2e2; padding: 2rem; border-radius: 1.5rem; border: 1px solid #fecaca; text-align: left; max-width: 600px; margin: 0 auto;">
+                        <strong style="display: block; font-size: 1.25rem; margin-bottom: 1rem;">⚠️ Supabase Key Missing</strong>
+                        <p style="margin-bottom: 1rem; color: #991b1b;">The application couldn't find your Supabase API key. To fix this:</p>
+                        
+                        <div style="background: white; padding: 1rem; border-radius: 0.75rem; border: 1px solid #fecaca; font-size: 0.875rem; color: #1e293b; margin-bottom: 1.5rem;">
+                            <h4 style="margin-bottom: 0.5rem; font-weight: 700;">For Vercel Deployment:</h4>
+                            <ol style="padding-left: 1.25rem; line-height: 1.6;">
+                                <li>Go to your <strong>Vercel Dashboard</strong>.</li>
+                                <li>Select this project &gt; <strong>Settings</strong> &gt; <strong>Environment Variables</strong>.</li>
+                                <li>Add <code>VITE_SUPABASE_ANON_KEY</code> with your Supabase Anon Key.</li>
+                                <li>Add <code>VITE_SUPABASE_URL</code> with your Supabase URL.</li>
+                                <li><strong>Redeploy</strong> your application for changes to take effect.</li>
+                            </ol>
                         </div>
+
+                        <p style="font-size: 0.8125rem; color: #7f1d1d; opacity: 0.8;">
+                            <em>Note: If you are using a static deployment, the server-side injection will not work. Ensure you are deploying as a Node.js application.</em>
+                        </p>
                     </div>`;
                 return;
             }
