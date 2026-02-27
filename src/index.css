@@ -1,10 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-brand-black: #0F0F0F;
+  --color-brand-brown: #2C1B12;
+  --color-brand-orange: #FF7A00;
+  --color-brand-cream: #F5E6D3;
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 font-sans;
+  @apply bg-brand-black text-brand-cream font-sans selection:bg-brand-orange selection:text-white;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0F0F0F;
+}
+::-webkit-scrollbar-thumb {
+  background: #2C1B12;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FF7A00;
 }
