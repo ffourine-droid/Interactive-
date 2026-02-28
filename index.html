@@ -1,23 +1,280 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0F0F0F" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="https://picsum.photos/seed/azilearn/192/192" />
-    <title>AziLearn</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+<html lang="en-KE">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#FF6B00">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://picsum.photos/seed/azilearn/192/192">
+    <link rel="manifest" href="/manifest.json">
+    
+    <title>AZILEARN | Study Smarter. Pass KCSE.</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <!-- Floating Orbs Background -->
+    <div class="orb-container">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p id="loading-text">Opening topic... 🚀</p>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- App Content -->
+    <div id="app">
+        <!-- Home Section -->
+        <section id="home-page" class="page active">
+            <header class="top-bar">
+                <div class="logo">AZILEARN</div>
+                <button class="menu-btn" id="menu-trigger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </header>
+
+            <div class="hero">
+                <h1 class="hero-title">Study Smarter,<br><span class="gradient-text">Pass KCSE 🔥</span></h1>
+                <p class="hero-subtext">Interactive lessons for every KCSE subject</p>
+                
+                <div class="search-container">
+                    <div class="search-wrapper">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="main-search" placeholder="Search Quadratic Equations...">
+                        <div id="search-suggestions" class="suggestions hidden"></div>
+                    </div>
+                </div>
+
+                <div class="subject-chips">
+                    <div class="chips-scroll">
+                        <button class="chip ripple">Math</button>
+                        <button class="chip ripple">Physics</button>
+                        <button class="chip ripple">Chemistry</button>
+                        <button class="chip ripple">Biology</button>
+                        <button class="chip ripple">English</button>
+                        <button class="chip ripple">History</button>
+                        <button class="chip ripple">Geography</button>
+                        <button class="chip ripple">CRE</button>
+                        <button class="chip ripple">Kiswahili</button>
+                        <button class="chip ripple">Business</button>
+                        <button class="chip ripple">Agriculture</button>
+                        <button class="chip ripple">Computer</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="marquee-bar">
+                <div class="marquee-track">
+                    <span class="marquee-pill">📚 2,400+ Topics</span>
+                    <span class="marquee-pill">🎯 24 Subjects</span>
+                    <span class="marquee-pill">✅ Free Forever</span>
+                    <span class="marquee-pill">🇰🇪 KCSE Focused</span>
+                    <span class="marquee-pill">🔥 Updated 2025</span>
+                    <span class="marquee-pill">⚡ Works Offline</span>
+                    <!-- Duplicate for infinite effect -->
+                    <span class="marquee-pill">📚 2,400+ Topics</span>
+                    <span class="marquee-pill">🎯 24 Subjects</span>
+                    <span class="marquee-pill">✅ Free Forever</span>
+                    <span class="marquee-pill">🇰🇪 KCSE Focused</span>
+                    <span class="marquee-pill">🔥 Updated 2025</span>
+                    <span class="marquee-pill">⚡ Works Offline</span>
+                </div>
+            </div>
+
+            <div class="content-padding">
+                <div class="section-header">
+                    <h2 class="section-title">Explore Subjects</h2>
+                </div>
+                <div class="subjects-grid" id="subjects-grid">
+                    <!-- Cards injected by JS -->
+                </div>
+
+                <div class="section-header mt-10">
+                    <h2 class="section-title">🔥 Trending This Week</h2>
+                </div>
+                <div class="trending-scroll">
+                    <div class="trending-card ripple" data-topic="KCSE 2022 Maths Paper 2">
+                        <div class="card-badge math">Math</div>
+                        <h3 class="card-title">KCSE 2022 Maths Paper 2</h3>
+                        <div class="card-meta">
+                            <span class="difficulty-dot hard"></span>
+                            <span>Hard</span>
+                        </div>
+                        <div class="card-cta">Study Now →</div>
+                    </div>
+                    <div class="trending-card ripple" data-topic="Quadratic Equations Form 3">
+                        <div class="card-badge math">Math</div>
+                        <h3 class="card-title">Quadratic Equations Form 3</h3>
+                        <div class="card-meta">
+                            <span class="difficulty-dot medium"></span>
+                            <span>Medium</span>
+                        </div>
+                        <div class="card-cta">Study Now →</div>
+                    </div>
+                    <div class="trending-card ripple" data-topic="Photosynthesis Form 2">
+                        <div class="card-badge bio">Biology</div>
+                        <h3 class="card-title">Photosynthesis Form 2</h3>
+                        <div class="card-meta">
+                            <span class="difficulty-dot easy"></span>
+                            <span>Easy</span>
+                        </div>
+                        <div class="card-cta">Study Now →</div>
+                    </div>
+                </div>
+
+                <div class="motivation-banner">
+                    <div class="banner-content">
+                        <h3>KCSE 2025 is coming.</h3>
+                        <p>Start preparing today — it's completely free.</p>
+                        <button class="banner-cta ripple">Start Studying →</button>
+                    </div>
+                    <div class="banner-pattern"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Subjects Page -->
+        <section id="subjects-page" class="page">
+            <div class="page-header">
+                <h2 class="page-title">All Subjects</h2>
+                <div class="search-wrapper mini">
+                    <input type="text" id="subject-filter" placeholder="Filter subjects...">
+                </div>
+            </div>
+            <div class="subjects-list" id="full-subjects-list">
+                <!-- List injected by JS -->
+            </div>
+        </section>
+
+        <!-- Search Page -->
+        <section id="search-page" class="page">
+            <div class="page-header">
+                <h2 class="page-title">Search Topics</h2>
+                <div class="search-wrapper">
+                    <input type="text" id="search-input-full" placeholder="What do you want to learn?" autofocus>
+                </div>
+            </div>
+            <div class="search-content">
+                <div id="recent-searches-container">
+                    <h3 class="sub-header">Recently Searched</h3>
+                    <div id="recent-searches-list" class="recent-list"></div>
+                </div>
+                <div id="search-results-full" class="results-list"></div>
+            </div>
+        </section>
+
+        <!-- Profile Page -->
+        <section id="profile-page" class="page">
+            <div class="profile-header">
+                <div class="avatar">S</div>
+                <h2 class="student-name">Student</h2>
+                <p class="student-tag">KCSE Candidate</p>
+            </div>
+            
+            <div class="stats-row">
+                <div class="stat-card">
+                    <span class="stat-val" id="stat-topics">0</span>
+                    <span class="stat-label">Topics Viewed</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val" id="stat-subjects">0</span>
+                    <span class="stat-label">Subjects</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val">1</span>
+                    <span class="stat-label">Days Streak</span>
+                </div>
+            </div>
+
+            <div class="settings-list">
+                <div class="settings-item ripple">
+                    <div class="settings-icon">🔔</div>
+                    <div class="settings-label">Notifications</div>
+                    <div class="settings-action">On</div>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-icon">🌙</div>
+                    <div class="settings-label">Dark Mode</div>
+                    <div class="settings-action">
+                        <label class="toggle">
+                            <input type="checkbox" id="dark-mode-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="settings-item ripple">
+                    <div class="settings-icon">ℹ️</div>
+                    <div class="settings-label">About AZILEARN</div>
+                    <div class="settings-chevron">›</div>
+                </div>
+                <div class="settings-item ripple">
+                    <div class="settings-icon">⭐</div>
+                    <div class="settings-label">Rate App</div>
+                    <div class="settings-chevron">›</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <button class="nav-item active ripple" data-page="home">
+                <div class="nav-icon">🏠</div>
+                <span class="nav-label">Home</span>
+                <div class="nav-dot"></div>
+            </button>
+            <button class="nav-item ripple" data-page="subjects">
+                <div class="nav-icon">📚</div>
+                <span class="nav-label">Subjects</span>
+                <div class="nav-dot"></div>
+            </button>
+            <button class="nav-item ripple" data-page="search">
+                <div class="nav-icon">🔍</div>
+                <span class="nav-label">Search</span>
+                <div class="nav-dot"></div>
+            </button>
+            <button class="nav-item ripple" data-page="profile">
+                <div class="nav-icon">👤</div>
+                <span class="nav-label">Profile</span>
+                <div class="nav-dot"></div>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Install Banner -->
+    <div id="install-banner" class="install-banner hidden">
+        <div class="install-content">
+            <img src="https://picsum.photos/seed/azilearn/64/64" alt="AZILEARN" class="install-icon">
+            <div>
+                <p class="install-title">Install AZILEARN</p>
+                <p class="install-sub">Study offline anytime</p>
+            </div>
+        </div>
+        <button id="install-btn" class="install-action">Install</button>
+        <button id="close-install" class="install-close">✕</button>
+    </div>
+
+    <script src="/app.js"></script>
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js');
-        });
-      }
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js');
+            });
+        }
     </script>
-  </body>
+</body>
 </html>

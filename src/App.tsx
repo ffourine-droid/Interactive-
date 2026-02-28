@@ -47,9 +47,14 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
-    const savedHistory = localStorage.getItem('azilearn_history');
-    if (savedHistory) {
-      setSearchHistory(JSON.parse(savedHistory));
+    try {
+      const savedHistory = localStorage.getItem('azilearn_history');
+      if (savedHistory) {
+        setSearchHistory(JSON.parse(savedHistory));
+      }
+    } catch (err) {
+      console.error('Failed to load history:', err);
+      localStorage.removeItem('azilearn_history');
     }
   }, []);
 
@@ -223,16 +228,16 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             onSubmit={handleSearch} 
-            className="w-full relative group"
+            className="w-full max-w-[400px] mx-auto relative group"
           >
-            <div className="absolute inset-0 bg-brand-orange/15 rounded-2xl blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
-            <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center bg-brand-brown/40 border border-brand-brown/60 rounded-2xl p-1.5 focus-within:border-brand-orange/50 transition-all duration-300 backdrop-blur-xl gap-2">
-              <div className="flex items-center flex-1 px-3 py-2">
-                <Search size={20} className="text-brand-cream/40 shrink-0" />
+            <div className="absolute inset-0 bg-brand-orange/15 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative flex items-center bg-brand-brown/40 border border-brand-brown/60 rounded-xl p-1 focus-within:border-brand-orange/50 transition-all duration-300 backdrop-blur-xl gap-1">
+              <div className="flex items-center flex-1 px-2 py-1.5">
+                <Search size={16} className="text-brand-cream/40 shrink-0" />
                 <input
                   type="text"
                   placeholder="Search..."
-                  className="w-full bg-transparent border-none outline-none px-3 text-base-responsive font-medium placeholder:text-brand-cream/20"
+                  className="w-full bg-transparent border-none outline-none px-2 text-sm font-medium placeholder:text-brand-cream/20"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -240,9 +245,9 @@ export default function App() {
               <button 
                 type="submit"
                 disabled={loading}
-                className="bg-brand-orange text-white px-8 py-3.5 sm:py-2.5 rounded-xl font-bold text-sm hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-brand-orange/10 min-h-[48px] flex items-center justify-center"
+                className="bg-brand-orange text-white px-4 py-2 rounded-lg font-bold text-xs hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-brand-orange/10 min-h-[36px] flex items-center justify-center"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Search'}
               </button>
             </div>
           </motion.form>
