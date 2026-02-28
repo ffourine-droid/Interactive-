@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, FormEvent } from 'react';
+import React, { useState, FormEvent, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, User } from 'lucide-react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, User, MoreVertical, History, Trash2, Clock, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Supabase configuration using Vite environment variables
@@ -43,13 +43,35 @@ export default function App() {
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('azilearn_history');
+    if (savedHistory) {
+      setSearchHistory(JSON.parse(savedHistory));
+    }
+  }, []);
+
+  const saveToHistory = (query: string) => {
+    const newHistory = [query, ...searchHistory.filter(h => h !== query)].slice(0, 10);
+    setSearchHistory(newHistory);
+    localStorage.setItem('azilearn_history', JSON.stringify(newHistory));
+  };
+
+  const clearHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem('azilearn_history');
+  };
 
   const isConfigured = SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'your-anon-key';
 
-  const handleSearch = async (e?: FormEvent) => {
+  const handleSearch = async (e?: FormEvent, overrideQuery?: string) => {
     if (e) e.preventDefault();
-    const query = searchQuery.trim();
+    const query = (overrideQuery || searchQuery).trim();
     if (!query) return;
+
+    if (overrideQuery) setSearchQuery(overrideQuery);
 
     if (!supabase) {
       setError('Supabase client failed to initialize. Please check your URL.');
@@ -64,6 +86,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    saveToHistory(query);
     
     try {
       const { data, error } = await supabase
@@ -73,6 +96,7 @@ export default function App() {
 
       if (error) throw error;
       setResults(data || []);
+      setIsMenuOpen(false);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch experiments.');
     } finally {
@@ -89,111 +113,197 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-black text-brand-cream selection:bg-brand-orange selection:text-white">
-      <main className="max-w-4xl mx-auto px-6 min-h-screen flex flex-col">
-        {/* Logo at the very top */}
-        <header className="pt-8 flex justify-center">
+    <div className="min-h-screen bg-brand-black text-brand-cream selection:bg-brand-orange selection:text-white flex flex-col items-center relative overflow-x-hidden">
+      {/* Search History Menu Overlay */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+            />
+            <motion.div 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed left-0 top-0 bottom-0 w-[280px] bg-brand-black border-r border-brand-brown/50 z-[70] p-6 flex flex-col shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-2 text-brand-orange">
+                  <History size={20} />
+                  <span className="font-bold tracking-tight">History</span>
+                </div>
+                <button 
+                  onClick={() => setIsMenuOpen(false)}
+                  className="p-2 hover:bg-brand-brown/30 rounded-xl transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2">
+                {searchHistory.length > 0 ? (
+                  searchHistory.map((item, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleSearch(undefined, item)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-brand-brown/30 transition-all text-left group"
+                    >
+                      <Clock size={16} className="text-brand-cream/20 group-hover:text-brand-orange" />
+                      <span className="text-sm font-medium truncate flex-1">{item}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="py-12 text-center opacity-20">
+                    <History size={40} className="mx-auto mb-2" />
+                    <p className="text-xs font-bold uppercase tracking-widest">No history yet</p>
+                  </div>
+                )}
+              </div>
+
+              {searchHistory.length > 0 && (
+                <button 
+                  onClick={clearHistory}
+                  className="mt-auto flex items-center justify-center gap-2 p-4 text-red-400/60 hover:text-red-400 hover:bg-red-400/5 rounded-2xl transition-all text-sm font-bold"
+                >
+                  <Trash2 size={16} />
+                  Clear History
+                </button>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Menu Trigger: Top Left */}
+      <div className="fixed top-6 left-6 z-50">
+        <button 
+          onClick={() => setIsMenuOpen(true)}
+          className="w-12 h-12 rounded-2xl bg-brand-brown/30 border border-brand-brown/50 flex items-center justify-center text-brand-cream/40 hover:text-brand-orange hover:border-brand-orange/30 transition-all active:scale-95"
+        >
+          <MoreVertical size={24} />
+        </button>
+      </div>
+
+      {/* Main Container: Mobile-first, max-width 600px on desktop */}
+      <main className="w-full max-w-[600px] px-6 py-8 flex flex-col min-h-screen">
+        
+        {/* Logo Section: Top Aligned */}
+        <header className="flex flex-col items-center gap-3 mb-12">
           <motion.div 
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center gap-2"
+            className="w-12 h-12 bg-brand-orange rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-brand-orange/20"
           >
-            <div className="w-10 h-10 bg-brand-orange rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-brand-orange/20">
-              A
-            </div>
-            <span className="text-xs font-black tracking-tighter opacity-50">AZILEARN</span>
+            A
           </motion.div>
+          <span className="text-xs font-bold tracking-[0.3em] uppercase opacity-40">AZILEARN</span>
         </header>
 
-        {/* Search bar in the middle area */}
-        <div className="flex-1 flex flex-col justify-center -mt-20">
+        {/* Hero Section: Centered Content */}
+        <div className="flex-1 flex flex-col justify-center gap-8">
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-center mb-6"
+            className="text-center"
           >
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter">
+            <h1 className="font-extrabold tracking-tighter text-welcome">
               Welcome.
             </h1>
           </motion.div>
 
-          {/* Search Bar */}
+          {/* Search Bar: Large Tap Targets, Responsive Width */}
           <motion.form 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             onSubmit={handleSearch} 
-            className="relative group"
+            className="w-full relative group"
           >
-            <div className="absolute inset-0 bg-brand-orange/20 rounded-[2rem] blur-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
-            <div className="relative flex items-center bg-brand-brown/40 border border-brand-brown/60 rounded-2xl p-1.5 focus-within:border-brand-orange/50 transition-all duration-300 backdrop-blur-xl">
-              <div className="pl-3 text-brand-cream/40">
-                <Search size={20} />
+            <div className="absolute inset-0 bg-brand-orange/15 rounded-2xl blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center bg-brand-brown/40 border border-brand-brown/60 rounded-2xl p-1.5 focus-within:border-brand-orange/50 transition-all duration-300 backdrop-blur-xl gap-2">
+              <div className="flex items-center flex-1 px-3 py-2">
+                <Search size={20} className="text-brand-cream/40 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="w-full bg-transparent border-none outline-none px-3 text-base-responsive font-medium placeholder:text-brand-cream/20"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
-              <input
-                type="text"
-                placeholder="Search..."
-                className="flex-1 bg-transparent border-none outline-none px-3 py-2 text-base font-medium placeholder:text-brand-cream/20"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
               <button 
                 type="submit"
                 disabled={loading}
-                className="bg-brand-orange text-white px-6 py-2 rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 shadow-xl shadow-brand-orange/20"
+                className="bg-brand-orange text-white px-8 py-3.5 sm:py-2.5 rounded-xl font-bold text-sm hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-brand-orange/10 min-h-[48px] flex items-center justify-center"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
               </button>
             </div>
           </motion.form>
 
-          {/* Results Section (Appears below search when searched) */}
-          <div className="mt-8">
+          {/* Results Section: Responsive Grid */}
+          <div className="mt-4 min-h-[100px]">
             <AnimatePresence mode="popLayout">
               {error && (
                 <motion.div 
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="p-6 bg-red-500/10 border border-red-500/20 rounded-3xl flex items-start gap-4 text-red-400 mb-8"
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-red-400 mb-6"
                 >
-                  <AlertCircle className="shrink-0 mt-1" />
-                  <div>
-                    <h3 className="font-bold text-lg">Oops!</h3>
-                    <p className="text-sm opacity-80">{error}</p>
+                  <AlertCircle className="shrink-0 mt-0.5" size={18} />
+                  <div className="text-sm">
+                    <p className="font-bold">Error</p>
+                    <p className="opacity-80">{error}</p>
                   </div>
                 </motion.div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-3">
                 {loading ? (
                   [1, 2].map((i) => <SkeletonCard key={i} />)
                 ) : results.length > 0 ? (
                   results.map((exp, idx) => (
                     <motion.div
                       key={exp.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: idx * 0.05 }}
                       onClick={() => openExperiment(exp)}
-                      className="group bg-brand-brown/20 border border-brand-brown/40 p-4 rounded-2xl hover:bg-brand-brown/40 hover:border-brand-orange/30 transition-all duration-300 cursor-pointer flex items-center justify-between"
+                      className="group bg-brand-brown/20 border border-brand-brown/40 p-4 rounded-2xl hover:bg-brand-brown/30 hover:border-brand-orange/30 transition-all duration-300 cursor-pointer flex items-center justify-between min-h-[64px]"
                     >
-                      <h3 className="text-base font-bold group-hover:text-brand-orange transition-colors truncate pr-4">
+                      <h3 className="text-base-responsive font-semibold group-hover:text-brand-orange transition-colors truncate pr-4">
                         {exp.title}
                       </h3>
                       <ExternalLink size={16} className="text-brand-cream/20 group-hover:text-brand-orange transition-colors shrink-0" />
                     </motion.div>
                   ))
                 ) : hasSearched && (
-                  <div className="col-span-full text-center py-10">
-                    <p className="text-lg font-bold text-brand-cream/20 italic">No results.</p>
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-center py-8"
+                  >
+                    <p className="text-sm font-bold text-brand-cream/20 uppercase tracking-widest">No results found</p>
+                  </motion.div>
                 )}
               </div>
             </AnimatePresence>
           </div>
         </div>
+
+        {/* Footer: Bottom Aligned */}
+        <footer className="py-8 mt-auto text-center">
+          <p className="text-[10px] font-bold uppercase tracking-[0.4em] opacity-20">
+            &copy; 2024 AZILEARN
+          </p>
+        </footer>
       </main>
 
       {/* Full Screen Preview Modal */}

@@ -9,9 +9,35 @@
   --color-brand-cream: #F5E6D3;
 }
 
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  overflow-x: hidden;
+  background-color: #0F0F0F;
+}
+
 body {
-  @apply bg-brand-black text-brand-cream font-sans selection:bg-brand-orange selection:text-white;
+  @apply text-brand-cream font-sans selection:bg-brand-orange selection:text-white;
   -webkit-tap-highlight-color: transparent;
+  line-height: 1.5;
+}
+
+/* Responsive Typography with clamp() */
+h1 {
+  font-size: clamp(2rem, 8vw, 3.5rem);
+}
+
+.text-welcome {
+  font-size: clamp(1.5rem, 5vw, 2.5rem);
+}
+
+.text-base-responsive {
+  font-size: clamp(0.875rem, 2vw, 1rem);
 }
 
 /* Custom Scrollbar */
