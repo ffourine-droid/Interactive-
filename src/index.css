@@ -3,7 +3,6 @@
 
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  
   --color-brand-bg: var(--bg);
   --color-brand-text: var(--text);
   --color-brand-surface: var(--surface);
@@ -24,14 +23,22 @@
   --accent: #FF7A00;
 }
 
-@layer base {
-  body {
-    background-color: var(--bg);
-    color: var(--text);
-    font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-    transition-property: background-color, color;
-    transition-duration: 300ms;
-  }
+/* Base styles without @layer to ensure they apply regardless of Tailwind processing */
+body {
+  background-color: #0F0F0F; /* Hardcoded fallback */
+  background-color: var(--bg);
+  color: #F5E6D3; /* Hardcoded fallback */
+  color: var(--text);
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  transition: background-color 300ms, color 300ms;
+}
+
+.light body {
+  background-color: #FDFCFB;
+  color: #2C1B12;
 }
 
 /* Custom Scrollbar */

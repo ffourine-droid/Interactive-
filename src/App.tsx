@@ -272,7 +272,7 @@ function AppContent() {
             <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-brand-accent/20">
               A
             </div>
-            <span className="text-xs font-black tracking-tighter opacity-50">AZILEARN v1.0.5</span>
+            <span className="text-xs font-black tracking-tighter opacity-50">AZILEARN v1.0.6</span>
           </motion.div>
         </header>
 
