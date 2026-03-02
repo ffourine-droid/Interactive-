@@ -3,8 +3,6 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-console.log('AZILEARN BOOTING v1.0.5 - ' + new Date().toISOString());
-
 // Global error handler for mobile debugging
 window.onerror = function(message, source, lineno, colno, error) {
   const errorMsg = `Error: ${message}\nSource: ${source}\nLine: ${lineno}`;
