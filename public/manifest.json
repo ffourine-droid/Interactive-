@@ -8,13 +8,13 @@
   "theme_color": "#FF7A00",
   "icons": [
     {
-      "src": "https://picsum.photos/seed/azilearn/192/192",
-      "sizes": "192x192",
+      "src": "https://picsum.photos/seed/azilearn/144/144",
+      "sizes": "144x144",
       "type": "image/png"
     },
     {
-      "src": "https://picsum.photos/seed/azilearn/512/512",
-      "sizes": "512x512",
+      "src": "https://picsum.photos/seed/azilearn/192/192",
+      "sizes": "192x192",
       "type": "image/png"
     }
   ]

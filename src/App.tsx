@@ -12,7 +12,7 @@ import * as storage from './services/storageService';
 // Supabase configuration using Vite environment variables
 const getSupabaseUrl = () => {
   try {
-    const envUrl = import.meta.env?.VITE_SUPABASE_URL;
+    const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
     let url = (envUrl || 'https://nfttlgbkdvuutrgmthkz.supabase.co').trim();
     if (url && !url.includes('.') && !url.startsWith('http')) {
       return `https://${url}.supabase.co`;
@@ -26,7 +26,7 @@ const getSupabaseUrl = () => {
 const SUPABASE_URL = getSupabaseUrl();
 const SUPABASE_ANON_KEY = (() => {
   try {
-    return (import.meta.env?.VITE_SUPABASE_ANON_KEY || '').trim();
+    return ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim();
   } catch (e) {
     return '';
   }
@@ -132,13 +132,36 @@ function AppContent() {
     }
   };
 
-  const handleDownloadFile = (e: React.MouseEvent, exp: Experiment) => {
+  const fetchFullExperiment = async (id: string | number): Promise<Experiment | null> => {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('experiments')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Failed to fetch full experiment:', err);
+      return null;
+    }
+  };
+
+  const handleDownloadFile = async (e: React.MouseEvent, exp: Experiment) => {
     e.stopPropagation();
-    const blob = new Blob([exp.html_content], { type: 'text/html' });
+    setLoading(true);
+    const fullExp = await fetchFullExperiment(exp.id);
+    setLoading(false);
+    if (!fullExp) {
+      setError('Failed to fetch experiment content for download.');
+      return;
+    }
+    const blob = new Blob([fullExp.html_content], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${exp.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
+    a.download = `${fullExp.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -150,7 +173,14 @@ function AppContent() {
     if (downloadedIds.has(exp.id)) {
       await storage.deleteExperiment(exp.id);
     } else {
-      await storage.saveExperiment(exp);
+      setLoading(true);
+      const fullExp = await fetchFullExperiment(exp.id);
+      setLoading(false);
+      if (!fullExp) {
+        setError('Failed to fetch experiment content for offline saving.');
+        return;
+      }
+      await storage.saveExperiment(fullExp);
     }
     await loadDownloads();
   };
@@ -192,7 +222,7 @@ function AppContent() {
     try {
       const { data, error } = await supabase
         .from('experiments')
-        .select('id, title, keywords, html_content')
+        .select('id, title, keywords')
         .ilike('keywords', `%${query}%`);
 
       if (error) throw error;
@@ -204,8 +234,21 @@ function AppContent() {
     }
   };
 
-  const openExperiment = (exp: Experiment) => {
-    setSelectedExperiment(exp);
+  const openExperiment = async (exp: Experiment) => {
+    if (isOffline) {
+      const saved = downloadedExperiments.find(e => e.id === exp.id);
+      if (saved) setSelectedExperiment(saved);
+      return;
+    }
+    
+    setLoading(true);
+    const fullExp = await fetchFullExperiment(exp.id);
+    setLoading(false);
+    if (fullExp) {
+      setSelectedExperiment(fullExp);
+    } else {
+      setError('Failed to load experiment content.');
+    }
   };
 
   const closeExperiment = () => {
@@ -285,7 +328,7 @@ function AppContent() {
             <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-brand-accent/20">
               A
             </div>
-            <span className="text-xs font-black tracking-tighter opacity-50">AZILEARN v1.0.6</span>
+            <span className="text-xs font-black tracking-tighter opacity-50">AZILEARN v1.0.7</span>
           </motion.div>
         </header>
 

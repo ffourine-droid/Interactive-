@@ -19,3 +19,12 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+
+// Hide the initial loading spinner
+const loader = document.getElementById('app-loading');
+if (loader) {
+  loader.style.opacity = '0';
+  setTimeout(() => {
+    loader.remove();
+  }, 500);
+}
