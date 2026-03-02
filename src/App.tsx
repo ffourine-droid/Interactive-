@@ -132,6 +132,19 @@ function AppContent() {
     }
   };
 
+  const handleDownloadFile = (e: React.MouseEvent, exp: Experiment) => {
+    e.stopPropagation();
+    const blob = new Blob([exp.html_content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${exp.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleDownload = async (e: React.MouseEvent, exp: Experiment) => {
     e.stopPropagation();
     if (downloadedIds.has(exp.id)) {
@@ -425,15 +438,22 @@ function AppContent() {
                             </h3>
                             <div className="flex items-center gap-2">
                               <button
+                                onClick={(e) => handleDownloadFile(e, exp)}
+                                className="p-2 rounded-xl text-brand-text/20 hover:bg-brand-accent/10 hover:text-brand-accent transition-all"
+                                title="Download as HTML File"
+                              >
+                                <Download size={16} />
+                              </button>
+                              <button
                                 onClick={(e) => handleDownload(e, exp)}
                                 className={`p-2 rounded-xl transition-all ${
                                   downloadedIds.has(exp.id)
                                     ? 'text-brand-accent bg-brand-accent/10'
                                     : 'text-brand-text/20 hover:bg-brand-accent/10 hover:text-brand-accent'
                                 }`}
-                                title={downloadedIds.has(exp.id) ? "Saved Offline" : "Download for Offline"}
+                                title={downloadedIds.has(exp.id) ? "Saved Offline" : "Save for Offline Access"}
                               >
-                                {downloadedIds.has(exp.id) ? <CheckCircle2 size={16} /> : <Download size={16} />}
+                                {downloadedIds.has(exp.id) ? <CheckCircle2 size={16} /> : <FlaskConical size={16} />}
                               </button>
                               <ExternalLink size={16} className="text-brand-text/20 group-hover:text-brand-accent transition-colors shrink-0" />
                             </div>
@@ -475,12 +495,32 @@ function AppContent() {
                   <p className="text-[10px] text-brand-accent font-black uppercase tracking-[0.2em]">Live Experiment</p>
                 </div>
               </div>
-              <button
-                onClick={closeExperiment}
-                className="bg-brand-accent text-white px-6 py-3 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all"
-              >
-                Exit
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => handleDownloadFile(e, selectedExperiment)}
+                  className="w-12 h-12 rounded-2xl border border-brand-surface/50 flex items-center justify-center hover:bg-brand-surface/20 transition-colors text-brand-text"
+                  title="Download as HTML File"
+                >
+                  <Download size={20} />
+                </button>
+                <button
+                  onClick={(e) => handleDownload(e, selectedExperiment)}
+                  className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all ${
+                    downloadedIds.has(selectedExperiment.id)
+                      ? 'bg-brand-accent text-white border-brand-accent'
+                      : 'border-brand-surface/50 text-brand-text hover:bg-brand-surface/20'
+                  }`}
+                  title={downloadedIds.has(selectedExperiment.id) ? "Saved Offline" : "Save for Offline Access"}
+                >
+                  {downloadedIds.has(selectedExperiment.id) ? <CheckCircle2 size={20} /> : <FlaskConical size={20} />}
+                </button>
+                <button
+                  onClick={closeExperiment}
+                  className="bg-brand-accent text-white px-6 py-3 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all"
+                >
+                  Exit
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 bg-white">
