@@ -6,15 +6,71 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#0F0F0F" />
     <link rel="manifest" href="./manifest.json" />
     <title>AziLearn</title>
+    <style>
+      #splash {
+        position: fixed;
+        inset: 0;
+        background: #0F0F0F;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease, visibility 0.5s ease;
+      }
+      .splash-logo {
+        width: 80px;
+        height: 80px;
+        background: #FF7A00;
+        border-radius: 22px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 42px;
+        color: white;
+        font-weight: 900;
+        box-shadow: 0 20px 40px rgba(255, 122, 0, 0.2);
+        animation: splash-pop 1.2s ease-in-out infinite alternate;
+        font-family: sans-serif;
+      }
+      .splash-text {
+        margin-top: 24px;
+        color: white;
+        font-family: sans-serif;
+        font-weight: 800;
+        letter-spacing: 0.2em;
+        font-size: 12px;
+        opacity: 0.5;
+        text-transform: uppercase;
+      }
+      @keyframes splash-pop {
+        from { transform: scale(1); box-shadow: 0 10px 20px rgba(255, 122, 0, 0.1); }
+        to { transform: scale(1.1); box-shadow: 0 25px 50px rgba(255, 122, 0, 0.3); }
+      }
+    </style>
   </head>
   <body>
+    <div id="splash">
+      <div class="splash-logo">A</div>
+      <div class="splash-text">AziLearn</div>
+    </div>
     <div id="root"></div>
     <script type="module" src="./src/main.tsx"></script>
     <script>
+      window.addEventListener("load", () => {
+        const splash = document.getElementById("splash");
+        setTimeout(() => {
+          splash.style.opacity = "0";
+          setTimeout(() => {
+            splash.style.display = "none";
+          }, 500);
+        }, 1500);
+      });
+
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js').catch(err => {

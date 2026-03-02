@@ -1,11 +1,12 @@
 {
-  "name": "AziLearn",
-  "short_name": "AziLearn",
+  "name": "AZILEARN",
+  "short_name": "AZI",
   "description": "Interactive learning experiments for everyone.",
-  "start_url": "/",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0F0F0F",
   "theme_color": "#FF7A00",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "https://picsum.photos/seed/azilearn/192/192",
