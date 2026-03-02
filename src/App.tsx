@@ -49,6 +49,37 @@ interface Experiment {
 }
 
 export default function App() {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    const handleError = (error: any) => {
+      console.error('Caught error:', error);
+      setHasError(true);
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center p-6 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+        <h1 className="text-2xl font-bold mb-2">Something went wrong.</h1>
+        <p className="text-brand-text/60 mb-6">The application encountered an error. Please try refreshing.</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="bg-brand-accent text-white px-6 py-2 rounded-xl font-bold"
+        >
+          Refresh App
+        </button>
+      </div>
+    );
+  }
+
+  return <AppContent />;
+}
+
+function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,11 +113,6 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
-    // Register Service Worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed:', err));
-    }
-
     // Load downloads
     loadDownloads();
 
@@ -246,7 +272,7 @@ export default function App() {
             <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-brand-accent/20">
               A
             </div>
-            <span className="text-xs font-black tracking-tighter opacity-50">AZILEARN</span>
+            <span className="text-xs font-black tracking-tighter opacity-50">AZILEARN v1.0.5</span>
           </motion.div>
         </header>
 
