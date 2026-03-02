@@ -263,7 +263,10 @@ function AppContent() {
 
       <main className="max-w-4xl mx-auto px-6 min-h-screen flex flex-col">
         {/* Logo at the very top */}
-        <header className="pt-8 flex justify-center">
+        <header className="pt-8 flex flex-col items-center justify-center">
+          <div className="bg-red-600 text-white px-4 py-1 rounded-full text-[10px] font-bold mb-4 animate-pulse">
+            DEPLOYED: {new Date().toLocaleTimeString()}
+          </div>
           <motion.div 
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
