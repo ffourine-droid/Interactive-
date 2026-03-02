@@ -1,12 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-brand-bg: var(--bg);
+  --color-brand-text: var(--text);
+  --color-brand-surface: var(--surface);
+  --color-brand-accent: var(--accent);
+}
+
 :root {
   --bg: #0F0F0F;
   --text: #F5E6D3;
   --surface: #2C1B12;
   --accent: #FF7A00;
-  --surface-rgb: 44, 27, 18;
 }
 
 .light {
@@ -14,20 +22,16 @@
   --text: #2C1B12;
   --surface: #F5E6D3;
   --accent: #FF7A00;
-  --surface-rgb: 245, 230, 211;
 }
 
-@theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --color-brand-bg: var(--bg);
-  --color-brand-text: var(--text);
-  --color-brand-surface: var(--surface);
-  --color-brand-accent: var(--accent);
-}
-
-body {
-  @apply bg-brand-bg text-brand-text font-sans selection:bg-brand-accent selection:text-white transition-colors duration-300;
-  -webkit-tap-highlight-color: transparent;
+@layer base {
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    transition-property: background-color, color;
+    transition-duration: 300ms;
+  }
 }
 
 /* Custom Scrollbar */
