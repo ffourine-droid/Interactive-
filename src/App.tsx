@@ -11,15 +11,26 @@ import * as storage from './services/storageService';
 
 // Supabase configuration using Vite environment variables
 const getSupabaseUrl = () => {
-  let url = (import.meta.env.VITE_SUPABASE_URL || 'https://nfttlgbkdvuutrgmthkz.supabase.co').trim();
-  if (url && !url.includes('.') && !url.startsWith('http')) {
-    return `https://${url}.supabase.co`;
+  try {
+    const envUrl = import.meta.env?.VITE_SUPABASE_URL;
+    let url = (envUrl || 'https://nfttlgbkdvuutrgmthkz.supabase.co').trim();
+    if (url && !url.includes('.') && !url.startsWith('http')) {
+      return `https://${url}.supabase.co`;
+    }
+    return url;
+  } catch (e) {
+    return 'https://nfttlgbkdvuutrgmthkz.supabase.co';
   }
-  return url;
 };
 
 const SUPABASE_URL = getSupabaseUrl();
-const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+const SUPABASE_ANON_KEY = (() => {
+  try {
+    return (import.meta.env?.VITE_SUPABASE_ANON_KEY || '').trim();
+  } catch (e) {
+    return '';
+  }
+})();
 
 let supabase: any = null;
 try {
@@ -86,9 +97,13 @@ export default function App() {
   }, []);
 
   const loadDownloads = async () => {
-    const downloads = await storage.getDownloadedExperiments();
-    setDownloadedExperiments(downloads);
-    setDownloadedIds(new Set(downloads.map(d => d.id)));
+    try {
+      const downloads = await storage.getDownloadedExperiments();
+      setDownloadedExperiments(downloads || []);
+      setDownloadedIds(new Set((downloads || []).map(d => d.id)));
+    } catch (err) {
+      console.error('Failed to load downloads:', err);
+    }
   };
 
   const handleDownload = async (e: React.MouseEvent, exp: Experiment) => {
