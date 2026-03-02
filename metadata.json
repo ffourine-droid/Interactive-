@@ -1,5 +1,5 @@
 {
   "name": "AziLearn",
-  "description": "A clean, modern interface to search and preview experiments stored in Supabase.",
+  "description": "A platform with user registration and authentication.",
   "requestFramePermissions": []
 }

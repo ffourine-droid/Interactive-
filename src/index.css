@@ -1,16 +1,32 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+:root {
+  --bg: #0F0F0F;
+  --text: #F5E6D3;
+  --surface: #2C1B12;
+  --accent: #FF7A00;
+  --surface-rgb: 44, 27, 18;
+}
+
+.light {
+  --bg: #FDFCFB;
+  --text: #2C1B12;
+  --surface: #F5E6D3;
+  --accent: #FF7A00;
+  --surface-rgb: 245, 230, 211;
+}
+
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --color-brand-black: #0F0F0F;
-  --color-brand-brown: #2C1B12;
-  --color-brand-orange: #FF7A00;
-  --color-brand-cream: #F5E6D3;
+  --color-brand-bg: var(--bg);
+  --color-brand-text: var(--text);
+  --color-brand-surface: var(--surface);
+  --color-brand-accent: var(--accent);
 }
 
 body {
-  @apply bg-brand-black text-brand-cream font-sans selection:bg-brand-orange selection:text-white;
+  @apply bg-brand-bg text-brand-text font-sans selection:bg-brand-accent selection:text-white transition-colors duration-300;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -19,12 +35,12 @@ body {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0F0F0F;
+  background: var(--bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: #2C1B12;
+  background: var(--surface);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #FF7A00;
+  background: var(--accent);
 }
