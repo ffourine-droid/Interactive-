@@ -4,42 +4,11 @@
  */
 
 import React, { useState, FormEvent, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, User, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as storage from './services/storageService';
-
-// Supabase configuration using Vite environment variables
-const getSupabaseUrl = () => {
-  try {
-    const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
-    let url = (envUrl || 'https://nfttlgbkdvuutrgmthkz.supabase.co').trim();
-    if (url && !url.includes('.') && !url.startsWith('http')) {
-      return `https://${url}.supabase.co`;
-    }
-    return url;
-  } catch (e) {
-    return 'https://nfttlgbkdvuutrgmthkz.supabase.co';
-  }
-};
-
-const SUPABASE_URL = getSupabaseUrl();
-const SUPABASE_ANON_KEY = (() => {
-  try {
-    return ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim();
-  } catch (e) {
-    return '';
-  }
-})();
-
-let supabase: any = null;
-try {
-  if (SUPABASE_URL && (SUPABASE_URL.startsWith('http://') || SUPABASE_URL.startsWith('https://'))) {
-    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || 'no-key-provided');
-  }
-} catch (err) {
-  console.error('Supabase initialization error:', err);
-}
+import { supabase } from './lib/supabase';
+import { AuthModal } from './components/AuthModal';
 
 interface Experiment {
   id: string | number;
@@ -50,6 +19,8 @@ interface Experiment {
 
 export default function App() {
   const [hasError, setHasError] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     const handleError = (error: any) => {
@@ -57,7 +28,25 @@ export default function App() {
       setHasError(true);
     };
     window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
+    
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      // Don't force showAuth here anymore
+    });
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (hasError) {
@@ -76,10 +65,21 @@ export default function App() {
     );
   }
 
-  return <AppContent />;
+  return (
+    <>
+      <AppContent user={user} onOpenProfile={() => setShowAuth(true)} />
+      <AuthModal 
+        isOpen={showAuth} 
+        onClose={() => setShowAuth(false)} 
+        onAuthSuccess={(u) => {
+          setUser(u);
+        }} 
+      />
+    </>
+  );
 }
 
-function AppContent() {
+function AppContent({ user, onOpenProfile }: { user: any, onOpenProfile: () => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -185,8 +185,6 @@ function AppContent() {
     await loadDownloads();
   };
 
-  const isConfigured = SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'your-anon-key';
-
   const handleSearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     const query = searchQuery.trim();
@@ -206,12 +204,7 @@ function AppContent() {
     }
 
     if (!supabase) {
-      setError('Supabase client failed to initialize. Please check your URL.');
-      return;
-    }
-
-    if (!isConfigured) {
-      setError('Supabase Key Missing. Please set VITE_SUPABASE_ANON_KEY.');
+      setError('Supabase client failed to initialize.');
       return;
     }
 
@@ -223,7 +216,7 @@ function AppContent() {
       const { data, error } = await supabase
         .from('experiments')
         .select('id, title, keywords')
-        .ilike('keywords', `%${query}%`);
+        .or(`keywords.ilike.%${query}%,title.ilike.%${query}%`);
 
       if (error) throw error;
       setResults(data || []);
@@ -311,6 +304,7 @@ function AppContent() {
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
+          onClick={onOpenProfile}
           className="w-12 h-12 rounded-2xl bg-brand-surface/40 border border-brand-surface/60 backdrop-blur-xl flex items-center justify-center text-brand-text hover:border-brand-accent/50 transition-all shadow-xl"
         >
           <User size={24} />
@@ -402,9 +396,9 @@ function AppContent() {
                   transition={{ delay: 0.1 }}
                   className="text-center mb-6"
                 >
-                  <div className="flex items-center justify-center gap-3 mb-2">
+                  <div className="flex flex-col items-center justify-center gap-3 mb-2">
                     <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter">
-                      Welcome.
+                      Welcome, {user?.user_metadata?.username || 'Explorer'}.
                     </h1>
                     {isOffline && (
                       <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-amber-500 text-[10px] font-black uppercase tracking-widest">
@@ -583,11 +577,11 @@ function AppContent() {
 
 function SkeletonCard() {
   return (
-    <div className="bg-brand-surface/10 border border-brand-surface/20 p-8 rounded-[2rem] animate-pulse">
-      <div className="h-8 bg-brand-surface/30 rounded-lg w-3/4 mb-4"></div>
+    <div className="bg-brand-surface/10 border border-brand-surface/20 p-4 rounded-2xl animate-pulse">
+      <div className="h-6 bg-brand-surface/30 rounded-lg w-3/4 mb-3"></div>
       <div className="flex gap-2">
-        <div className="h-6 bg-brand-surface/20 rounded-full w-16"></div>
-        <div className="h-6 bg-brand-surface/20 rounded-full w-20"></div>
+        <div className="h-4 bg-brand-surface/20 rounded-full w-16"></div>
+        <div className="h-4 bg-brand-surface/20 rounded-full w-20"></div>
       </div>
     </div>
   );
