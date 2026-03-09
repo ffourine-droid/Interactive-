@@ -4,23 +4,26 @@
  */
 
 import React, { useState, FormEvent, useEffect } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, User, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2 } from 'lucide-react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, User, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as storage from './services/storageService';
 import { supabase } from './lib/supabase';
 import { AuthModal } from './components/AuthModal';
+import { SubscriptionModal } from './components/SubscriptionModal';
 
 interface Experiment {
   id: string | number;
   title: string;
   keywords: string;
   html_content: string;
+  subject?: string;
 }
 
 export default function App() {
   const [hasError, setHasError] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(localStorage.getItem('azilearn_phone'));
   const [showAuth, setShowAuth] = useState(false);
+  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
 
   useEffect(() => {
     const handleError = (error: any) => {
@@ -29,25 +32,34 @@ export default function App() {
     };
     window.addEventListener('error', handleError);
     
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      // Don't force showAuth here anymore
-    });
+    if (phoneNumber) {
+      checkSubscription(phoneNumber);
+    }
 
     return () => {
       window.removeEventListener('error', handleError);
-      subscription.unsubscribe();
     };
-  }, []);
+  }, [phoneNumber]);
+
+  const checkSubscription = async (phone: string) => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('phone_number', phone)
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
+        .order('expires_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+      setHasActiveSubscription(data && data.length > 0);
+    } catch (err) {
+      console.error('Failed to check subscription:', err);
+      setHasActiveSubscription(false);
+    }
+  };
 
   if (hasError) {
     return (
@@ -67,25 +79,44 @@ export default function App() {
 
   return (
     <>
-      <AppContent user={user} onOpenProfile={() => setShowAuth(true)} />
+      <AppContent 
+        phoneNumber={phoneNumber} 
+        hasActiveSubscription={hasActiveSubscription}
+        onOpenProfile={() => setShowAuth(true)} 
+        onCheckSubscription={() => phoneNumber && checkSubscription(phoneNumber)}
+      />
       <AuthModal 
         isOpen={showAuth} 
         onClose={() => setShowAuth(false)} 
-        onAuthSuccess={(u) => {
-          setUser(u);
+        hasActiveSubscription={hasActiveSubscription}
+        onAuthSuccess={(phone) => {
+          setPhoneNumber(phone);
+          if (phone) checkSubscription(phone);
+          else setHasActiveSubscription(false);
         }} 
       />
     </>
   );
 }
 
-function AppContent({ user, onOpenProfile }: { user: any, onOpenProfile: () => void }) {
+function AppContent({ 
+  phoneNumber, 
+  hasActiveSubscription, 
+  onOpenProfile,
+  onCheckSubscription
+}: { 
+  phoneNumber: string | null, 
+  hasActiveSubscription: boolean,
+  onOpenProfile: () => void,
+  onCheckSubscription: () => void
+}) {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
@@ -228,6 +259,16 @@ function AppContent({ user, onOpenProfile }: { user: any, onOpenProfile: () => v
   };
 
   const openExperiment = async (exp: Experiment) => {
+    if (!phoneNumber) {
+      onOpenProfile();
+      return;
+    }
+
+    if (!hasActiveSubscription) {
+      setShowSubscriptionModal(true);
+      return;
+    }
+
     if (isOffline) {
       const saved = downloadedExperiments.find(e => e.id === exp.id);
       if (saved) setSelectedExperiment(saved);
@@ -398,7 +439,7 @@ function AppContent({ user, onOpenProfile }: { user: any, onOpenProfile: () => v
                 >
                   <div className="flex flex-col items-center justify-center gap-3 mb-2">
                     <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter">
-                      Welcome, {user?.user_metadata?.username || 'Explorer'}.
+                      Welcome, {phoneNumber || 'Explorer'}.
                     </h1>
                     {isOffline && (
                       <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-amber-500 text-[10px] font-black uppercase tracking-widest">
@@ -468,30 +509,47 @@ function AppContent({ user, onOpenProfile }: { user: any, onOpenProfile: () => v
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: idx * 0.05 }}
                             onClick={() => openExperiment(exp)}
-                            className="group bg-brand-surface/20 border border-brand-surface/40 p-4 rounded-2xl hover:bg-brand-surface/40 hover:border-brand-accent/30 transition-all duration-300 cursor-pointer flex items-center justify-between"
+                            className="group relative bg-brand-surface/20 border border-brand-surface/40 p-4 rounded-2xl hover:bg-brand-surface/40 hover:border-brand-accent/30 transition-all duration-300 cursor-pointer overflow-hidden"
                           >
-                            <h3 className="text-base font-bold group-hover:text-brand-accent transition-colors truncate pr-4">
-                              {exp.title}
-                            </h3>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={(e) => handleDownloadFile(e, exp)}
-                                className="p-2 rounded-xl text-brand-text/20 hover:bg-brand-accent/10 hover:text-brand-accent transition-all"
-                                title="Download as HTML File"
-                              >
-                                <Download size={16} />
-                              </button>
-                              <button
-                                onClick={(e) => handleDownload(e, exp)}
-                                className={`p-2 rounded-xl transition-all ${
-                                  downloadedIds.has(exp.id)
-                                    ? 'text-brand-accent bg-brand-accent/10'
-                                    : 'text-brand-text/20 hover:bg-brand-accent/10 hover:text-brand-accent'
-                                }`}
-                                title={downloadedIds.has(exp.id) ? "Saved Offline" : "Save for Offline Access"}
-                              >
-                                {downloadedIds.has(exp.id) ? <CheckCircle2 size={16} /> : <FlaskConical size={16} />}
-                              </button>
+                            <div className={!hasActiveSubscription ? 'blur-[2px] opacity-60' : ''}>
+                              <h3 className="text-base font-bold group-hover:text-brand-accent transition-colors truncate pr-12">
+                                {exp.title}
+                              </h3>
+                              <p className="text-[10px] text-brand-text/40 uppercase tracking-widest mt-1">
+                                Study Material
+                              </p>
+                            </div>
+
+                            {!hasActiveSubscription && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/5 backdrop-blur-[1px] group-hover:bg-black/10 transition-all">
+                                <Lock size={16} className="text-brand-accent mb-1" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Subscribe to Access</span>
+                              </div>
+                            )}
+
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                              {hasActiveSubscription && (
+                                <>
+                                  <button
+                                    onClick={(e) => handleDownloadFile(e, exp)}
+                                    className="p-2 rounded-xl text-brand-text/20 hover:bg-brand-accent/10 hover:text-brand-accent transition-all"
+                                    title="Download as HTML File"
+                                  >
+                                    <Download size={16} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleDownload(e, exp)}
+                                    className={`p-2 rounded-xl transition-all ${
+                                      downloadedIds.has(exp.id)
+                                        ? 'text-brand-accent bg-brand-accent/10'
+                                        : 'text-brand-text/20 hover:bg-brand-accent/10 hover:text-brand-accent'
+                                    }`}
+                                    title={downloadedIds.has(exp.id) ? "Saved Offline" : "Save for Offline Access"}
+                                  >
+                                    {downloadedIds.has(exp.id) ? <CheckCircle2 size={16} /> : <FlaskConical size={16} />}
+                                  </button>
+                                </>
+                              )}
                               <ExternalLink size={16} className="text-brand-text/20 group-hover:text-brand-accent transition-colors shrink-0" />
                             </div>
                           </motion.div>
@@ -509,6 +567,13 @@ function AppContent({ user, onOpenProfile }: { user: any, onOpenProfile: () => v
           </AnimatePresence>
         </div>
       </main>
+
+      <SubscriptionModal
+        isOpen={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        phoneNumber={phoneNumber || ''}
+        onSubscriptionSuccess={onCheckSubscription}
+      />
 
       {/* Full Screen Preview Modal */}
       <AnimatePresence>

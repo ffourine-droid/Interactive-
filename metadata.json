@@ -1,5 +1,5 @@
 {
-  "name": "AziLearn Pro",
-  "description": "Professional learning platform with secure Twilio-powered phone authentication and user management.",
+  "name": "AziLearn",
+  "description": "Subscription-based study materials platform with M-Pesa payment integration and locked content previews.",
   "requestFramePermissions": []
 }
