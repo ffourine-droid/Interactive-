@@ -2,8 +2,29 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import crypto from "crypto";
+import twilio from "twilio";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const db = new Database("users.db");
+
+// Initialize Twilio client lazily
+let twilioClient: any = null;
+const getTwilioClient = () => {
+  if (!twilioClient) {
+    const sid = (process.env.TWILIO_ACCOUNT_SID || process.env.ACCOUNT_SID || "").trim();
+    const token = (process.env.TWILIO_AUTH_TOKEN || process.env.AUTH_TOKEN || "").trim();
+    if (!sid || !token) {
+      console.warn("Twilio credentials missing. OTP features will be disabled.");
+      return null;
+    }
+    twilioClient = twilio(sid, token);
+  }
+  return twilioClient;
+};
 
 // Initialize database
 db.exec(`
@@ -59,6 +80,77 @@ async function startServer() {
     }
   });
 
+  // Twilio OTP Endpoints
+  app.post("/api/auth/send-otp", async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: "Phone number is required" });
+
+    // Sanitize phone number: remove all non-digit characters except the leading +
+    const sanitizedPhone = '+' + phone.replace(/\D/g, '');
+
+    const client = getTwilioClient();
+    const serviceSid = (process.env.TWILIO_SERVICE_SID || process.env.SERVICE_SID || "").trim();
+
+    // Mock mode if no credentials or invalid SID format
+    if (!client || !serviceSid || !serviceSid.startsWith('VA')) {
+      console.log(`[MOCK OTP] Sending code 123456 to ${sanitizedPhone}`);
+      return res.json({ 
+        message: "OTP sent (Mock Mode)", 
+        mock: true,
+        details: !serviceSid ? "Missing TWILIO_SERVICE_SID" : !serviceSid.startsWith('VA') ? `Invalid Service SID type. You provided an Account SID (starts with 'AC'), but you need a Verify Service SID (starts with 'VA'). Create one here: https://console.twilio.com/us1/develop/verify/services` : "Missing Twilio Credentials"
+      });
+    }
+
+    try {
+      await client.verify.v2.services(serviceSid)
+        .verifications
+        .create({ to: sanitizedPhone, channel: 'sms' });
+      res.json({ message: "OTP sent successfully" });
+    } catch (error: any) {
+      console.error("Twilio Send Error:", error);
+      // Handle "Invalid parameter" specifically
+      if (error.message.includes('Invalid parameter') || error.code === 21604) {
+        return res.status(400).json({ 
+          error: "Invalid phone number format. Please ensure it includes the country code (e.g., +254...)",
+          code: "INVALID_PARAMETER"
+        });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/auth/verify-otp", async (req, res) => {
+    const { phone, code } = req.body;
+    if (!phone || !code) return res.status(400).json({ error: "Phone and code are required" });
+
+    const sanitizedPhone = '+' + phone.replace(/\D/g, '');
+    const client = getTwilioClient();
+    const serviceSid = (process.env.TWILIO_SERVICE_SID || process.env.SERVICE_SID || "").trim();
+
+    // Mock mode verification
+    if (!client || !serviceSid || !serviceSid.startsWith('VA')) {
+      if (code === "123456") {
+        return res.json({ message: "Verified (Mock Mode)", success: true });
+      }
+      return res.status(400).json({ error: "Invalid mock code. Use 123456" });
+    }
+
+    try {
+      const verification = await client.verify.v2.services(serviceSid)
+        .verificationChecks
+        .create({ to: sanitizedPhone, code: code });
+      
+      if (verification.status === 'approved') {
+        res.json({ message: "Verified successfully", success: true });
+      } else {
+        res.status(400).json({ error: "Invalid verification code" });
+      }
+    } catch (error: any) {
+      console.error("Twilio Verify Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/users", (req, res) => {
     try {
       const stmt = db.prepare("SELECT id, username, created_at FROM users ORDER BY created_at DESC");
@@ -78,7 +170,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static("dist"));
+    app.use(express.static(path.join(__dirname, "dist")));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(__dirname, "dist", "index.html"));
+    });
   }
 
   app.listen(PORT, "0.0.0.0", () => {

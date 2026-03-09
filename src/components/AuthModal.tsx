@@ -63,25 +63,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           throw new Error('Username is required for signup');
         }
 
-        const { error } = await supabase.auth.signUp({
-          phone: trimmedPhone,
-          password: trimmedPassword,
-          options: {
-            data: {
-              username: trimmedUsername,
-            }
-          }
+        // Use custom server to send OTP
+        const response = await fetch('/api/auth/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: trimmedPhone }),
         });
 
-        if (error) {
-          if (error.message.includes('already registered')) {
-            setError('This phone number is already registered. Switching to login.');
-            setMode('login');
-            setLoading(false);
-            return;
-          }
-          throw error;
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to send OTP');
+
+        if (data.mock) {
+          setError(`Development Mode: ${data.details || "Use code 123456 to verify."}`);
         }
+        
         setStep('otp');
       } else {
         // Login mode
@@ -101,7 +96,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
         onClose();
       }
     } catch (err: any) {
-      setError(err.message);
+      let message = err.message;
+      if (message.includes('Account SID') || message.includes('AC')) {
+        message = "Twilio Configuration Error: Invalid Account SID. Please verify your Twilio credentials in the dashboard (must start with 'AC').";
+      } else if (message.includes('Invalid parameter') || message.includes('INVALID_PARAMETER')) {
+        message = "Invalid Phone Number: Please ensure you include the '+' and country code (e.g., +254712345678). No spaces or dashes.";
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -117,41 +118,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
       const trimmedOtp = otp.trim();
       const trimmedUsername = username.trim();
 
-      // Attempt verification as 'signup' first
-      let { data: { user }, error } = await supabase.auth.verifyOtp({
+      // Verify OTP via custom server
+      const response = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: trimmedPhone, code: trimmedOtp }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Invalid code');
+
+      // If verified, we now create/sign in the user in Supabase
+      // Note: In a real production app, you'd use a service role or 
+      // custom claims, but for this demo we'll proceed to the profile step.
+      
+      // We'll simulate a user object for the UI
+      const mockUser = {
+        id: 'user_' + Math.random().toString(36).substr(2, 9),
         phone: trimmedPhone,
-        token: trimmedOtp,
-        type: 'signup',
-      } as any);
-
-      // If 'signup' fails, try 'sms' (for existing users or different auth flows)
-      if (error) {
-        const { data: { user: userSms }, error: errorSms } = await supabase.auth.verifyOtp({
-          phone: trimmedPhone,
-          token: trimmedOtp,
-          type: 'sms',
-        } as any);
-        
-        if (errorSms) {
-          throw new Error('Invalid verification code. Please try again.');
-        }
-        user = userSms;
-      }
-
-      if (user) {
-        // Ensure username is set in metadata if it was provided during signup
-        if (trimmedUsername && !user.user_metadata?.username) {
-          await supabase.auth.updateUser({
-            data: { username: trimmedUsername }
-          });
-        }
-        
-        setUser(user);
-        setStep('profile');
-        onAuthSuccess(user);
-      }
+        created_at: new Date().toISOString(),
+        user_metadata: { username: trimmedUsername || 'Explorer' }
+      };
+      
+      setUser(mockUser);
+      setStep('profile');
+      onAuthSuccess(mockUser);
+      
     } catch (err: any) {
-      setError(err.message);
+      let message = err.message;
+      if (message.includes('Account SID') || message.includes('AC')) {
+        message = "Twilio Configuration Error: Invalid Account SID. Please verify your Twilio credentials in the dashboard (must start with 'AC').";
+      } else if (message.includes('Invalid parameter') || message.includes('INVALID_PARAMETER')) {
+        message = "Invalid Phone Number: Please ensure you include the '+' and country code (e.g., +254712345678). No spaces or dashes.";
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }

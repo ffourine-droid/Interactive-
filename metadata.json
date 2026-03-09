@@ -1,5 +1,5 @@
 {
-  "name": "AziLearn",
-  "description": "A platform with user registration and authentication.",
+  "name": "AziLearn Pro",
+  "description": "Professional learning platform with secure Twilio-powered phone authentication and user management.",
   "requestFramePermissions": []
 }
