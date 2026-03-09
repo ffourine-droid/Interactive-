@@ -47,8 +47,13 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", environment: process.env.NODE_ENV || "development" });
+  });
+
   // API routes
-  app.post("/api/register", (req, res) => {
+  app.post(["/api/register", "/api/register/"], (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -81,7 +86,7 @@ async function startServer() {
   });
 
   // Twilio OTP Endpoints
-  app.post("/api/auth/send-otp", async (req, res) => {
+  app.post(["/api/auth/send-otp", "/api/auth/send-otp/"], async (req, res) => {
     const { phone } = req.body;
     if (!phone) return res.status(400).json({ error: "Phone number is required" });
 
@@ -119,7 +124,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/auth/verify-otp", async (req, res) => {
+  app.post(["/api/auth/verify-otp", "/api/auth/verify-otp/"], async (req, res) => {
     const { phone, code } = req.body;
     if (!phone || !code) return res.status(400).json({ error: "Phone and code are required" });
 
@@ -151,7 +156,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/users", (req, res) => {
+  app.get(["/api/users", "/api/users/"], (req, res) => {
     try {
       const stmt = db.prepare("SELECT id, username, created_at FROM users ORDER BY created_at DESC");
       const users = stmt.all();
@@ -160,6 +165,11 @@ async function startServer() {
       console.error("Fetch users error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
+  });
+
+  // API 404 Handler - Ensure API routes always return JSON
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: "API route not found" });
   });
 
   // Vite middleware for development
@@ -178,6 +188,16 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  // Global Error Handler
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("Global Error:", err);
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      message: err.message,
+      path: req.path
+    });
   });
 }
 
