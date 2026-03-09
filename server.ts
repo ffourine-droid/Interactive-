@@ -182,22 +182,47 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    console.log("Initializing Vite middleware for development");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
+    app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, "dist");
-    console.log(`Serving static files from: ${distPath}`);
+    const distPath = path.resolve(__dirname, "dist");
+    console.log(`Production mode: Serving static files from ${distPath}`);
     
+    // Verify dist directory exists
+    import("fs").then(fs => {
+      if (fs.existsSync(distPath)) {
+        console.log("Dist directory found");
+        if (fs.existsSync(path.join(distPath, "index.html"))) {
+          console.log("index.html found in dist");
+        } else {
+          console.error("index.html NOT found in dist!");
+        }
+      } else {
+        console.error("Dist directory NOT found!");
+      }
+    });
+
     app.use(express.static(distPath));
     
     app.get("*", (req, res) => {
+      // Don't handle API routes here, they should have been caught above
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: "API route not found (catch-all)" });
+      }
+
       const indexPath = path.join(distPath, "index.html");
       res.sendFile(indexPath, (err) => {
         if (err) {
-          console.error(`Error sending index.html from ${indexPath}:`, err);
-          res.status(404).send("The page could not be found. (Index.html missing)");
+          console.error(`Error sending index.html:`, err);
+          res.status(404).json({ 
+            error: "Frontend not found", 
+            message: "The application frontend files are missing. Please run build.",
+            path: indexPath
+          });
         }
       });
     });
