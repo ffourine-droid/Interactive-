@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import crypto from "crypto";
 import twilio from "twilio";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -153,6 +154,9 @@ async function startServer() {
 
   // Mount API Router
   app.use("/api", apiRouter);
+
+  // Root redirect for convenience
+  app.get("/health", (req, res) => res.json({ status: "ok", service: "root" }));
 
   // API 404 Handler
   app.all("/api/*", (req, res) => {
