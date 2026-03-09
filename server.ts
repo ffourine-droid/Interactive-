@@ -45,66 +45,52 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode`);
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  console.log(`[SERVER] Starting in ${nodeEnv} mode on port ${PORT}`);
 
   app.use(express.json());
 
-  // Request logging
+  // Request logging middleware
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
   });
 
-  // Health check
+  // Health check (at root level for infrastructure)
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", environment: process.env.NODE_ENV || "development" });
+    res.json({ status: "ok", env: nodeEnv, time: new Date().toISOString() });
   });
 
-  // API routes
-  app.post(["/api/register", "/api/register/"], (req, res) => {
+  // API Router
+  const apiRouter = express.Router();
+
+  // Registration
+  apiRouter.post(["/register", "/register/"], (req, res) => {
     const { username, password } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json({ error: "Username and password are required" });
-    }
-
-    if (username.length < 3) {
-      return res.status(400).json({ error: "Username must be at least 3 characters long" });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters long" });
-    }
-
+    if (!username || !password) return res.status(400).json({ error: "Username and password are required" });
+    
     try {
       const salt = crypto.randomBytes(16).toString("hex");
       const password_hash = hashPassword(password, salt);
-
       const stmt = db.prepare("INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)");
       stmt.run(username, password_hash, salt);
-
       res.status(201).json({ message: "User registered successfully" });
     } catch (error: any) {
-      if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
-        return res.status(409).json({ error: "Username already exists" });
-      }
+      if (error.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ error: "Username already exists" });
       console.error("Registration error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // Twilio OTP Endpoints
-  app.post(["/api/auth/send-otp", "/api/auth/send-otp/"], async (req, res) => {
+  // OTP - Send
+  apiRouter.post(["/auth/send-otp", "/auth/send-otp/"], async (req, res) => {
     const { phone } = req.body;
     if (!phone) return res.status(400).json({ error: "Phone number is required" });
 
-    // Sanitize phone number: remove all non-digit characters except the leading +
     const sanitizedPhone = '+' + phone.replace(/\D/g, '');
-
     const client = getTwilioClient();
     const serviceSid = (process.env.TWILIO_SERVICE_SID || process.env.SERVICE_SID || "").trim();
 
-    // Mock mode if no credentials or invalid SID format
     if (!client || !serviceSid || !serviceSid.startsWith('VA')) {
       console.log(`[MOCK OTP] Sending code 123456 to ${sanitizedPhone}`);
       return res.json({ 
@@ -115,24 +101,19 @@ async function startServer() {
     }
 
     try {
-      await client.verify.v2.services(serviceSid)
-        .verifications
-        .create({ to: sanitizedPhone, channel: 'sms' });
+      await client.verify.v2.services(serviceSid).verifications.create({ to: sanitizedPhone, channel: 'sms' });
       res.json({ message: "OTP sent successfully" });
     } catch (error: any) {
       console.error("Twilio Send Error:", error);
-      // Handle "Invalid parameter" specifically
       if (error.message.includes('Invalid parameter') || error.code === 21604) {
-        return res.status(400).json({ 
-          error: "Invalid phone number format. Please ensure it includes the country code (e.g., +254...)",
-          code: "INVALID_PARAMETER"
-        });
+        return res.status(400).json({ error: "Invalid phone number format. Please ensure it includes the country code (e.g., +254...)", code: "INVALID_PARAMETER" });
       }
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post(["/api/auth/verify-otp", "/api/auth/verify-otp/"], async (req, res) => {
+  // OTP - Verify
+  apiRouter.post(["/auth/verify-otp", "/auth/verify-otp/"], async (req, res) => {
     const { phone, code } = req.body;
     if (!phone || !code) return res.status(400).json({ error: "Phone and code are required" });
 
@@ -140,19 +121,13 @@ async function startServer() {
     const client = getTwilioClient();
     const serviceSid = (process.env.TWILIO_SERVICE_SID || process.env.SERVICE_SID || "").trim();
 
-    // Mock mode verification
     if (!client || !serviceSid || !serviceSid.startsWith('VA')) {
-      if (code === "123456") {
-        return res.json({ message: "Verified (Mock Mode)", success: true });
-      }
+      if (code === "123456") return res.json({ message: "Verified (Mock Mode)", success: true });
       return res.status(400).json({ error: "Invalid mock code. Use 123456" });
     }
 
     try {
-      const verification = await client.verify.v2.services(serviceSid)
-        .verificationChecks
-        .create({ to: sanitizedPhone, code: code });
-      
+      const verification = await client.verify.v2.services(serviceSid).verificationChecks.create({ to: sanitizedPhone, code: code });
       if (verification.status === 'approved') {
         res.json({ message: "Verified successfully", success: true });
       } else {
@@ -164,7 +139,8 @@ async function startServer() {
     }
   });
 
-  app.get(["/api/users", "/api/users/"], (req, res) => {
+  // Users List
+  apiRouter.get(["/users", "/users/"], (req, res) => {
     try {
       const stmt = db.prepare("SELECT id, username, created_at FROM users ORDER BY created_at DESC");
       const users = stmt.all();
@@ -175,14 +151,18 @@ async function startServer() {
     }
   });
 
-  // API 404 Handler - Ensure API routes always return JSON
+  // Mount API Router
+  app.use("/api", apiRouter);
+
+  // API 404 Handler
   app.all("/api/*", (req, res) => {
-    res.status(404).json({ error: "API route not found" });
+    console.warn(`[SERVER] 404 on API route: ${req.method} ${req.url}`);
+    res.status(404).json({ error: "API route not found", path: req.url });
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    console.log("Initializing Vite middleware for development");
+  // Frontend Serving
+  if (nodeEnv !== "production") {
+    console.log("[SERVER] Initializing Vite middleware for development");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -190,56 +170,36 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, "dist");
-    console.log(`Production mode: Serving static files from ${distPath}`);
+    console.log(`[SERVER] Production mode: Serving static files from ${distPath}`);
     
-    // Verify dist directory exists
-    import("fs").then(fs => {
-      if (fs.existsSync(distPath)) {
-        console.log("Dist directory found");
-        if (fs.existsSync(path.join(distPath, "index.html"))) {
-          console.log("index.html found in dist");
+    // Check if dist exists
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        const indexPath = path.join(distPath, "index.html");
+        if (fs.existsSync(indexPath)) {
+          res.sendFile(indexPath);
         } else {
-          console.error("index.html NOT found in dist!");
-        }
-      } else {
-        console.error("Dist directory NOT found!");
-      }
-    });
-
-    app.use(express.static(distPath));
-    
-    app.get("*", (req, res) => {
-      // Don't handle API routes here, they should have been caught above
-      if (req.path.startsWith('/api/')) {
-        return res.status(404).json({ error: "API route not found (catch-all)" });
-      }
-
-      const indexPath = path.join(distPath, "index.html");
-      res.sendFile(indexPath, (err) => {
-        if (err) {
-          console.error(`Error sending index.html:`, err);
-          res.status(404).json({ 
-            error: "Frontend not found", 
-            message: "The application frontend files are missing. Please run build.",
-            path: indexPath
-          });
+          console.error(`[SERVER] index.html missing at ${indexPath}`);
+          res.status(404).json({ error: "Frontend index.html missing" });
         }
       });
-    });
+    } else {
+      console.error(`[SERVER] dist directory missing at ${distPath}`);
+      app.get("*", (req, res) => {
+        res.status(404).json({ error: "Frontend dist directory missing. Please run build." });
+      });
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`[SERVER] Listening on http://0.0.0.0:${PORT}`);
   });
 
   // Global Error Handler
   app.use((err: any, req: any, res: any, next: any) => {
-    console.error("Global Error:", err);
-    res.status(500).json({ 
-      error: "Internal Server Error", 
-      message: err.message,
-      path: req.path
-    });
+    console.error("[SERVER] Global Error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: err.message });
   });
 }
 
