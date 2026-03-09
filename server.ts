@@ -45,7 +45,15 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode`);
+
   app.use(express.json());
+
+  // Request logging
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+  });
 
   // Health check
   app.get("/api/health", (req, res) => {
@@ -178,11 +186,20 @@ async function startServer() {
       server: { middlewareMode: true },
       appType: "spa",
     });
-    app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, "dist")));
+    const distPath = path.join(__dirname, "dist");
+    console.log(`Serving static files from: ${distPath}`);
+    
+    app.use(express.static(distPath));
+    
     app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
+      const indexPath = path.join(distPath, "index.html");
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error(`Error sending index.html from ${indexPath}:`, err);
+          res.status(404).send("The page could not be found. (Index.html missing)");
+        }
+      });
     });
   }
 

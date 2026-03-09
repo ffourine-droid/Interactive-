@@ -70,6 +70,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           body: JSON.stringify({ phone: trimmedPhone }),
         });
 
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('Non-JSON response received:', text);
+          throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}...`);
+        }
+
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to send OTP');
 
@@ -124,6 +131,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: trimmedPhone, code: trimmedOtp }),
       });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response received:', text);
+        throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}...`);
+      }
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Invalid code');
