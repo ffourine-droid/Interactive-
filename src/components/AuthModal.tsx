@@ -63,26 +63,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           throw new Error('Username is required for signup');
         }
 
-        // Use custom server to send OTP
-        const response = await fetch('/api/auth/send-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: trimmedPhone }),
+        // Use Supabase to send OTP for signup
+        const { error } = await supabase.auth.signInWithOtp({
+          phone: trimmedPhone,
+          options: {
+            data: {
+              username: trimmedUsername,
+            }
+          }
         });
 
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          const text = await response.text();
-          console.error('Non-JSON response received:', text);
-          throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}...`);
-        }
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Failed to send OTP');
-
-        if (data.mock) {
-          setError(`Development Mode: ${data.details || "Use code 123456 to verify."}`);
-        }
+        if (error) throw error;
         
         setStep('otp');
       } else {
@@ -123,40 +114,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
     try {
       const trimmedPhone = phone.trim();
       const trimmedOtp = otp.trim();
-      const trimmedUsername = username.trim();
 
-      // Verify OTP via custom server
-      const response = await fetch('/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: trimmedPhone, code: trimmedOtp }),
+      // Verify OTP via Supabase
+      const { data: { session, user }, error } = await supabase.auth.verifyOtp({
+        phone: trimmedPhone,
+        token: trimmedOtp,
+        type: 'sms'
       });
 
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response received:', text);
-        throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}...`);
+      if (error) throw error;
+
+      if (user) {
+        setUser(user);
+        setStep('profile');
+        onAuthSuccess(user);
       }
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Invalid code');
-
-      // If verified, we now create/sign in the user in Supabase
-      // Note: In a real production app, you'd use a service role or 
-      // custom claims, but for this demo we'll proceed to the profile step.
-      
-      // We'll simulate a user object for the UI
-      const mockUser = {
-        id: 'user_' + Math.random().toString(36).substr(2, 9),
-        phone: trimmedPhone,
-        created_at: new Date().toISOString(),
-        user_metadata: { username: trimmedUsername || 'Explorer' }
-      };
-      
-      setUser(mockUser);
-      setStep('profile');
-      onAuthSuccess(mockUser);
       
     } catch (err: any) {
       let message = err.message;
