@@ -13,8 +13,8 @@ export const PremiumGate: React.FC<PremiumGateProps> = ({ lessonId, children, on
   const [access, setAccess] = useState<boolean | null>(null); // null=loading, true=granted, false=denied
 
   useEffect(() => {
-    const checkSavedCode = async () => {
-      const saved = sessionStorage.getItem('azilearn_code');
+    const checkSavedPhone = async () => {
+      const saved = sessionStorage.getItem('azilearn_phone');
       if (saved) {
         const result = await checkAccess(saved);
         if (result.access) {
@@ -27,7 +27,7 @@ export const PremiumGate: React.FC<PremiumGateProps> = ({ lessonId, children, on
       }
     };
 
-    checkSavedCode();
+    checkSavedPhone();
   }, [lessonId]);
 
   if (access === null) {

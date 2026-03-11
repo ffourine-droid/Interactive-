@@ -52,7 +52,7 @@ export default function App() {
           />
         );
       case 'admin':
-        return <AdminPayments />;
+        return <AdminPayments onBack={() => setCurrentPage('home')} />;
       case 'home':
       default:
         return (
@@ -133,23 +133,25 @@ function Home({ onPayPlan, onEnterCode, onAdminClick }: {
               <span className="text-2xl font-black tracking-tighter">AZILEARN</span>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <button 
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-2 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
+                className="p-3 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
+                aria-label="Toggle Theme"
               >
                 {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
               </button>
               <button 
                 onClick={onEnterCode}
-                className="hidden md:flex items-center gap-2 px-4 py-2 bg-brand-surface/20 hover:bg-brand-surface/40 rounded-xl transition-all text-sm font-bold"
+                className="hidden md:flex items-center gap-2 px-5 py-3 bg-brand-surface/20 hover:bg-brand-surface/40 rounded-xl transition-all text-sm font-bold"
               >
                 <Key size={18} />
                 Enter Code
               </button>
               <button 
                 onClick={onAdminClick}
-                className="p-2 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
+                className="p-3 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
+                aria-label="Admin Dashboard"
               >
                 <Shield size={20} />
               </button>

@@ -8,36 +8,47 @@ export interface AccessResult {
   rejection_reason?: string;
 }
 
-export async function checkAccess(code: string): Promise<AccessResult> {
-  if (!code) return { access: false, reason: 'not_found' };
+export async function checkAccess(phone: string): Promise<AccessResult> {
+  if (!phone) return { access: false, reason: 'not_found' };
 
   try {
+    // Get all payments for this phone number, ordered by expiry (latest first)
     const { data, error } = await supabase
       .from('payments')
       .select('*')
-      .eq('transaction_code', code.trim().toUpperCase())
-      .single();
+      .eq('phone_number', phone.trim())
+      .order('expires_at', { ascending: false });
 
-    if (error || !data) {
+    if (error || !data || data.length === 0) {
       return { access: false, reason: 'not_found' };
     }
 
-    if (data.status === 'pending') {
+    // 1. Check if any are approved and not expired
+    const activePayment = data.find(p => 
+      p.status === 'approved' && 
+      (!p.expires_at || new Date(p.expires_at) > new Date())
+    );
+
+    if (activePayment) {
+      return { access: true, reason: 'granted', plan: activePayment.plan, lesson_id: activePayment.lesson_id };
+    }
+
+    // 2. If none active, check if any are pending
+    const pendingPayment = data.find(p => p.status === 'pending');
+    if (pendingPayment) {
       return { access: false, reason: 'pending' };
     }
 
-    if (data.status === 'rejected') {
-      return { access: false, reason: 'rejected', rejection_reason: data.rejection_reason };
+    // 3. Check if any were rejected
+    const rejectedPayment = data.find(p => p.status === 'rejected');
+    if (rejectedPayment) {
+      return { access: false, reason: 'rejected', rejection_reason: rejectedPayment.rejection_reason };
     }
 
-    if (data.status === 'approved') {
-      // Check expiry for all plans
-      if (data.expires_at) {
-        if (new Date(data.expires_at) < new Date()) {
-          return { access: false, reason: 'expired' };
-        }
-      }
-      return { access: true, reason: 'granted', plan: data.plan, lesson_id: data.lesson_id };
+    // 4. Check if any are expired
+    const expiredPayment = data.find(p => p.status === 'approved' && p.expires_at && new Date(p.expires_at) < new Date());
+    if (expiredPayment) {
+      return { access: false, reason: 'expired' };
     }
 
     return { access: false, reason: 'not_found' };
