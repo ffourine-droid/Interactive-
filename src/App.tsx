@@ -3,13 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, FormEvent, useEffect } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, User, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock } from 'lucide-react';
+/**
+ * AziLearn - Subscription-based study materials platform
+ */
+import React, { useState, useEffect } from 'react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import * as storage from './services/storageService';
 import { supabase } from './lib/supabase';
-import { AuthModal } from './components/AuthModal';
-import { SubscriptionModal } from './components/SubscriptionModal';
+import { PremiumGate } from './components/PremiumGate';
+import { Pay } from './pages/Pay';
+import { Access } from './pages/Access';
+import { AdminPayments } from './pages/AdminPayments';
 
 interface Experiment {
   id: string | number;
@@ -19,623 +23,297 @@ interface Experiment {
   subject?: string;
 }
 
+type Page = 'home' | 'pay' | 'access' | 'admin';
+type Plan = 'daily' | 'weekly' | 'monthly';
+
 export default function App() {
-  const [hasError, setHasError] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState<string | null>(localStorage.getItem('azilearn_phone'));
-  const [showAuth, setShowAuth] = useState(false);
-  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [selectedPlan, setSelectedPlan] = useState<Plan>('daily');
+  const [selectedLesson, setSelectedLesson] = useState<Experiment | null>(null);
 
-  useEffect(() => {
-    const handleError = (error: any) => {
-      console.error('Caught error:', error);
-      setHasError(true);
-    };
-    window.addEventListener('error', handleError);
-    
-    if (phoneNumber) {
-      checkSubscription(phoneNumber);
-    }
-
-    return () => {
-      window.removeEventListener('error', handleError);
-    };
-  }, [phoneNumber]);
-
-  const checkSubscription = async (phone: string) => {
-    if (!supabase) return;
-    try {
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('phone_number', phone)
-        .eq('is_active', true)
-        .gt('expires_at', new Date().toISOString())
-        .order('expires_at', { ascending: false })
-        .limit(1);
-
-      if (error) throw error;
-      setHasActiveSubscription(data && data.length > 0);
-    } catch (err) {
-      console.error('Failed to check subscription:', err);
-      setHasActiveSubscription(false);
+  // Simple router
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'pay':
+        return (
+          <Pay 
+            plan={selectedPlan} 
+            lessonId={selectedLesson?.id.toString()} 
+            lessonTitle={selectedLesson?.title}
+            onBack={() => setCurrentPage('home')} 
+          />
+        );
+      case 'access':
+        return (
+          <Access 
+            onBack={() => setCurrentPage('home')} 
+            onSuccess={() => setCurrentPage('home')}
+            onPayClick={() => setCurrentPage('pay')}
+          />
+        );
+      case 'admin':
+        return <AdminPayments />;
+      case 'home':
+      default:
+        return (
+          <Home 
+            onPayPlan={(plan, lesson) => {
+              setSelectedPlan(plan);
+              setSelectedLesson(lesson || null);
+              setCurrentPage('pay');
+            }}
+            onEnterCode={() => setCurrentPage('access')}
+            onAdminClick={() => setCurrentPage('admin')}
+          />
+        );
     }
   };
 
-  if (hasError) {
-    return (
-      <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center p-6 text-center">
-        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h1 className="text-2xl font-bold mb-2">Something went wrong.</h1>
-        <p className="text-brand-text/60 mb-6">The application encountered an error. Please try refreshing.</p>
-        <button 
-          onClick={() => window.location.reload()}
-          className="bg-brand-accent text-white px-6 py-2 rounded-xl font-bold"
-        >
-          Refresh App
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <AppContent 
-        phoneNumber={phoneNumber} 
-        hasActiveSubscription={hasActiveSubscription}
-        onOpenProfile={() => setShowAuth(true)} 
-        onCheckSubscription={() => phoneNumber && checkSubscription(phoneNumber)}
-      />
-      <AuthModal 
-        isOpen={showAuth} 
-        onClose={() => setShowAuth(false)} 
-        hasActiveSubscription={hasActiveSubscription}
-        onAuthSuccess={(phone) => {
-          setPhoneNumber(phone);
-          if (phone) checkSubscription(phone);
-          else setHasActiveSubscription(false);
-        }} 
-      />
-    </>
+    <div className="min-h-screen bg-brand-bg text-brand-text selection:bg-brand-accent/30">
+      {renderPage()}
+    </div>
   );
 }
 
-function AppContent({ 
-  phoneNumber, 
-  hasActiveSubscription, 
-  onOpenProfile,
-  onCheckSubscription
-}: { 
-  phoneNumber: string | null, 
-  hasActiveSubscription: boolean,
-  onOpenProfile: () => void,
-  onCheckSubscription: () => void
+function Home({ onPayPlan, onEnterCode, onAdminClick }: { 
+  onPayPlan: (plan: Plan, lesson?: Experiment) => void,
+  onEnterCode: () => void,
+  onAdminClick: () => void
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
-  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
-    }
-    return 'dark';
-  });
-  const [showSettings, setShowSettings] = useState(false);
-  const [showDownloads, setShowDownloads] = useState(false);
-  const [downloadedExperiments, setDownloadedExperiments] = useState<Experiment[]>([]);
-  const [downloadedIds, setDownloadedIds] = useState<Set<string | number>>(new Set());
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   useEffect(() => {
-    if (theme === 'light') {
-      document.documentElement.classList.add('light');
-    } else {
-      document.documentElement.classList.remove('light');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    // Load downloads
-    loadDownloads();
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
+    handleSearch('');
   }, []);
 
-  const loadDownloads = async () => {
-    try {
-      const downloads = await storage.getDownloadedExperiments();
-      setDownloadedExperiments(downloads || []);
-      setDownloadedIds(new Set((downloads || []).map(d => d.id)));
-    } catch (err) {
-      console.error('Failed to load downloads:', err);
-    }
-  };
-
-  const fetchFullExperiment = async (id: string | number): Promise<Experiment | null> => {
-    if (!supabase) return null;
-    try {
-      const { data, error } = await supabase
-        .from('experiments')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      console.error('Failed to fetch full experiment:', err);
-      return null;
-    }
-  };
-
-  const handleDownloadFile = async (e: React.MouseEvent, exp: Experiment) => {
-    e.stopPropagation();
-    setLoading(true);
-    const fullExp = await fetchFullExperiment(exp.id);
-    setLoading(false);
-    if (!fullExp) {
-      setError('Failed to fetch experiment content for download.');
-      return;
-    }
-    const blob = new Blob([fullExp.html_content], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${fullExp.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDownload = async (e: React.MouseEvent, exp: Experiment) => {
-    e.stopPropagation();
-    if (downloadedIds.has(exp.id)) {
-      await storage.deleteExperiment(exp.id);
-    } else {
-      setLoading(true);
-      const fullExp = await fetchFullExperiment(exp.id);
-      setLoading(false);
-      if (!fullExp) {
-        setError('Failed to fetch experiment content for offline saving.');
-        return;
-      }
-      await storage.saveExperiment(fullExp);
-    }
-    await loadDownloads();
-  };
-
-  const handleSearch = async (e?: FormEvent) => {
-    if (e) e.preventDefault();
-    const query = searchQuery.trim();
-    if (!query) return;
-
-    if (isOffline) {
-      setLoading(true);
-      setError(null);
-      setHasSearched(true);
-      const filtered = downloadedExperiments.filter(exp => 
-        exp.title.toLowerCase().includes(query.toLowerCase()) || 
-        exp.keywords.toLowerCase().includes(query.toLowerCase())
-      );
-      setResults(filtered);
-      setLoading(false);
-      return;
-    }
-
-    if (!supabase) {
-      setError('Supabase client failed to initialize.');
-      return;
-    }
-
+  const handleSearch = async (query: string) => {
     setLoading(true);
     setError(null);
     setHasSearched(true);
     
     try {
-      const { data, error } = await supabase
-        .from('experiments')
-        .select('id, title, keywords')
-        .or(`keywords.ilike.%${query}%,title.ilike.%${query}%`);
+      let supabaseQuery = supabase.from('experiments').select('id, title, keywords');
+      
+      if (query) {
+        supabaseQuery = supabaseQuery.or(`keywords.ilike.%${query}%,title.ilike.%${query}%`);
+      }
+
+      const { data, error } = await supabaseQuery.limit(20);
 
       if (error) throw error;
       setResults(data || []);
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch experiments.');
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const openExperiment = async (exp: Experiment) => {
-    if (!phoneNumber) {
-      onOpenProfile();
-      return;
-    }
-
-    if (!hasActiveSubscription) {
-      setShowSubscriptionModal(true);
-      return;
-    }
-
-    if (isOffline) {
-      const saved = downloadedExperiments.find(e => e.id === exp.id);
-      if (saved) setSelectedExperiment(saved);
-      return;
-    }
-    
-    setLoading(true);
-    const fullExp = await fetchFullExperiment(exp.id);
-    setLoading(false);
-    if (fullExp) {
-      setSelectedExperiment(fullExp);
-    } else {
-      setError('Failed to load experiment content.');
-    }
-  };
-
-  const closeExperiment = () => {
-    setSelectedExperiment(null);
+  const openExperiment = (exp: Experiment) => {
+    setSelectedExperiment(exp);
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg text-brand-text selection:bg-brand-accent selection:text-white transition-colors duration-300">
-      {/* Bottom Left Controls */}
-      <div className="fixed left-6 bottom-6 z-50 flex items-end gap-4">
-        {/* Settings Button */}
-        <div className="flex flex-col-reverse gap-4">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setShowSettings(!showSettings)}
-            className="w-12 h-12 rounded-2xl bg-brand-surface/40 border border-brand-surface/60 backdrop-blur-xl flex items-center justify-center text-brand-text hover:border-brand-accent/50 transition-all shadow-xl"
-          >
-            <Settings size={24} className={showSettings ? 'rotate-90 transition-transform duration-300' : 'transition-transform duration-300'} />
-          </motion.button>
+    <div className={theme}>
+      <div className="min-h-screen bg-brand-bg transition-colors duration-500">
+        {/* Header */}
+        <header className="fixed top-0 left-0 right-0 z-[100] bg-brand-bg/80 backdrop-blur-xl border-b border-brand-surface/40">
+          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center shadow-lg shadow-brand-accent/20">
+                <FlaskConical className="text-white" size={24} />
+              </div>
+              <span className="text-2xl font-black tracking-tighter">AZILEARN</span>
+            </div>
 
-          <AnimatePresence>
-            {showSettings && (
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="p-2 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
+              >
+                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+              <button 
+                onClick={onEnterCode}
+                className="hidden md:flex items-center gap-2 px-4 py-2 bg-brand-surface/20 hover:bg-brand-surface/40 rounded-xl transition-all text-sm font-bold"
+              >
+                <Key size={18} />
+                Enter Code
+              </button>
+              <button 
+                onClick={onAdminClick}
+                className="p-2 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
+              >
+                <Shield size={20} />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="pt-32 pb-20 px-6">
+          <div className="max-w-4xl mx-auto">
+            {/* Hero Section */}
+            <div className="text-center mb-16">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="flex flex-col gap-2 p-2 bg-brand-surface/40 border border-brand-surface/60 backdrop-blur-xl rounded-2xl"
               >
-                <button
-                  onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                  className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-brand-accent/20 transition-colors text-brand-text"
-                  title={theme === 'light' ? 'Switch to Dark' : 'Switch to Light'}
-                >
-                  {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-                </button>
+                <div className="flex flex-col items-center justify-center gap-3 mb-2">
+                  <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter">
+                    Welcome, Explorer.
+                  </h1>
+                  <p className="text-brand-text/60 text-lg">What are we learning today?</p>
+                </div>
               </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Downloads Button */}
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setShowDownloads(!showDownloads)}
-          className={`w-12 h-12 rounded-2xl border backdrop-blur-xl flex items-center justify-center transition-all shadow-xl ${
-            showDownloads 
-              ? 'bg-brand-accent text-white border-brand-accent' 
-              : 'bg-brand-surface/40 border-brand-surface/60 text-brand-text hover:border-brand-accent/50'
-          }`}
-          title="My Downloads"
-        >
-          <Download size={24} />
-        </motion.button>
-      </div>
-
-      {/* Profile Button - Bottom Right */}
-      <div className="fixed right-6 bottom-6 z-50">
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={onOpenProfile}
-          className="w-12 h-12 rounded-2xl bg-brand-surface/40 border border-brand-surface/60 backdrop-blur-xl flex items-center justify-center text-brand-text hover:border-brand-accent/50 transition-all shadow-xl"
-        >
-          <User size={24} />
-        </motion.button>
-      </div>
-
-      <main className="max-w-4xl mx-auto px-6 min-h-screen flex flex-col">
-        {/* Logo at the very top */}
-        <header className="pt-8 flex justify-center">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center gap-2"
-          >
-            <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-brand-accent/20">
-              A
             </div>
-            <span className="text-xs font-black tracking-tighter opacity-50">AZILEARN v1.0.7</span>
-          </motion.div>
-        </header>
 
-        {/* Search bar in the middle area */}
-        <div className="flex-1 flex flex-col justify-center -mt-20">
-          <AnimatePresence mode="wait">
-            {showDownloads ? (
-              <motion.div
-                key="downloads-view"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="w-full"
-              >
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-3xl font-extrabold tracking-tighter">My Downloads</h2>
-                  <button 
-                    onClick={() => setShowDownloads(false)}
-                    className="text-sm font-bold text-brand-accent hover:underline"
-                  >
-                    Back to Search
-                  </button>
-                </div>
-
-                {downloadedExperiments.length === 0 ? (
-                  <div className="text-center py-20 bg-brand-surface/10 rounded-[2rem] border border-dashed border-brand-surface/40">
-                    <Download className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                    <p className="text-lg font-bold text-brand-text/40">No offline materials yet.</p>
-                    <p className="text-sm text-brand-text/20">Download experiments to view them without internet.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {downloadedExperiments.map((exp) => (
-                      <motion.div
-                        key={exp.id}
-                        layoutId={`exp-${exp.id}`}
-                        onClick={() => openExperiment(exp)}
-                        className="group bg-brand-surface/20 border border-brand-surface/40 p-4 rounded-2xl hover:bg-brand-surface/40 hover:border-brand-accent/30 transition-all duration-300 cursor-pointer flex items-center justify-between"
-                      >
-                        <div className="flex-1 truncate pr-4">
-                          <h3 className="text-base font-bold group-hover:text-brand-accent transition-colors truncate">
-                            {exp.title}
-                          </h3>
-                          <p className="text-[10px] text-brand-text/40 uppercase tracking-widest mt-1">Available Offline</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => handleDownload(e, exp)}
-                            className="p-2 rounded-xl hover:bg-red-500/10 text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                            title="Remove from downloads"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                          <ExternalLink size={16} className="text-brand-text/20 group-hover:text-brand-accent transition-colors shrink-0" />
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="search-view"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-              >
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="text-center mb-6"
-                >
-                  <div className="flex flex-col items-center justify-center gap-3 mb-2">
-                    <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter">
-                      Welcome, {phoneNumber || 'Explorer'}.
-                    </h1>
-                    {isOffline && (
-                      <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-amber-500 text-[10px] font-black uppercase tracking-widest">
-                        <WifiOff size={12} />
-                        Offline Mode
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-
-                {/* Search Bar */}
-                <motion.form 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  onSubmit={handleSearch} 
-                  className="relative group"
-                >
-                  <div className="absolute inset-0 bg-brand-accent/20 rounded-[2rem] blur-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
-                  <div className="relative flex items-center bg-brand-surface/40 border border-brand-surface/60 rounded-2xl p-1.5 focus-within:border-brand-accent/50 transition-all duration-300 backdrop-blur-xl">
-                    <div className="pl-3 text-brand-text/40">
-                      <Search size={20} />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder={isOffline ? "Search downloads..." : "Search..."}
-                      className="flex-1 bg-transparent border-none outline-none px-3 py-2 text-base font-medium placeholder:text-brand-text/20"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <button 
-                      type="submit"
-                      disabled={loading || (isOffline && !searchQuery)}
-                      className="bg-brand-accent text-white px-6 py-2 rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 shadow-xl shadow-brand-accent/20"
-                    >
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
-                    </button>
-                  </div>
-                </motion.form>
-
-                {/* Results Section (Appears below search when searched) */}
-                <div className="mt-8">
-                  <AnimatePresence mode="popLayout">
-                    {error && (
-                      <motion.div 
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        className="p-6 bg-red-500/10 border border-red-500/20 rounded-3xl flex items-start gap-4 text-red-400 mb-8"
-                      >
-                        <AlertCircle className="shrink-0 mt-1" />
-                        <div>
-                          <h3 className="font-bold text-lg">Oops!</h3>
-                          <p className="text-sm opacity-80">{error}</p>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {loading ? (
-                        [1, 2].map((i) => <SkeletonCard key={i} />)
-                      ) : results.length > 0 ? (
-                        results.map((exp, idx) => (
-                          <motion.div
-                            key={exp.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.05 }}
-                            onClick={() => openExperiment(exp)}
-                            className="group relative bg-brand-surface/20 border border-brand-surface/40 p-4 rounded-2xl hover:bg-brand-surface/40 hover:border-brand-accent/30 transition-all duration-300 cursor-pointer overflow-hidden"
-                          >
-                            <div className={!hasActiveSubscription ? 'blur-[2px] opacity-60' : ''}>
-                              <h3 className="text-base font-bold group-hover:text-brand-accent transition-colors truncate pr-12">
-                                {exp.title}
-                              </h3>
-                              <p className="text-[10px] text-brand-text/40 uppercase tracking-widest mt-1">
-                                Study Material
-                              </p>
-                            </div>
-
-                            {!hasActiveSubscription && (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/5 backdrop-blur-[1px] group-hover:bg-black/10 transition-all">
-                                <Lock size={16} className="text-brand-accent mb-1" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Subscribe to Access</span>
-                              </div>
-                            )}
-
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                              {hasActiveSubscription && (
-                                <>
-                                  <button
-                                    onClick={(e) => handleDownloadFile(e, exp)}
-                                    className="p-2 rounded-xl text-brand-text/20 hover:bg-brand-accent/10 hover:text-brand-accent transition-all"
-                                    title="Download as HTML File"
-                                  >
-                                    <Download size={16} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => handleDownload(e, exp)}
-                                    className={`p-2 rounded-xl transition-all ${
-                                      downloadedIds.has(exp.id)
-                                        ? 'text-brand-accent bg-brand-accent/10'
-                                        : 'text-brand-text/20 hover:bg-brand-accent/10 hover:text-brand-accent'
-                                    }`}
-                                    title={downloadedIds.has(exp.id) ? "Saved Offline" : "Save for Offline Access"}
-                                  >
-                                    {downloadedIds.has(exp.id) ? <CheckCircle2 size={16} /> : <FlaskConical size={16} />}
-                                  </button>
-                                </>
-                              )}
-                              <ExternalLink size={16} className="text-brand-text/20 group-hover:text-brand-accent transition-colors shrink-0" />
-                            </div>
-                          </motion.div>
-                        ))
-                      ) : hasSearched && (
-                        <div className="col-span-full text-center py-10">
-                          <p className="text-lg font-bold text-brand-text/20 italic">No results.</p>
-                        </div>
-                      )}
-                    </div>
-                  </AnimatePresence>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </main>
-
-      <SubscriptionModal
-        isOpen={showSubscriptionModal}
-        onClose={() => setShowSubscriptionModal(false)}
-        phoneNumber={phoneNumber || ''}
-        onSubscriptionSuccess={onCheckSubscription}
-      />
-
-      {/* Full Screen Preview Modal */}
-      <AnimatePresence>
-        {selectedExperiment && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-brand-bg flex flex-col"
-          >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-brand-surface/50 bg-brand-surface/10 backdrop-blur-xl">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={closeExperiment}
-                  className="w-12 h-12 rounded-2xl border border-brand-surface/50 flex items-center justify-center hover:bg-brand-surface/20 transition-colors"
-                >
-                  <ChevronLeft size={24} />
-                </button>
-                <div>
-                  <h2 className="font-bold text-xl text-brand-text leading-none mb-1">{selectedExperiment.title}</h2>
-                  <p className="text-[10px] text-brand-accent font-black uppercase tracking-[0.2em]">Live Experiment</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => handleDownloadFile(e, selectedExperiment)}
-                  className="w-12 h-12 rounded-2xl border border-brand-surface/50 flex items-center justify-center hover:bg-brand-surface/20 transition-colors text-brand-text"
-                  title="Download as HTML File"
-                >
-                  <Download size={20} />
-                </button>
-                <button
-                  onClick={(e) => handleDownload(e, selectedExperiment)}
-                  className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all ${
-                    downloadedIds.has(selectedExperiment.id)
-                      ? 'bg-brand-accent text-white border-brand-accent'
-                      : 'border-brand-surface/50 text-brand-text hover:bg-brand-surface/20'
-                  }`}
-                  title={downloadedIds.has(selectedExperiment.id) ? "Saved Offline" : "Save for Offline Access"}
-                >
-                  {downloadedIds.has(selectedExperiment.id) ? <CheckCircle2 size={20} /> : <FlaskConical size={20} />}
-                </button>
-                <button
-                  onClick={closeExperiment}
-                  className="bg-brand-accent text-white px-6 py-3 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all"
-                >
-                  Exit
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex-1 bg-white">
-              <iframe
-                title={selectedExperiment.title}
-                srcDoc={selectedExperiment.html_content}
-                className="w-full h-full border-none"
-                sandbox="allow-scripts allow-modals"
+            {/* Search Bar */}
+            <div className="relative mb-12">
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-brand-text/20" size={24} />
+              <input
+                type="text"
+                placeholder="Search for a topic (e.g. Photosynthesis, Algebra)..."
+                className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-[2rem] py-6 pl-16 pr-6 outline-none focus:border-brand-accent/50 transition-all text-lg shadow-xl"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  handleSearch(e.target.value);
+                }}
               />
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+            {/* Pricing CTA */}
+            <div className="mb-12 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-6 bg-brand-surface/20 border border-brand-surface/40 rounded-3xl flex flex-col items-center text-center">
+                <h3 className="text-lg font-bold mb-1">Daily Pass</h3>
+                <p className="text-2xl font-black text-brand-accent mb-4">KES 10</p>
+                <button 
+                  onClick={() => onPayPlan('daily')}
+                  className="w-full py-3 bg-brand-accent text-white rounded-xl font-bold hover:scale-105 transition-all"
+                >
+                  Get 1 Day
+                </button>
+              </div>
+              <div className="p-6 bg-brand-accent/10 border border-brand-accent/20 rounded-3xl flex flex-col items-center text-center relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-brand-accent text-white text-[10px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">Popular</div>
+                <h3 className="text-lg font-bold mb-1">Weekly Pass</h3>
+                <p className="text-2xl font-black text-brand-accent mb-4">KES 50</p>
+                <button 
+                  onClick={() => onPayPlan('weekly')}
+                  className="w-full py-3 bg-brand-accent text-white rounded-xl font-bold hover:scale-105 transition-all shadow-lg shadow-brand-accent/20"
+                >
+                  Get 7 Days
+                </button>
+              </div>
+              <div className="p-6 bg-brand-surface/20 border border-brand-surface/40 rounded-3xl flex flex-col items-center text-center">
+                <h3 className="text-lg font-bold mb-1">Monthly Pass</h3>
+                <p className="text-2xl font-black text-brand-accent mb-4">KES 120</p>
+                <button 
+                  onClick={() => onPayPlan('monthly')}
+                  className="w-full py-3 bg-brand-accent text-white rounded-xl font-bold hover:scale-105 transition-all"
+                >
+                  Get 30 Days
+                </button>
+              </div>
+            </div>
+
+            {/* Results */}
+            <div className="space-y-4">
+              {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+                </div>
+              ) : results.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {results.map((exp, idx) => (
+                    <motion.div
+                      key={exp.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      onClick={() => openExperiment(exp)}
+                      className="group relative bg-brand-surface/20 border border-brand-surface/40 p-4 rounded-2xl hover:bg-brand-surface/40 hover:border-brand-accent/30 transition-all duration-300 cursor-pointer overflow-hidden"
+                    >
+                      <div className="blur-[2px] opacity-60">
+                        <h3 className="text-base font-bold group-hover:text-brand-accent transition-colors truncate pr-12">
+                          {exp.title}
+                        </h3>
+                        <p className="text-[10px] text-brand-text/40 uppercase tracking-widest mt-1">
+                          Study Material
+                        </p>
+                      </div>
+
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/5 backdrop-blur-[1px] group-hover:bg-black/10 transition-all">
+                        <Lock size={16} className="text-brand-accent mb-1" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Unlock Lesson</span>
+                      </div>
+
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                        <ExternalLink size={16} className="text-brand-text/20 group-hover:text-brand-accent transition-colors shrink-0" />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : hasSearched && (
+                <div className="text-center p-12 bg-brand-surface/10 rounded-3xl border border-dashed border-brand-surface/40">
+                  <p className="text-brand-text/40">No lessons found. Try a different topic.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+
+        {/* Experiment Modal (PremiumGate handles access) */}
+        <AnimatePresence>
+          {selectedExperiment && (
+            <PremiumGate 
+              lessonId={selectedExperiment.id.toString()}
+              onClose={() => setSelectedExperiment(null)}
+              onPayClick={() => onPayPlan('daily', selectedExperiment)}
+              onEnterCode={onEnterCode}
+            >
+              <div className="fixed inset-0 z-[100] bg-brand-bg flex flex-col">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-brand-surface/50 bg-brand-surface/10 backdrop-blur-xl">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setSelectedExperiment(null)}
+                      className="w-12 h-12 rounded-2xl border border-brand-surface/50 flex items-center justify-center hover:bg-brand-surface/20 transition-colors"
+                    >
+                      <ChevronLeft size={24} />
+                    </button>
+                    <div>
+                      <h2 className="font-bold text-xl text-brand-text leading-none mb-1">{selectedExperiment.title}</h2>
+                      <p className="text-[10px] text-brand-accent font-black uppercase tracking-[0.2em]">Live Experiment</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedExperiment(null)}
+                    className="bg-brand-accent text-white px-6 py-3 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all"
+                  >
+                    Exit
+                  </button>
+                </div>
+                
+                <div className="flex-1 bg-white">
+                  <iframe
+                    title={selectedExperiment.title}
+                    srcDoc={selectedExperiment.html_content}
+                    className="w-full h-full border-none"
+                    sandbox="allow-scripts allow-modals"
+                  />
+                </div>
+              </div>
+            </PremiumGate>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
