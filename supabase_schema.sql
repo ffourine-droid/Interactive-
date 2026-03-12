@@ -11,16 +11,16 @@ DROP TABLE IF EXISTS payments CASCADE;
 -- 3. Create the payments table correctly
 CREATE TABLE payments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  transaction_code TEXT NOT NULL UNIQUE,
+  phone_number TEXT NOT NULL,            -- Required for verification
   amount INTEGER NOT NULL,
-  plan TEXT NOT NULL,           -- 'lesson' or 'monthly'
-  lesson_id TEXT,               -- if plan = 'lesson', which lesson slug
-  phone_number TEXT,            -- optional, user-entered
+  plan TEXT NOT NULL,                    -- 'daily', 'weekly', 'monthly'
+  lesson_id TEXT,                        -- if plan = 'lesson', which lesson slug
+  transaction_code TEXT,                 -- now optional
   status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
   submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   verified_at TIMESTAMP WITH TIME ZONE,
   rejection_reason TEXT,
-  expires_at TIMESTAMP WITH TIME ZONE  -- null for lesson, 30 days for monthly
+  expires_at TIMESTAMP WITH TIME ZONE
 );
 
 -- 4. Enable Row Level Security
@@ -32,9 +32,13 @@ ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public insert" ON payments
   FOR INSERT TO anon WITH CHECK (true);
 
--- Anyone can read a payment by transaction code (Access Verification)
-CREATE POLICY "Allow public read by code" ON payments
+-- Anyone can read a payment by phone number (Access Verification)
+CREATE POLICY "Allow public read by phone" ON payments
   FOR SELECT TO anon USING (true);
 
--- 6. Index for faster lookups by transaction code
-CREATE INDEX idx_payments_code ON payments(transaction_code);
+-- Anyone can update a payment (Admin Approval/Rejection)
+CREATE POLICY "Allow public update" ON payments
+  FOR UPDATE TO anon USING (true);
+
+-- 6. Index for faster lookups by phone number
+CREATE INDEX idx_payments_phone ON payments(phone_number);

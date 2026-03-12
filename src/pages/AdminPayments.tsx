@@ -159,7 +159,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
-    await supabase
+    const { error } = await supabase
       .from('payments')
       .update({
         status: 'approved',
@@ -167,10 +167,16 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         expires_at: expiresAt
       })
       .eq('id', id);
+    
+    if (error) {
+      alert("Failed to approve payment: " + error.message);
+    } else {
+      fetchPayments();
+    }
   };
 
   const rejectPayment = async (id: string, reason: string) => {
-    await supabase
+    const { error } = await supabase
       .from('payments')
       .update({
         status: 'rejected',
@@ -178,8 +184,14 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         rejection_reason: reason || 'Invalid transaction'
       })
       .eq('id', id);
-    setRejectingId(null);
-    setRejectionReason('');
+    
+    if (error) {
+      alert("Failed to reject payment: " + error.message);
+    } else {
+      setRejectingId(null);
+      setRejectionReason('');
+      fetchPayments();
+    }
   };
 
   const deleteExperiment = async (id: string | number) => {
@@ -388,7 +400,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-text/20" size={18} />
                 <input
                   type="text"
-                  placeholder="Search code or phone..."
+                  placeholder="Search phone number..."
                   className="w-full bg-brand-bg border border-brand-surface/60 rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all text-sm"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -402,7 +414,6 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   <tr className="text-[10px] font-black uppercase tracking-widest text-brand-text/40 border-b border-brand-surface/40">
                     <th className="px-8 py-4">Phone Number</th>
                     <th className="px-8 py-4">Plan / Lesson</th>
-                    <th className="px-8 py-4">M-Pesa Code</th>
                     <th className="px-8 py-4">Amount</th>
                     <th className="px-8 py-4">Submitted</th>
                     <th className="px-8 py-4">Status</th>
@@ -441,9 +452,6 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             {p.plan}
                           </span>
                           {p.lesson_id && <p className="text-xs text-brand-text/40 mt-1">{p.lesson_id}</p>}
-                        </td>
-                        <td className="px-8 py-6 text-sm font-mono opacity-60">
-                          {p.transaction_code.startsWith('PHONE_') ? 'N/A' : p.transaction_code}
                         </td>
                         <td className="px-8 py-6 font-bold">KES {p.amount}</td>
                         <td className="px-8 py-6 text-xs text-brand-text/40">

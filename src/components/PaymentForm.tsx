@@ -11,13 +11,10 @@ interface PaymentFormProps {
 }
 
 export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount, onSuccess }) => {
-  const [code, setCode] = useState('');
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
-
-  const mpesaCodeRegex = /^[A-Z0-9]{10}$/;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +34,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
       const { error: insertError } = await supabase
         .from('payments')
         .insert({
-          transaction_code: code.trim().toUpperCase() || `PHONE_${Date.now()}`,
+          transaction_code: `PAY_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           amount,
           plan,
           lesson_id: lessonId,
@@ -98,22 +95,6 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
             />
           </div>
         </div>
-
-        <div>
-          <label className="block text-xs font-black uppercase tracking-widest text-brand-text/40 mb-2 ml-1">
-            M-Pesa Transaction Code (Optional)
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              maxLength={10}
-              placeholder="e.g. QGH123ABCD"
-              className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all font-mono uppercase tracking-widest"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-            />
-          </div>
-        </div>
       </div>
 
       {error && (
@@ -132,7 +113,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
         disabled={loading}
         className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-xl shadow-brand-accent/20"
       >
-        {loading ? <Loader2 className="animate-spin" size={20} /> : 'Submit Payment Code'}
+        {loading ? <Loader2 className="animate-spin" size={20} /> : 'Submit Payment'}
       </button>
     </form>
   );
