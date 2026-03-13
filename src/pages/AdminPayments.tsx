@@ -90,6 +90,8 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   // Deletion state
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
+  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
+
   const ADMIN_PASSWORD = "azilearn-admin-2024"; // In real app, use env var
 
   useEffect(() => {
@@ -120,12 +122,18 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   }, [isAuthenticated]);
 
   const fetchExperiments = async () => {
-    const { data } = await supabase.from('experiments').select('*').order('title');
+    const { data, error } = await supabase.from('experiments').select('*').order('title');
+    if (error) {
+      console.error('Error fetching experiments:', error);
+    }
     if (data) setExperiments(data);
   };
 
   const fetchProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    if (error) {
+      console.error('Error fetching profiles:', error);
+    }
     if (data) setProfiles(data);
   };
 
@@ -653,6 +661,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-brand-text/40">Phone Number</th>
                     <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-brand-text/40">Joined Date</th>
                     <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-brand-text/40">Total Payments</th>
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-brand-text/40 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-surface/40">
@@ -678,6 +687,14 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <span className="px-3 py-1 bg-brand-surface/40 rounded-lg text-xs font-bold">
                               {userPayments.length} Payments
                             </span>
+                          </td>
+                          <td className="px-8 py-6 text-right">
+                            <button
+                              onClick={() => setSelectedUser(user)}
+                              className="px-4 py-2 bg-brand-accent/10 text-brand-accent rounded-xl text-xs font-bold hover:bg-brand-accent/20 transition-all"
+                            >
+                              View Details
+                            </button>
                           </td>
                         </tr>
                       );
@@ -828,6 +845,91 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   >
                     Delete
                   </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+        {/* Modals */}
+        <AnimatePresence>
+          {selectedUser && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedUser(null)}
+                className="absolute inset-0 bg-brand-bg/80 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative w-full max-w-2xl bg-brand-bg border border-brand-surface/40 rounded-[2.5rem] shadow-2xl overflow-hidden"
+              >
+                <div className="p-8 border-b border-brand-surface/40 bg-brand-surface/5 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-brand-accent rounded-2xl flex items-center justify-center text-white text-xl font-black">
+                      {selectedUser.username.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black tracking-tighter">{selectedUser.username}</h2>
+                      <p className="text-xs font-bold text-brand-text/40 uppercase tracking-widest">{selectedUser.phone_number}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedUser(null)}
+                    className="p-2 hover:bg-brand-surface/20 rounded-xl transition-colors"
+                  >
+                    <XCircle size={24} className="text-brand-text/40" />
+                  </button>
+                </div>
+
+                <div className="p-8 max-h-[60vh] overflow-y-auto">
+                  <div className="grid grid-cols-2 gap-4 mb-8">
+                    <div className="p-4 bg-brand-surface/10 rounded-2xl border border-brand-surface/20">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-brand-text/40 mb-1">Joined Date</p>
+                      <p className="font-bold">{new Date(selectedUser.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div className="p-4 bg-brand-surface/10 rounded-2xl border border-brand-surface/20">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-brand-text/40 mb-1">Total Spent</p>
+                      <p className="font-bold">KES {payments.filter(p => p.phone_number === selectedUser.phone_number && p.status === 'approved').reduce((acc, p) => acc + p.amount, 0)}</p>
+                    </div>
+                  </div>
+
+                  <h3 className="text-xs font-black uppercase tracking-widest text-brand-text/40 mb-4">Payment History</h3>
+                  <div className="space-y-3">
+                    {payments
+                      .filter(p => p.phone_number === selectedUser.phone_number)
+                      .sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())
+                      .map((p) => (
+                        <div key={p.id} className="p-4 bg-brand-surface/5 border border-brand-surface/20 rounded-2xl flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-bold">{p.transaction_code}</span>
+                              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                                p.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                                p.status === 'rejected' ? 'bg-red-500/10 text-red-500' :
+                                'bg-amber-500/10 text-amber-500'
+                              }`}>
+                                {p.status}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-brand-text/40 font-bold">
+                              {new Date(p.submitted_at).toLocaleString()} • {p.plan} plan
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-black">KES {p.amount}</p>
+                          </div>
+                        </div>
+                      ))}
+                    {payments.filter(p => p.phone_number === selectedUser.phone_number).length === 0 && (
+                      <div className="py-8 text-center bg-brand-surface/5 rounded-2xl border border-dashed border-brand-surface/40">
+                        <p className="text-xs font-bold text-brand-text/40">No payment history found.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             </div>
