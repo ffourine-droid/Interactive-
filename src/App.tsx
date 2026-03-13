@@ -7,13 +7,17 @@
  * AziLearn - Subscription-based study materials platform
  */
 import React, { useState, useEffect } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key } from 'lucide-react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key, Clock, FileText, PlayCircle, Mic2, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
 import { PremiumGate } from './components/PremiumGate';
 import { Pay } from './pages/Pay';
 import { Access } from './pages/Access';
 import { AdminPayments } from './pages/AdminPayments';
+import { Auth } from './components/Auth';
+import { checkAccess, AccessResult } from './utils/checkAccess';
+import { CountdownTimer } from './components/CountdownTimer';
+import { SlidesViewer } from './components/SlidesViewer';
 
 interface Experiment {
   id: string | number;
@@ -21,6 +25,15 @@ interface Experiment {
   keywords: string;
   html_content: string;
   subject?: string;
+  slides?: string[];
+  audio_url?: string;
+}
+
+interface Profile {
+  id: string;
+  username: string;
+  phone_number: string;
+  created_at: string;
 }
 
 type Page = 'home' | 'pay' | 'access' | 'admin';
@@ -30,9 +43,88 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('daily');
   const [selectedLesson, setSelectedLesson] = useState<Experiment | null>(null);
+  const [accessResult, setAccessResult] = useState<AccessResult | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  const refreshAccess = async () => {
+    const saved = sessionStorage.getItem('azilearn_phone');
+    if (saved) {
+      const result = await checkAccess(saved);
+      setAccessResult(result);
+    } else {
+      setAccessResult(null);
+    }
+  };
+
+  const checkProfile = async () => {
+    const savedPhone = sessionStorage.getItem('azilearn_phone');
+    if (savedPhone) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('phone_number', savedPhone)
+        .maybeSingle();
+      
+      if (data) {
+        setProfile(data);
+      }
+    }
+    setIsAuthLoading(false);
+  };
+
+  useEffect(() => {
+    checkProfile();
+    refreshAccess();
+    
+    // Listen for storage changes (e.g. from PaymentForm or AccessPrompt)
+    const handleStorage = () => refreshAccess();
+    window.addEventListener('storage', handleStorage);
+    
+    // Real-time subscription
+    const saved = sessionStorage.getItem('azilearn_phone');
+    let channel: any;
+    if (saved) {
+      channel = supabase
+        .channel('global_payment_status')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'payments',
+            filter: `phone_number=eq.${saved}`,
+          },
+          () => {
+            refreshAccess();
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Simple router
   const renderPage = () => {
+    if (isAuthLoading) {
+      return (
+        <div className="min-h-screen bg-brand-bg flex items-center justify-center">
+          <Loader2 className="animate-spin text-brand-accent" size={48} />
+        </div>
+      );
+    }
+
+    if (!profile && currentPage !== 'admin') {
+      return <Auth onSuccess={(p) => {
+        setProfile(p);
+        refreshAccess();
+      }} />;
+    }
+
     switch (currentPage) {
       case 'pay':
         return (
@@ -40,6 +132,15 @@ export default function App() {
             plan={selectedPlan} 
             lessonId={selectedLesson?.id.toString()} 
             lessonTitle={selectedLesson?.title}
+            onSuccess={() => {
+              refreshAccess();
+              if (selectedLesson) {
+                setCurrentPage('home');
+                // The lesson modal will still be open or can be re-opened
+              } else {
+                setCurrentPage('home');
+              }
+            }}
             onBack={() => setCurrentPage('home')} 
           />
         );
@@ -47,7 +148,10 @@ export default function App() {
         return (
           <Access 
             onBack={() => setCurrentPage('home')} 
-            onSuccess={() => setCurrentPage('home')}
+            onSuccess={() => {
+              refreshAccess();
+              setCurrentPage('home');
+            }}
             onPayClick={() => setCurrentPage('pay')}
           />
         );
@@ -57,6 +161,7 @@ export default function App() {
       default:
         return (
           <Home 
+            accessResult={accessResult}
             onPayPlan={(plan, lesson) => {
               setSelectedPlan(plan);
               setSelectedLesson(lesson || null);
@@ -64,6 +169,13 @@ export default function App() {
             }}
             onEnterCode={() => setCurrentPage('access')}
             onAdminClick={() => setCurrentPage('admin')}
+            profile={profile}
+            onLogout={() => {
+              sessionStorage.removeItem('azilearn_phone');
+              sessionStorage.removeItem('azilearn_username');
+              setProfile(null);
+              setAccessResult(null);
+            }}
           />
         );
     }
@@ -76,12 +188,16 @@ export default function App() {
   );
 }
 
-function Home({ onPayPlan, onEnterCode, onAdminClick }: { 
+function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onLogout }: { 
+  accessResult: AccessResult | null,
   onPayPlan: (plan: Plan, lesson?: Experiment) => void,
   onEnterCode: () => void,
-  onAdminClick: () => void
+  onAdminClick: () => void,
+  profile: Profile | null,
+  onLogout: () => void
 }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [category, setCategory] = useState<'all' | 'notes' | 'slides' | 'audio'>('all');
   const [results, setResults] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,25 +206,43 @@ function Home({ onPayPlan, onEnterCode, onAdminClick }: {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   useEffect(() => {
-    handleSearch('');
-  }, []);
+    handleSearch(searchQuery, category);
+  }, [category]);
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = async (query: string, cat: string = category) => {
     setLoading(true);
     setError(null);
     setHasSearched(true);
     
     try {
-      let supabaseQuery = supabase.from('experiments').select('id, title, keywords');
+      let supabaseQuery = supabase.from('experiments').select('id, title, keywords, html_content, slides, audio_url');
       
+      const filters: string[] = [];
       if (query) {
-        supabaseQuery = supabaseQuery.or(`keywords.ilike.%${query}%,title.ilike.%${query}%`);
+        filters.push(`keywords.ilike.%${query}%,title.ilike.%${query}%`);
       }
 
-      const { data, error } = await supabaseQuery.limit(20);
+      if (filters.length > 0) {
+        supabaseQuery = supabaseQuery.or(filters.join(','));
+      }
+
+      const { data, error } = await supabaseQuery.limit(50);
 
       if (error) throw error;
-      setResults(data || []);
+      
+      let filteredData = data || [];
+      
+      // Client-side category filtering for better precision
+      if (cat !== 'all') {
+        filteredData = filteredData.filter(exp => {
+          if (cat === 'slides') return exp.slides && exp.slides.length > 0;
+          if (cat === 'audio') return !!exp.audio_url;
+          if (cat === 'notes') return !!exp.html_content && (!exp.slides || exp.slides.length === 0);
+          return true;
+        });
+      }
+
+      setResults(filteredData);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -134,6 +268,34 @@ function Home({ onPayPlan, onEnterCode, onAdminClick }: {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4">
+              {profile && (
+                <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-brand-surface/20 rounded-xl border border-brand-surface/40">
+                  <User size={16} className="text-brand-accent" />
+                  <span className="text-xs font-bold">{profile.username}</span>
+                  <button 
+                    onClick={onLogout}
+                    className="ml-2 text-[10px] font-black uppercase tracking-widest text-red-500/60 hover:text-red-500 transition-colors"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+              {accessResult?.access && (
+                <div className="hidden lg:flex items-center gap-3 px-4 py-2 bg-brand-accent/10 rounded-xl border border-brand-accent/20">
+                  <div className="flex flex-col items-end">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent/60">
+                      {accessResult.status === 'pending' ? 'Provisional Access' : 'Premium Access'}
+                    </span>
+                    <div className="text-xs font-bold text-brand-accent">
+                      {accessResult.status === 'pending' ? (
+                        <span className="flex items-center gap-1"><Clock size={12} className="animate-pulse" /> Pending Approval</span>
+                      ) : (
+                        <CountdownTimer expiresAt={accessResult.expires_at!} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               <button 
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                 className="p-3 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
@@ -177,49 +339,76 @@ function Home({ onPayPlan, onEnterCode, onAdminClick }: {
             </div>
 
             {/* Search Bar */}
-            <div className="relative mb-12">
+            <div className="relative mb-6">
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-brand-text/20" size={24} />
               <input
                 type="text"
-                placeholder="Search for a topic (e.g. Photosynthesis, Algebra)..."
-                className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-[2rem] py-6 pl-16 pr-6 outline-none focus:border-brand-accent/50 transition-all text-lg shadow-xl"
+                placeholder="Search for a topic..."
+                className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-[2rem] py-6 pl-16 pr-32 outline-none focus:border-brand-accent/50 transition-all text-lg shadow-xl"
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  handleSearch(e.target.value);
-                }}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
               />
+              <button 
+                onClick={() => handleSearch(searchQuery)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 bg-brand-accent text-white px-6 py-3 rounded-full font-bold hover:scale-105 active:scale-95 transition-all shadow-lg shadow-brand-accent/20"
+              >
+                Search
+              </button>
+            </div>
+
+            {/* Categories */}
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-12">
+              {[
+                { id: 'all', label: 'All Materials', icon: FlaskConical },
+                { id: 'notes', label: 'Study Notes', icon: FileText },
+                { id: 'slides', label: 'Slides', icon: PlayCircle },
+                { id: 'audio', label: 'Audio Lessons', icon: Mic2 },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setCategory(cat.id as any)}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm transition-all border ${
+                    category === cat.id 
+                      ? 'bg-brand-accent border-brand-accent text-white shadow-lg shadow-brand-accent/20' 
+                      : 'bg-brand-surface/10 border-brand-surface/40 text-brand-text/40 hover:text-brand-text hover:border-brand-surface/60'
+                  }`}
+                >
+                  <cat.icon size={16} />
+                  {cat.label}
+                </button>
+              ))}
             </div>
 
             {/* Pricing CTA */}
-            <div className="mb-12 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-6 bg-brand-surface/20 border border-brand-surface/40 rounded-3xl flex flex-col items-center text-center">
-                <h3 className="text-lg font-bold mb-1">Daily Pass</h3>
-                <p className="text-2xl font-black text-brand-accent mb-4">KES 10</p>
+            <div className="mb-12 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="p-4 bg-brand-surface/20 border border-brand-surface/40 rounded-2xl flex flex-col items-center text-center">
+                <h3 className="text-sm font-bold mb-1">Daily Pass</h3>
+                <p className="text-xl font-black text-brand-accent mb-3">KES 10</p>
                 <button 
                   onClick={() => onPayPlan('daily')}
-                  className="w-full py-3 bg-brand-accent text-white rounded-xl font-bold hover:scale-105 transition-all"
+                  className="w-full py-2 bg-brand-accent text-white rounded-lg font-bold text-sm hover:scale-105 transition-all"
                 >
                   Get 1 Day
                 </button>
               </div>
-              <div className="p-6 bg-brand-accent/10 border border-brand-accent/20 rounded-3xl flex flex-col items-center text-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-brand-accent text-white text-[10px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">Popular</div>
-                <h3 className="text-lg font-bold mb-1">Weekly Pass</h3>
-                <p className="text-2xl font-black text-brand-accent mb-4">KES 50</p>
+              <div className="p-4 bg-brand-accent/10 border border-brand-accent/20 rounded-2xl flex flex-col items-center text-center relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-brand-accent text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase tracking-widest">Popular</div>
+                <h3 className="text-sm font-bold mb-1">Weekly Pass</h3>
+                <p className="text-xl font-black text-brand-accent mb-3">KES 50</p>
                 <button 
                   onClick={() => onPayPlan('weekly')}
-                  className="w-full py-3 bg-brand-accent text-white rounded-xl font-bold hover:scale-105 transition-all shadow-lg shadow-brand-accent/20"
+                  className="w-full py-2 bg-brand-accent text-white rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-lg shadow-brand-accent/20"
                 >
                   Get 7 Days
                 </button>
               </div>
-              <div className="p-6 bg-brand-surface/20 border border-brand-surface/40 rounded-3xl flex flex-col items-center text-center">
-                <h3 className="text-lg font-bold mb-1">Monthly Pass</h3>
-                <p className="text-2xl font-black text-brand-accent mb-4">KES 120</p>
+              <div className="p-4 bg-brand-surface/20 border border-brand-surface/40 rounded-2xl flex flex-col items-center text-center">
+                <h3 className="text-sm font-bold mb-1">Monthly Pass</h3>
+                <p className="text-xl font-black text-brand-accent mb-3">KES 120</p>
                 <button 
                   onClick={() => onPayPlan('monthly')}
-                  className="w-full py-3 bg-brand-accent text-white rounded-xl font-bold hover:scale-105 transition-all"
+                  className="w-full py-2 bg-brand-accent text-white rounded-lg font-bold text-sm hover:scale-105 transition-all"
                 >
                   Get 30 Days
                 </button>
@@ -253,8 +442,17 @@ function Home({ onPayPlan, onEnterCode, onAdminClick }: {
                       </div>
 
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/5 backdrop-blur-[1px] group-hover:bg-black/10 transition-all">
-                        <Lock size={16} className="text-brand-accent mb-1" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Unlock Lesson</span>
+                        {accessResult?.access ? (
+                          <>
+                            <CheckCircle2 size={16} className="text-emerald-500 mb-1" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Open Lesson</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock size={16} className="text-brand-accent mb-1" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Unlock Lesson</span>
+                          </>
+                        )}
                       </div>
 
                       <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -304,12 +502,25 @@ function Home({ onPayPlan, onEnterCode, onAdminClick }: {
                 </div>
                 
                 <div className="flex-1 bg-white">
-                  <iframe
-                    title={selectedExperiment.title}
-                    srcDoc={selectedExperiment.html_content}
-                    className="w-full h-full border-none"
-                    sandbox="allow-scripts allow-modals"
-                  />
+                  {selectedExperiment.slides && selectedExperiment.slides.length > 0 ? (
+                    <SlidesViewer 
+                      slides={selectedExperiment.slides} 
+                      audioUrl={selectedExperiment.audio_url} 
+                    />
+                  ) : selectedExperiment.html_content ? (
+                    <iframe
+                      title={selectedExperiment.title}
+                      srcDoc={selectedExperiment.html_content}
+                      className="w-full h-full border-none"
+                      sandbox="allow-scripts allow-modals"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-brand-text/40 gap-4">
+                      <AlertCircle size={48} className="text-brand-accent/20" />
+                      <p className="font-bold">No content available for this lesson.</p>
+                      <p className="text-sm">Please contact support if you believe this is an error.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </PremiumGate>

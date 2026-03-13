@@ -21,7 +21,10 @@ import {
   Trash2,
   FileText,
   LayoutDashboard,
-  Database
+  Database,
+  Image as ImageIcon,
+  Music,
+  User
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -44,6 +47,15 @@ interface Experiment {
   keywords: string;
   html_content: string;
   subject?: string;
+  slides?: string[];
+  audio_url?: string;
+}
+
+interface Profile {
+  id: string;
+  username: string;
+  phone_number: string;
+  created_at: string;
 }
 
 export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -52,11 +64,13 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [activeTab, setActiveTab] = useState<'payments' | 'content'>('payments');
+  const [activeTab, setActiveTab] = useState<'payments' | 'content' | 'users'>('payments');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [stats, setStats] = useState({
     pending: 0,
@@ -67,6 +81,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const [isExpModalOpen, setIsExpModalOpen] = useState(false);
   const [editingExp, setEditingExp] = useState<Partial<Experiment> | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Rejection state
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -81,6 +96,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     if (isAuthenticated) {
       fetchPayments();
       fetchExperiments();
+      fetchProfiles();
       
       const paymentsSub = supabase
         .channel('payments_changes')
@@ -108,18 +124,34 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     if (data) setExperiments(data);
   };
 
-  const fetchPayments = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('payments')
-      .select('*')
-      .order('submitted_at', { ascending: false });
+  const fetchProfiles = async () => {
+    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    if (data) setProfiles(data);
+  };
 
-    if (data) {
-      setPayments(data);
-      calculateStats(data);
+  const fetchPayments = async (isManual = false) => {
+    if (isManual) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .order('submitted_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setPayments(data);
+        calculateStats(data);
+      }
+    } catch (err: any) {
+      console.error('Fetch payments error:', err);
+      alert('Failed to fetch payments: ' + err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLoading(false);
   };
 
   const calculateStats = (data: Payment[]) => {
@@ -198,6 +230,80 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     await supabase.from('experiments').delete().eq('id', id);
     setDeletingId(null);
     fetchExperiments();
+  };
+  
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'slides' | 'audio') => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      const bucket = type === 'slides' ? 'slides' : 'audio';
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        console.log(`Uploading ${file.name} to ${bucket}...`);
+
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Upload error details:', uploadError);
+          throw new Error(`Upload failed for ${file.name}: ${uploadError.message}`);
+        }
+
+        const { data } = supabase.storage
+          .from(bucket)
+          .getPublicUrl(filePath);
+
+        if (data?.publicUrl) {
+          uploadedUrls.push(data.publicUrl);
+        }
+      }
+
+      if (type === 'slides') {
+        setEditingExp(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            slides: [...(prev.slides || []), ...uploadedUrls]
+          };
+        });
+      } else {
+        setEditingExp(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            audio_url: uploadedUrls[0]
+          };
+        });
+      }
+      
+      console.log('Upload successful:', uploadedUrls);
+    } catch (err: any) {
+      console.error('File upload error:', err);
+      alert('Upload failed: ' + err.message + '\n\nPlease ensure the "' + (type === 'slides' ? 'slides' : 'audio') + '" bucket exists in Supabase storage and is public.');
+    } finally {
+      setIsUploading(false);
+      // Clear the input so the same file can be selected again
+      e.target.value = '';
+    }
+  };
+
+  const removeSlide = (index: number) => {
+    setEditingExp(prev => ({
+      ...prev!,
+      slides: prev?.slides?.filter((_, i) => i !== index)
+    }));
   };
 
   const saveExperiment = async (e: React.FormEvent) => {
@@ -342,6 +448,14 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   <p className="text-xl font-black tracking-tighter">{stats.pending}</p>
                 </div>
               </div>
+              <button 
+                onClick={() => fetchPayments(true)}
+                disabled={refreshing}
+                className="p-4 bg-brand-surface/20 border border-brand-surface/40 rounded-3xl hover:bg-brand-surface/40 transition-all disabled:opacity-50"
+                title="Refresh Data"
+              >
+                <Database className={`${refreshing ? 'animate-spin' : ''}`} size={24} />
+              </button>
             </div>
             <button 
               onClick={handleLogout}
@@ -376,6 +490,17 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           >
             <Database size={20} />
             Content
+          </button>
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`flex items-center gap-2 px-8 py-4 rounded-3xl font-bold transition-all ${
+              activeTab === 'users' 
+                ? 'bg-brand-accent text-white shadow-xl shadow-brand-accent/20' 
+                : 'bg-brand-surface/20 text-brand-text/40 hover:text-brand-text'
+            }`}
+          >
+            <User size={20} />
+            Users
           </button>
         </div>
 
@@ -502,6 +627,63 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   <p className="text-brand-text/40">No payments found matching your criteria.</p>
                 </div>
               )}
+            </div>
+          </div>
+        ) : activeTab === 'users' ? (
+          <div className="bg-brand-surface/20 border border-brand-surface/40 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="p-8 border-b border-brand-surface/40 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <h2 className="text-2xl font-bold">User Profiles</h2>
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-text/20" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search users by name or phone..."
+                  className="w-full bg-brand-bg border border-brand-surface/60 rounded-2xl py-3 pl-12 pr-6 outline-none focus:border-brand-accent/50 transition-all text-sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-brand-surface/10">
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-brand-text/40">Username</th>
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-brand-text/40">Phone Number</th>
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-brand-text/40">Joined Date</th>
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-brand-text/40">Total Payments</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-surface/40">
+                  {profiles
+                    .filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase()) || u.phone_number.includes(searchQuery))
+                    .map((user) => {
+                      const userPayments = payments.filter(p => p.phone_number === user.phone_number);
+                      return (
+                        <tr key={user.id} className="hover:bg-brand-surface/10 transition-colors">
+                          <td className="px-8 py-6">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent font-black">
+                                {user.username.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-bold">{user.username}</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-6 font-mono text-sm">{user.phone_number}</td>
+                          <td className="px-8 py-6 text-sm text-brand-text/60">
+                            {new Date(user.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className="px-3 py-1 bg-brand-surface/40 rounded-lg text-xs font-bold">
+                              {userPayments.length} Payments
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
             </div>
           </div>
         ) : (
@@ -702,15 +884,86 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">HTML Content</label>
+                    <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">HTML Content (Optional if using slides)</label>
                     <textarea 
-                      required
-                      rows={12}
+                      rows={8}
                       className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all font-mono text-sm"
                       value={editingExp?.html_content || ''}
                       onChange={e => setEditingExp({...editingExp!, html_content: e.target.value})}
                     />
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                      <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">Instagram-style Slides</label>
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        {editingExp?.slides?.map((url, idx) => (
+                          <div key={idx} className="relative aspect-square rounded-xl overflow-hidden group">
+                            <img src={url} alt={`Slide ${idx}`} className="w-full h-full object-cover" />
+                            <button 
+                              type="button"
+                              onClick={() => removeSlide(idx)}
+                              className="absolute inset-0 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            >
+                              <Trash2 size={20} />
+                            </button>
+                          </div>
+                        ))}
+                        <label className="aspect-square rounded-xl border-2 border-dashed border-brand-surface/60 flex flex-col items-center justify-center cursor-pointer hover:border-brand-accent/50 transition-colors">
+                          <Plus size={24} className="text-brand-text/20" />
+                          <span className="text-[10px] font-bold text-brand-text/40 mt-1">Add Slide</span>
+                          <input 
+                            type="file" 
+                            multiple 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={e => handleFileUpload(e, 'slides')}
+                            disabled={isUploading}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">Audio Background</label>
+                      {editingExp?.audio_url ? (
+                        <div className="p-4 bg-brand-surface/20 rounded-2xl border border-brand-surface/40 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-brand-accent/10 rounded-xl">
+                              <Music size={20} className="text-brand-accent" />
+                            </div>
+                            <span className="text-xs font-bold truncate max-w-[150px]">Audio Uploaded</span>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => setEditingExp(prev => ({ ...prev!, audio_url: undefined }))}
+                            className="text-red-500 hover:text-red-600 p-2"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="w-full py-8 rounded-2xl border-2 border-dashed border-brand-surface/60 flex flex-col items-center justify-center cursor-pointer hover:border-brand-accent/50 transition-colors">
+                          <Plus size={24} className="text-brand-text/20" />
+                          <span className="text-[10px] font-bold text-brand-text/40 mt-1">Upload Audio</span>
+                          <input 
+                            type="file" 
+                            accept="audio/*" 
+                            className="hidden" 
+                            onChange={e => handleFileUpload(e, 'audio')}
+                            disabled={isUploading}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  {isUploading && (
+                    <div className="flex items-center gap-3 text-brand-accent animate-pulse">
+                      <Loader2 className="animate-spin" size={20} />
+                      <span className="text-xs font-bold uppercase tracking-widest">Uploading assets...</span>
+                    </div>
+                  )}
                   <div className="flex gap-4 pt-4">
                     <button 
                       type="submit"

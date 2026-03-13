@@ -11,7 +11,7 @@ interface PaymentFormProps {
 }
 
 export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount, onSuccess }) => {
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(sessionStorage.getItem('azilearn_phone') || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -44,6 +44,10 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
 
       if (insertError) throw insertError;
 
+      // Auto-login for immediate access
+      sessionStorage.setItem('azilearn_phone', trimmedPhone);
+      window.dispatchEvent(new Event('storage'));
+
       setSubmitted(true);
       onSuccess();
     } catch (err: any) {
@@ -64,10 +68,16 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
         <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
           <CheckCircle2 className="text-emerald-500" size={32} />
         </div>
-        <h3 className="text-xl font-bold mb-2 text-emerald-500">Payment Submitted!</h3>
+        <h3 className="text-xl font-bold mb-2 text-emerald-500">Access Granted!</h3>
         <p className="text-emerald-500/80 mb-6">
-          Access will be activated within 30 minutes. Come back and enter your phone number to access your content.
+          You now have immediate access to the materials. Our admin will verify your payment shortly.
         </p>
+        <button
+          onClick={onSuccess}
+          className="w-full bg-emerald-500 text-white py-4 rounded-2xl font-bold hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-emerald-500/20"
+        >
+          Start Learning Now
+        </button>
         <div className="p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
           <p className="text-xs uppercase tracking-widest font-black text-emerald-500/40 mb-1">Your Phone Number</p>
           <p className="font-mono text-lg font-bold text-emerald-500 tracking-widest">{phone}</p>

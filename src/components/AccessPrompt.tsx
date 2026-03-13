@@ -10,7 +10,7 @@ interface AccessPromptProps {
 }
 
 export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess, onPayClick }) => {
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(sessionStorage.getItem('azilearn_phone') || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,6 +23,7 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
 
     if (result.access) {
       sessionStorage.setItem('azilearn_phone', phone.trim());
+      window.dispatchEvent(new Event('storage'));
       onSuccess(phone.trim());
     } else {
       switch (result.reason) {
@@ -30,7 +31,7 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
           setError("Your payment is still being verified. Please check back in 30 minutes.");
           break;
         case 'rejected':
-          setError(`This payment was not verified. Reason: ${result.rejection_reason || 'Invalid transaction'}.`);
+          setError(`Access Denied. Your payment was not verified. Reason: ${result.rejection_reason || 'Invalid transaction'}. Please confirm your payment and try again.`);
           break;
         case 'expired':
           setError("Your access has expired. Please make a new payment.");

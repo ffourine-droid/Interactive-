@@ -6,49 +6,71 @@ export interface AccessResult {
   plan?: string;
   lesson_id?: string;
   rejection_reason?: string;
+  expires_at?: string;
+  status?: string;
 }
 
 export async function checkAccess(phone: string): Promise<AccessResult> {
   if (!phone) return { access: false, reason: 'not_found' };
 
   try {
-    // Get all payments for this phone number, ordered by expiry (latest first)
+    // Get all payments for this phone number, ordered by submission (latest first)
     const { data, error } = await supabase
       .from('payments')
       .select('*')
       .eq('phone_number', phone.trim())
-      .order('expires_at', { ascending: false });
+      .order('submitted_at', { ascending: false });
 
     if (error || !data || data.length === 0) {
       return { access: false, reason: 'not_found' };
     }
 
-    // 1. Check if any are approved and not expired
-    const activePayment = data.find(p => 
-      p.status === 'approved' && 
-      (!p.expires_at || new Date(p.expires_at) > new Date())
-    );
+    // 1. Check for the most recent payment
+    const latestPayment = data[0];
 
-    if (activePayment) {
-      return { access: true, reason: 'granted', plan: activePayment.plan, lesson_id: activePayment.lesson_id };
+    // If rejected, no access
+    if (latestPayment.status === 'rejected') {
+      return { 
+        access: false, 
+        reason: 'rejected', 
+        rejection_reason: latestPayment.rejection_reason,
+        status: 'rejected'
+      };
     }
 
-    // 2. If none active, check if any are pending
-    const pendingPayment = data.find(p => p.status === 'pending');
-    if (pendingPayment) {
-      return { access: false, reason: 'pending' };
+    // If approved, check expiry
+    if (latestPayment.status === 'approved') {
+      const isExpired = latestPayment.expires_at && new Date(latestPayment.expires_at) < new Date();
+      if (isExpired) {
+        return { access: false, reason: 'expired', status: 'approved' };
+      }
+      return { 
+        access: true, 
+        reason: 'granted', 
+        plan: latestPayment.plan, 
+        lesson_id: latestPayment.lesson_id,
+        expires_at: latestPayment.expires_at,
+        status: 'approved'
+      };
     }
 
-    // 3. Check if any were rejected
-    const rejectedPayment = data.find(p => p.status === 'rejected');
-    if (rejectedPayment) {
-      return { access: false, reason: 'rejected', rejection_reason: rejectedPayment.rejection_reason };
-    }
+    // If pending, grant immediate access (as per new requirement)
+    if (latestPayment.status === 'pending') {
+      // Calculate provisional expiry based on plan
+      let days = 1;
+      if (latestPayment.plan === 'weekly') days = 7;
+      if (latestPayment.plan === 'monthly') days = 30;
+      
+      const provisionalExpiry = new Date(new Date(latestPayment.submitted_at).getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 
-    // 4. Check if any are expired
-    const expiredPayment = data.find(p => p.status === 'approved' && p.expires_at && new Date(p.expires_at) < new Date());
-    if (expiredPayment) {
-      return { access: false, reason: 'expired' };
+      return { 
+        access: true, 
+        reason: 'granted', 
+        plan: latestPayment.plan, 
+        lesson_id: latestPayment.lesson_id,
+        expires_at: provisionalExpiry,
+        status: 'pending'
+      };
     }
 
     return { access: false, reason: 'not_found' };

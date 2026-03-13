@@ -7,10 +7,11 @@ interface PayProps {
   plan: 'daily' | 'weekly' | 'monthly';
   lessonId?: string;
   lessonTitle?: string;
+  onSuccess: () => void;
   onBack: () => void;
 }
 
-export const Pay: React.FC<PayProps> = ({ plan, lessonId, lessonTitle, onBack }) => {
+export const Pay: React.FC<PayProps> = ({ plan, lessonId, lessonTitle, onSuccess, onBack }) => {
   const getAmount = () => {
     switch (plan) {
       case 'daily': return 10;
@@ -121,7 +122,7 @@ export const Pay: React.FC<PayProps> = ({ plan, lessonId, lessonTitle, onBack })
               plan={plan} 
               lessonId={lessonId} 
               amount={amount} 
-              onSuccess={() => {}} 
+              onSuccess={onSuccess} 
             />
           </div>
 

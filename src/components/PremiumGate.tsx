@@ -1,54 +1,116 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
-import { checkAccess } from '../utils/checkAccess';
+import { Loader2, Clock, AlertCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { checkAccess, AccessResult } from '../utils/checkAccess';
 import { AccessPrompt } from './AccessPrompt';
+import { CountdownTimer } from './CountdownTimer';
 
 interface PremiumGateProps {
   lessonId: string;
   children: React.ReactNode;
   onPayClick: () => void;
+  onEnterCode: () => void;
+  onClose: () => void;
 }
 
-export const PremiumGate: React.FC<PremiumGateProps> = ({ lessonId, children, onPayClick }) => {
-  const [access, setAccess] = useState<boolean | null>(null); // null=loading, true=granted, false=denied
+export const PremiumGate: React.FC<PremiumGateProps> = ({ lessonId, children, onPayClick, onEnterCode, onClose }) => {
+  const [accessResult, setAccessResult] = useState<AccessResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const performCheck = async () => {
+    const saved = sessionStorage.getItem('azilearn_phone');
+    if (saved) {
+      const result = await checkAccess(saved);
+      setAccessResult(result);
+    } else {
+      setAccessResult({ access: false, reason: 'not_found' });
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const checkSavedPhone = async () => {
-      const saved = sessionStorage.getItem('azilearn_phone');
-      if (saved) {
-        const result = await checkAccess(saved);
-        if (result.access) {
-          setAccess(true);
-        } else {
-          setAccess(false);
-        }
-      } else {
-        setAccess(false);
-      }
-    };
+    performCheck();
 
-    checkSavedPhone();
+    const handleStorage = () => performCheck();
+    window.addEventListener('storage', handleStorage);
+
+    // Real-time subscription for status changes
+    const saved = sessionStorage.getItem('azilearn_phone');
+    if (saved) {
+      const channel = supabase
+        .channel('payment_status')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'payments',
+            filter: `phone_number=eq.${saved}`,
+          },
+          () => {
+            performCheck();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        window.removeEventListener('storage', handleStorage);
+        supabase.removeChannel(channel);
+      };
+    }
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [lessonId]);
 
-  if (access === null) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center p-20">
+      <div className="fixed inset-0 z-[200] bg-brand-bg flex items-center justify-center">
         <Loader2 className="animate-spin text-brand-accent" size={40} />
       </div>
     );
   }
 
-  if (access === true) {
-    return <>{children}</>;
+  if (accessResult?.access) {
+    return (
+      <>
+        {/* Timer/Status Bar */}
+        <div className="fixed top-20 left-0 right-0 z-[110] px-6 py-2 bg-brand-accent/10 backdrop-blur-md border-b border-brand-accent/20 flex items-center justify-center gap-4 text-xs font-bold">
+          {accessResult.status === 'pending' ? (
+            <div className="flex items-center gap-2 text-amber-500">
+              <Clock size={14} className="animate-pulse" />
+              <span>Awaiting Admin Approval (Temporary Access)</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-brand-accent">
+              <span className="opacity-60">Time Remaining:</span>
+              <CountdownTimer expiresAt={accessResult.expires_at!} onExpire={performCheck} />
+            </div>
+          )}
+        </div>
+        <div className="pt-10 h-full">
+          {children}
+        </div>
+      </>
+    );
   }
 
   return (
-    <div className="py-12">
-      <AccessPrompt 
-        lessonId={lessonId} 
-        onSuccess={() => setAccess(true)} 
-        onPayClick={onPayClick}
-      />
+    <div className="fixed inset-0 z-[200] bg-brand-bg/95 backdrop-blur-md flex items-center justify-center p-6">
+      <div className="w-full max-w-md">
+        <button 
+          onClick={onClose}
+          className="mb-8 text-brand-text/40 hover:text-brand-accent font-bold flex items-center gap-2"
+        >
+          Close
+        </button>
+        <AccessPrompt 
+          lessonId={lessonId} 
+          onSuccess={performCheck} 
+          onPayClick={onPayClick}
+        />
+      </div>
     </div>
   );
 };
