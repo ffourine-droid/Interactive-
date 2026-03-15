@@ -14,12 +14,12 @@ export async function checkAccess(phone: string): Promise<AccessResult> {
   if (!phone) return { access: false, reason: 'not_found' };
 
   try {
-    // Get all payments for this phone number, ordered by submission (latest first)
+    // Get all payments for this phone number, ordered by creation (latest first)
     const { data, error } = await supabase
       .from('payments')
       .select('*')
       .eq('phone_number', phone.trim())
-      .order('submitted_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error || !data || data.length === 0) {
       return { access: false, reason: 'not_found' };
@@ -61,7 +61,7 @@ export async function checkAccess(phone: string): Promise<AccessResult> {
       if (latestPayment.plan === 'weekly') days = 7;
       if (latestPayment.plan === 'monthly') days = 30;
       
-      const provisionalExpiry = new Date(new Date(latestPayment.submitted_at).getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+      const provisionalExpiry = new Date(new Date(latestPayment.created_at).getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 
       return { 
         access: true, 

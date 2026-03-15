@@ -1,13 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { Navigation, Pagination, EffectCoverflow } from 'swiper/modules';
-import { Volume2, VolumeX, ChevronLeft, ChevronRight, Play, Pause } from 'lucide-react';
-
-// Import Swiper styles
-import 'swiper/css';
-import 'swiper/css/navigation';
-import 'swiper/css/pagination';
-import 'swiper/css/effect-coverflow';
+import { motion, AnimatePresence } from 'motion/react';
+import { Volume2, VolumeX, ChevronLeft, ChevronRight, Play, Pause, Maximize2, Minimize2 } from 'lucide-react';
 
 interface SlidesViewerProps {
   slides: string[];
@@ -15,16 +8,18 @@ interface SlidesViewerProps {
 }
 
 export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (audioUrl) {
       audioRef.current = new Audio(audioUrl);
       audioRef.current.loop = true;
       
-      // Try to autoplay (might be blocked by browser)
       const playAudio = async () => {
         try {
           await audioRef.current?.play();
@@ -61,81 +56,130 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
     }
   };
 
+  const goTo = (index: number) => {
+    setCurrentIndex(Math.max(0, Math.min(index, slides.length - 1)));
+  };
+
+  const next = () => goTo(currentIndex + 1);
+  const prev = () => goTo(currentIndex - 1);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
   return (
-    <div className="relative w-full h-full bg-black flex items-center justify-center overflow-hidden">
-      <Swiper
-        effect={'coverflow'}
-        grabCursor={true}
-        centeredSlides={true}
-        slidesPerView={'auto'}
-        coverflowEffect={{
-          rotate: 50,
-          stretch: 0,
-          depth: 100,
-          modifier: 1,
-          slideShadows: true,
-        }}
-        pagination={{ clickable: true }}
-        navigation={true}
-        modules={[EffectCoverflow, Pagination, Navigation]}
-        className="w-full h-full max-w-lg"
-      >
-        {slides.map((url, index) => (
-          <SwiperSlide key={index} className="flex items-center justify-center">
-            <div className="w-full h-full flex items-center justify-center p-4">
+    <div 
+      ref={containerRef}
+      className={`relative w-full h-full bg-black flex flex-col items-center justify-center overflow-hidden select-none ${isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}
+    >
+      {/* Carousel Wrapper */}
+      <div className="relative w-full flex-1 flex items-center justify-center overflow-hidden">
+        <motion.div 
+          className="flex h-full"
+          animate={{ x: `-${currentIndex * 100}%` }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          style={{ width: `${slides.length * 100}%` }}
+        >
+          {slides.map((url, index) => (
+            <div 
+              key={index} 
+              className="w-full h-full flex items-center justify-center p-4 md:p-8"
+              style={{ flex: "0 0 100%" }}
+            >
               <img 
                 src={url} 
                 alt={`Slide ${index + 1}`} 
-                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
+                className="max-w-full max-h-full object-contain rounded-xl shadow-2xl pointer-events-none"
+                referrerPolicy="no-referrer"
               />
             </div>
-          </SwiperSlide>
-        ))}
-      </Swiper>
+          ))}
+        </motion.div>
 
-      {/* Controls Overlay */}
-      <div className="absolute top-6 right-6 z-50 flex gap-3">
-        {audioUrl && (
-          <>
-            <button 
-              onClick={togglePlay}
-              className="w-12 h-12 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-all"
-            >
-              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-            </button>
-            <button 
-              onClick={toggleMute}
-              className="w-12 h-12 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-all"
-            >
-              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-            </button>
-          </>
+        {/* Navigation Arrows */}
+        {currentIndex > 0 && (
+          <button 
+            onClick={prev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/20 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-black/40 transition-all z-10"
+          >
+            <ChevronLeft size={24} />
+          </button>
+        )}
+        {currentIndex < slides.length - 1 && (
+          <button 
+            onClick={next}
+            className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/20 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-black/40 transition-all z-10"
+          >
+            <ChevronRight size={24} />
+          </button>
         )}
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        .swiper-button-next, .swiper-button-prev {
-          color: white !important;
-          background: rgba(255,255,255,0.1);
-          backdrop-filter: blur(10px);
-          width: 50px !important;
-          height: 50px !important;
-          border-radius: 50%;
-          border: 1px solid rgba(255,255,255,0.2);
-        }
-        .swiper-button-next:after, .swiper-button-prev:after {
-          font-size: 20px !important;
-          font-weight: bold;
-        }
-        .swiper-pagination-bullet {
-          background: white !important;
-          opacity: 0.5;
-        }
-        .swiper-pagination-bullet-active {
-          opacity: 1;
-          background: #FF6321 !important;
-        }
-      `}} />
+      {/* Bottom Controls */}
+      <div className="w-full p-6 flex flex-col items-center gap-4 bg-gradient-to-t from-black/80 to-transparent">
+        {/* Dots */}
+        <div className="flex gap-2">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                i === currentIndex ? 'bg-brand-accent w-6' : 'bg-white/30 hover:bg-white/50'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* Action Bar */}
+        <div className="flex items-center gap-6">
+          {audioUrl && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={togglePlay}
+                className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-all"
+                title={isPlaying ? "Pause Audio" : "Play Audio"}
+              >
+                {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+              </button>
+              <button 
+                onClick={toggleMute}
+                className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-all"
+                title={isMuted ? "Unmute" : "Mute"}
+              >
+                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              </button>
+            </div>
+          )}
+          
+          <div className="h-4 w-px bg-white/20" />
+          
+          <button 
+            onClick={toggleFullscreen}
+            className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-all"
+            title="Toggle Fullscreen"
+          >
+            {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
+
+          <div className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+            Slide {currentIndex + 1} of {slides.length}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

@@ -7,7 +7,7 @@
  * AziLearn - Subscription-based study materials platform
  */
 import React, { useState, useEffect } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key, Clock, FileText, PlayCircle, Mic2, User } from 'lucide-react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key, Clock, FileText, PlayCircle, Mic2, User, Smartphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
 import { PremiumGate } from './components/PremiumGate';
@@ -18,6 +18,8 @@ import { Auth } from './components/Auth';
 import { checkAccess, AccessResult } from './utils/checkAccess';
 import { CountdownTimer } from './components/CountdownTimer';
 import { SlidesViewer } from './components/SlidesViewer';
+import { ToastProvider, useToast } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 interface Experiment {
   id: string | number;
@@ -40,18 +42,45 @@ type Page = 'home' | 'pay' | 'access' | 'admin';
 type Plan = 'daily' | 'weekly' | 'monthly';
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('daily');
   const [selectedLesson, setSelectedLesson] = useState<Experiment | null>(null);
   const [accessResult, setAccessResult] = useState<AccessResult | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('azilearn_theme') as 'light' | 'dark') || 'light';
+    }
+    return 'light';
+  });
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    document.body.className = theme;
+    localStorage.setItem('azilearn_theme', theme);
+  }, [theme]);
 
   const refreshAccess = async () => {
     const saved = sessionStorage.getItem('azilearn_phone');
     if (saved) {
-      const result = await checkAccess(saved);
-      setAccessResult(result);
+      try {
+        const result = await checkAccess(saved);
+        setAccessResult(result);
+      } catch (err) {
+        console.error('Access check failed:', err);
+        showToast('Failed to verify access. Please check your connection.', 'error');
+      }
     } else {
       setAccessResult(null);
     }
@@ -60,14 +89,20 @@ export default function App() {
   const checkProfile = async () => {
     const savedPhone = sessionStorage.getItem('azilearn_phone');
     if (savedPhone) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('phone_number', savedPhone)
-        .maybeSingle();
-      
-      if (data) {
-        setProfile(data);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('phone_number', savedPhone)
+          .maybeSingle();
+        
+        if (error) throw error;
+        if (data) {
+          setProfile(data);
+        }
+      } catch (err) {
+        console.error('Profile check failed:', err);
+        showToast('Failed to load profile.', 'error');
       }
     }
     setIsAuthLoading(false);
@@ -176,25 +211,29 @@ export default function App() {
               setProfile(null);
               setAccessResult(null);
             }}
+            theme={theme}
+            setTheme={setTheme}
           />
         );
     }
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg text-brand-text selection:bg-brand-accent/30">
+    <div className={`min-h-screen bg-brand-bg text-brand-text selection:bg-brand-accent/30 transition-colors duration-500`}>
       {renderPage()}
     </div>
   );
 }
 
-function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onLogout }: { 
+function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onLogout, theme, setTheme }: { 
   accessResult: AccessResult | null,
   onPayPlan: (plan: Plan, lesson?: Experiment) => void,
   onEnterCode: () => void,
   onAdminClick: () => void,
   profile: Profile | null,
-  onLogout: () => void
+  onLogout: () => void,
+  theme: 'light' | 'dark',
+  setTheme: (theme: 'light' | 'dark') => void
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [category, setCategory] = useState<'all' | 'notes' | 'slides' | 'audio'>('all');
@@ -203,23 +242,30 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [activeTab, setActiveTab] = useState('home');
+  const { showToast } = useToast();
 
   useEffect(() => {
     handleSearch(searchQuery, category);
   }, [category]);
 
   const handleSearch = async (query: string, cat: string = category) => {
+    if (!navigator.onLine) {
+      setError("You are offline. Results may be outdated.");
+      showToast("You are offline", "error");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setHasSearched(true);
     
     try {
-      let supabaseQuery = supabase.from('experiments').select('id, title, keywords, html_content, slides, audio_url');
+      let supabaseQuery = supabase.from('experiments').select('id, title, keywords, html_content, slides, audio_url, subject');
       
       const filters: string[] = [];
       if (query) {
-        filters.push(`keywords.ilike.%${query}%,title.ilike.%${query}%`);
+        filters.push(`keywords.ilike.%${query}%,title.ilike.%${query}%,subject.ilike.%${query}%`);
       }
 
       if (filters.length > 0) {
@@ -228,11 +274,15 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
       const { data, error } = await supabaseQuery.limit(50);
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes('network')) {
+          throw new Error("Network error. Please check your connection.");
+        }
+        throw error;
+      }
       
       let filteredData = data || [];
       
-      // Client-side category filtering for better precision
       if (cat !== 'all') {
         filteredData = filteredData.filter(exp => {
           if (cat === 'slides') return exp.slides && exp.slides.length > 0;
@@ -244,7 +294,9 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
       setResults(filteredData);
     } catch (err: any) {
+      console.error('Search error:', err);
       setError(err.message);
+      showToast(err.message || "Failed to load content.", "error");
     } finally {
       setLoading(false);
     }
@@ -254,279 +306,275 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     setSelectedExperiment(exp);
   };
 
+  const rippleEffect = (e: React.MouseEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const r = document.createElement('span');
+    r.className = 'ripple';
+    const size = Math.max(rect.width, rect.height);
+    r.style.width = `${size}px`;
+    r.style.height = `${size}px`;
+    r.style.left = `${e.clientX - rect.left - size / 2}px`;
+    r.style.top = `${e.clientY - rect.top - size / 2}px`;
+    el.appendChild(r);
+    setTimeout(() => r.remove(), 600);
+  };
+
+  const availableResults = results.filter(r => accessResult?.access);
+  const lockedResults = results.filter(r => !accessResult?.access);
+
   return (
-    <div className={theme}>
-      <div className="min-h-screen bg-brand-bg transition-colors duration-500">
-        {/* Header */}
-        <header className="fixed top-0 left-0 right-0 z-[100] bg-brand-bg/80 backdrop-blur-xl border-b border-brand-surface/40">
-          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center shadow-lg shadow-brand-accent/20">
-                <FlaskConical className="text-white" size={24} />
-              </div>
-              <span className="text-2xl font-black tracking-tighter">AZILEARN</span>
-            </div>
+    <div className="max-w-[420px] mx-auto bg-brand-bg min-h-screen relative pb-32">
+      {/* TOP SEARCH BAR */}
+      <div className="sticky top-0 z-[100] p-3 pt-4 bg-transparent pointer-events-none">
+        <div className="flex items-center bg-brand-surface rounded-full shadow-md px-4 h-12 gap-3 pointer-events-auto border border-brand-border/50">
+          <Search className="text-brand-muted shrink-0" size={18} />
+          <input 
+            type="text" 
+            placeholder="Search for a topic..." 
+            className="flex-1 bg-transparent border-none outline-none font-sans text-[15px] text-brand-text placeholder:text-brand-muted/60"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
+          />
+          <button 
+            onClick={(e) => {
+              rippleEffect(e);
+              setTheme(theme === 'dark' ? 'light' : 'dark');
+            }}
+            className="w-9 h-9 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform relative overflow-hidden"
+          >
+            <span className="font-sans font-bold text-sm uppercase">
+              {profile?.username?.[0] || 'A'}
+            </span>
+          </button>
+        </div>
+      </div>
 
-            <div className="flex items-center gap-2 sm:gap-4">
-              {profile && (
-                <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-brand-surface/20 rounded-xl border border-brand-surface/40">
-                  <User size={16} className="text-brand-accent" />
-                  <span className="text-xs font-bold">{profile.username}</span>
-                  <button 
-                    onClick={onLogout}
-                    className="ml-2 text-[10px] font-black uppercase tracking-widest text-red-500/60 hover:text-red-500 transition-colors"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-              {accessResult?.access && (
-                <div className="hidden lg:flex items-center gap-3 px-4 py-2 bg-brand-accent/10 rounded-xl border border-brand-accent/20">
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent/60">
-                      {accessResult.status === 'pending' ? 'Provisional Access' : 'Premium Access'}
-                    </span>
-                    <div className="text-xs font-bold text-brand-accent">
-                      {accessResult.status === 'pending' ? (
-                        <span className="flex items-center gap-1"><Clock size={12} className="animate-pulse" /> Pending Approval</span>
-                      ) : (
-                        <CountdownTimer expiresAt={accessResult.expires_at!} />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-              <button 
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-3 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
-                aria-label="Toggle Theme"
-              >
-                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-              </button>
-              <button 
-                onClick={onEnterCode}
-                className="hidden md:flex items-center gap-2 px-5 py-3 bg-brand-surface/20 hover:bg-brand-surface/40 rounded-xl transition-all text-sm font-bold"
-              >
-                <Key size={18} />
-                Enter Code
-              </button>
-              <button 
-                onClick={onAdminClick}
-                className="p-3 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/40"
-                aria-label="Admin Dashboard"
-              >
-                <Shield size={20} />
-              </button>
-            </div>
+      {/* HERO */}
+      <div className="px-4 py-6">
+        <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
+          Welcome, {profile?.username || 'Explorer'}.
+        </h1>
+        <p className="text-[13px] text-brand-muted mt-1 font-sans">What are we learning today?</p>
+      </div>
+
+      {/* FILTER CHIPS */}
+      <div className="flex gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
+        {[
+          { id: 'all', label: 'All Materials', icon: FlaskConical },
+          { id: 'notes', label: 'Study Notes', icon: FileText },
+          { id: 'slides', label: 'Slides', icon: PlayCircle },
+          { id: 'audio', label: 'Audio Lessons', icon: Mic2 },
+        ].map((cat) => (
+          <button
+            key={cat.id}
+            onClick={(e) => {
+              rippleEffect(e);
+              setCategory(cat.id as any);
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap font-sans text-[13px] font-medium transition-all border relative overflow-hidden shrink-0 shadow-sm ${
+              category === cat.id 
+                ? 'bg-brand-accent border-brand-accent text-white' 
+                : 'bg-brand-surface border-brand-border text-brand-text'
+            }`}
+          >
+            <cat.icon size={15} />
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
+      {/* CONTENT CARDS */}
+      <div className="mt-4">
+        {loading ? (
+          <div className="px-4 space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-20 bg-brand-surface/50 rounded-2xl animate-pulse border border-brand-border/50" />
+            ))}
           </div>
-        </header>
-
-        <main className="pt-32 pb-20 px-6">
-          <div className="max-w-4xl mx-auto">
-            {/* Hero Section */}
-            <div className="text-center mb-16">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <div className="flex flex-col items-center justify-center gap-3 mb-2">
-                  <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter">
-                    Welcome, Explorer.
-                  </h1>
-                  <p className="text-brand-text/60 text-lg">What are we learning today?</p>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Search Bar */}
-            <div className="relative mb-6">
-              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-brand-text/20" size={24} />
-              <input
-                type="text"
-                placeholder="Search for a topic..."
-                className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-[2rem] py-6 pl-16 pr-32 outline-none focus:border-brand-accent/50 transition-all text-lg shadow-xl"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
-              />
-              <button 
-                onClick={() => handleSearch(searchQuery)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 bg-brand-accent text-white px-6 py-3 rounded-full font-bold hover:scale-105 active:scale-95 transition-all shadow-lg shadow-brand-accent/20"
-              >
-                Search
-              </button>
-            </div>
-
-            {/* Categories */}
-            <div className="flex flex-wrap items-center justify-center gap-3 mb-12">
-              {[
-                { id: 'all', label: 'All Materials', icon: FlaskConical },
-                { id: 'notes', label: 'Study Notes', icon: FileText },
-                { id: 'slides', label: 'Slides', icon: PlayCircle },
-                { id: 'audio', label: 'Audio Lessons', icon: Mic2 },
-              ].map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setCategory(cat.id as any)}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm transition-all border ${
-                    category === cat.id 
-                      ? 'bg-brand-accent border-brand-accent text-white shadow-lg shadow-brand-accent/20' 
-                      : 'bg-brand-surface/10 border-brand-surface/40 text-brand-text/40 hover:text-brand-text hover:border-brand-surface/60'
-                  }`}
-                >
-                  <cat.icon size={16} />
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Pricing CTA */}
-            <div className="mb-12 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="p-4 bg-brand-surface/20 border border-brand-surface/40 rounded-2xl flex flex-col items-center text-center">
-                <h3 className="text-sm font-bold mb-1">Daily Pass</h3>
-                <p className="text-xl font-black text-brand-accent mb-3">KES 10</p>
-                <button 
-                  onClick={() => onPayPlan('daily')}
-                  className="w-full py-2 bg-brand-accent text-white rounded-lg font-bold text-sm hover:scale-105 transition-all"
-                >
-                  Get 1 Day
-                </button>
-              </div>
-              <div className="p-4 bg-brand-accent/10 border border-brand-accent/20 rounded-2xl flex flex-col items-center text-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-brand-accent text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase tracking-widest">Popular</div>
-                <h3 className="text-sm font-bold mb-1">Weekly Pass</h3>
-                <p className="text-xl font-black text-brand-accent mb-3">KES 50</p>
-                <button 
-                  onClick={() => onPayPlan('weekly')}
-                  className="w-full py-2 bg-brand-accent text-white rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-lg shadow-brand-accent/20"
-                >
-                  Get 7 Days
-                </button>
-              </div>
-              <div className="p-4 bg-brand-surface/20 border border-brand-surface/40 rounded-2xl flex flex-col items-center text-center">
-                <h3 className="text-sm font-bold mb-1">Monthly Pass</h3>
-                <p className="text-xl font-black text-brand-accent mb-3">KES 120</p>
-                <button 
-                  onClick={() => onPayPlan('monthly')}
-                  className="w-full py-2 bg-brand-accent text-white rounded-lg font-bold text-sm hover:scale-105 transition-all"
-                >
-                  Get 30 Days
-                </button>
-              </div>
-            </div>
-
-            {/* Results */}
-            <div className="space-y-4">
-              {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
-                </div>
-              ) : results.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {results.map((exp, idx) => (
-                    <motion.div
-                      key={exp.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.05 }}
-                      onClick={() => openExperiment(exp)}
-                      className="group relative bg-brand-surface/20 border border-brand-surface/40 p-4 rounded-2xl hover:bg-brand-surface/40 hover:border-brand-accent/30 transition-all duration-300 cursor-pointer overflow-hidden"
+        ) : (
+          <>
+            {availableResults.length > 0 && (
+              <div className="mb-6">
+                <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider">Available</div>
+                <div className="px-3 space-y-2.5">
+                  {availableResults.map((exp) => (
+                    <div 
+                      key={exp.id} 
+                      onClick={(e) => {
+                        rippleEffect(e);
+                        openExperiment(exp);
+                      }}
+                      className="bg-brand-surface rounded-[14px] p-3.5 flex items-center gap-3 shadow-sm active:scale-[0.985] transition-all relative overflow-hidden border border-brand-border/30"
                     >
-                      <div className="blur-[2px] opacity-60">
-                        <h3 className="text-base font-bold group-hover:text-brand-accent transition-colors truncate pr-12">
-                          {exp.title}
-                        </h3>
-                        <p className="text-[10px] text-brand-text/40 uppercase tracking-widest mt-1">
-                          Study Material
-                        </p>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        exp.slides?.length ? 'bg-orange-50 text-brand-accent' : 
+                        exp.audio_url ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
+                      }`}>
+                        {exp.slides?.length ? <PlayCircle size={22} /> : exp.audio_url ? <Mic2 size={22} /> : <FileText size={22} />}
                       </div>
-
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/5 backdrop-blur-[1px] group-hover:bg-black/10 transition-all">
-                        {accessResult?.access ? (
-                          <>
-                            <CheckCircle2 size={16} className="text-emerald-500 mb-1" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Open Lesson</span>
-                          </>
-                        ) : (
-                          <>
-                            <Lock size={16} className="text-brand-accent mb-1" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Unlock Lesson</span>
-                          </>
-                        )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-sans text-sm font-medium text-brand-text truncate">{exp.title}</div>
+                        <div className="text-[12px] text-brand-muted mt-0.5">{exp.subject || 'Study Material'}</div>
                       </div>
-
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                        <ExternalLink size={16} className="text-brand-text/20 group-hover:text-brand-accent transition-colors shrink-0" />
-                      </div>
-                    </motion.div>
+                      <button className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted hover:bg-brand-bg transition-colors">
+                        <ExternalLink size={16} />
+                      </button>
+                    </div>
                   ))}
                 </div>
-              ) : hasSearched && (
-                <div className="text-center p-12 bg-brand-surface/10 rounded-3xl border border-dashed border-brand-surface/40">
-                  <p className="text-brand-text/40">No lessons found. Try a different topic.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </main>
+              </div>
+            )}
 
-        {/* Experiment Modal (PremiumGate handles access) */}
-        <AnimatePresence>
-          {selectedExperiment && (
-            <PremiumGate 
-              lessonId={selectedExperiment.id.toString()}
-              onClose={() => setSelectedExperiment(null)}
-              onPayClick={() => onPayPlan('daily', selectedExperiment)}
-              onEnterCode={onEnterCode}
-            >
-              <div className="fixed inset-0 z-[100] bg-brand-bg flex flex-col">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-brand-surface/50 bg-brand-surface/10 backdrop-blur-xl">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => setSelectedExperiment(null)}
-                      className="w-12 h-12 rounded-2xl border border-brand-surface/50 flex items-center justify-center hover:bg-brand-surface/20 transition-colors"
+            {lockedResults.length > 0 && (
+              <div>
+                <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider">Locked</div>
+                <div className="px-3 space-y-2.5">
+                  {lockedResults.map((exp) => (
+                    <div 
+                      key={exp.id} 
+                      onClick={(e) => {
+                        rippleEffect(e);
+                        openExperiment(exp);
+                      }}
+                      className="bg-brand-surface rounded-[14px] p-3.5 flex items-center gap-3 shadow-sm active:scale-[0.985] transition-all relative overflow-hidden border border-brand-border/30 group"
                     >
-                      <ChevronLeft size={24} />
-                    </button>
-                    <div>
-                      <h2 className="font-bold text-xl text-brand-text leading-none mb-1">{selectedExperiment.title}</h2>
-                      <p className="text-[10px] text-brand-accent font-black uppercase tracking-[0.2em]">Live Experiment</p>
+                      <div className="w-10 h-10 rounded-xl bg-brand-bg flex items-center justify-center shrink-0 opacity-40">
+                        {exp.slides?.length ? <PlayCircle size={22} /> : exp.audio_url ? <Mic2 size={22} /> : <FileText size={22} />}
+                      </div>
+                      <div className="flex-1 min-w-0 opacity-40">
+                        <div className="font-sans text-sm font-medium text-brand-text truncate">{exp.title}</div>
+                        <div className="text-[12px] text-brand-muted mt-0.5">{exp.subject || 'Study Material'}</div>
+                      </div>
+                      <div className="absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-brand-accent/10 border border-brand-accent/30 rounded-full px-2.5 py-1">
+                        <Lock size={10} className="text-brand-accent" />
+                        <span className="font-sans text-[11px] font-bold text-brand-accent">UNLOCK</span>
+                      </div>
+                      <button className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted opacity-40">
+                        <ExternalLink size={16} />
+                      </button>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => setSelectedExperiment(null)}
-                    className="bg-brand-accent text-white px-6 py-3 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all"
-                  >
-                    Exit
-                  </button>
-                </div>
-                
-                <div className="flex-1 bg-white">
-                  {selectedExperiment.slides && selectedExperiment.slides.length > 0 ? (
-                    <SlidesViewer 
-                      slides={selectedExperiment.slides} 
-                      audioUrl={selectedExperiment.audio_url} 
-                    />
-                  ) : selectedExperiment.html_content ? (
-                    <iframe
-                      title={selectedExperiment.title}
-                      srcDoc={selectedExperiment.html_content}
-                      className="w-full h-full border-none"
-                      sandbox="allow-scripts allow-modals"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-brand-text/40 gap-4">
-                      <AlertCircle size={48} className="text-brand-accent/20" />
-                      <p className="font-bold">No content available for this lesson.</p>
-                      <p className="text-sm">Please contact support if you believe this is an error.</p>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
-            </PremiumGate>
-          )}
-        </AnimatePresence>
+            )}
+
+            {results.length === 0 && hasSearched && (
+              <div className="text-center p-12 mx-4 bg-brand-surface rounded-3xl border border-dashed border-brand-border">
+                <p className="text-brand-muted text-sm mb-4">No lessons found for "{searchQuery}".</p>
+                <button 
+                  onClick={() => { setSearchQuery(''); handleSearch(''); }}
+                  className="px-6 py-2 bg-brand-accent text-white rounded-xl text-sm font-bold shadow-md"
+                >
+                  Show All Materials
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
+
+      {/* FAB PAYMENT BUTTON */}
+      <button 
+        onClick={(e) => {
+          rippleEffect(e);
+          onPayPlan('daily');
+        }}
+        className="fixed bottom-24 right-4 bg-brand-accent text-white rounded-full h-[52px] px-5 flex items-center gap-2 shadow-lg shadow-brand-accent/40 active:scale-95 transition-all z-[199] font-sans text-sm font-bold relative overflow-hidden"
+      >
+        <Smartphone size={18} />
+        Payment Plans
+      </button>
+
+      {/* BOTTOM SHEET NAV */}
+      <div className="fixed bottom-0 left-0 right-0 z-[200] bg-brand-surface border-t border-brand-border shadow-[0_-2px_20px_rgba(0,0,0,0.1)] pb-safe">
+        <div className="w-9 h-1 bg-brand-border rounded-full mx-auto my-2.5" />
+        <div className="flex justify-around px-2 pb-4">
+          {[
+            { id: 'home', label: 'Home', icon: FlaskConical, action: () => setActiveTab('home') },
+            { id: 'search', label: 'Search', icon: Search, action: () => setActiveTab('search') },
+            { id: 'admin', label: 'Admin', icon: Shield, action: onAdminClick },
+            { id: 'logout', label: 'Logout', icon: User, action: onLogout },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={(e) => {
+                rippleEffect(e);
+                tab.action();
+              }}
+              className={`flex flex-col items-center gap-1 px-4 py-1.5 rounded-xl transition-all relative overflow-hidden min-w-[72px] ${
+                activeTab === tab.id ? 'text-brand-accent' : 'text-brand-muted'
+              }`}
+            >
+              <div className={`w-12 h-7 rounded-full flex items-center justify-center transition-colors ${
+                activeTab === tab.id ? 'bg-brand-accent/10' : 'bg-transparent'
+              }`}>
+                <tab.icon size={22} className={activeTab === tab.id ? 'text-brand-accent' : 'text-brand-muted'} />
+              </div>
+              <span className={`font-sans text-[11px] font-medium ${activeTab === tab.id ? 'font-bold' : ''}`}>
+                {tab.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Experiment Modal */}
+      <AnimatePresence>
+        {selectedExperiment && (
+          <PremiumGate 
+            lessonId={selectedExperiment.id.toString()}
+            onClose={() => setSelectedExperiment(null)}
+            onPayClick={() => onPayPlan('daily', selectedExperiment)}
+            onEnterCode={onEnterCode}
+          >
+            <div className="fixed inset-0 z-[300] bg-brand-bg flex flex-col">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border bg-brand-surface/80 backdrop-blur-xl">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSelectedExperiment(null)}
+                    className="w-10 h-10 rounded-xl border border-brand-border flex items-center justify-center hover:bg-brand-surface transition-colors"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <div className="min-w-0">
+                    <h2 className="font-bold text-base text-brand-text leading-none mb-1 truncate max-w-[200px]">{selectedExperiment.title}</h2>
+                    <p className="text-[10px] text-brand-accent font-bold uppercase tracking-wider">Study Material</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedExperiment(null)}
+                  className="bg-brand-accent text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm"
+                >
+                  Exit
+                </button>
+              </div>
+              
+              <div className="flex-1 bg-black">
+                {selectedExperiment.slides && selectedExperiment.slides.length > 0 ? (
+                  <SlidesViewer 
+                    slides={selectedExperiment.slides} 
+                    audioUrl={selectedExperiment.audio_url} 
+                  />
+                ) : selectedExperiment.html_content ? (
+                  <iframe
+                    title={selectedExperiment.title}
+                    srcDoc={selectedExperiment.html_content}
+                    className="w-full h-full border-none bg-white"
+                    sandbox="allow-scripts allow-modals"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-brand-muted gap-4 bg-brand-bg">
+                    <AlertCircle size={48} className="text-brand-accent/20" />
+                    <p className="font-bold">No content available.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </PremiumGate>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

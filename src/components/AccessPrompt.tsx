@@ -46,13 +46,13 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
   };
 
   return (
-    <div className="bg-brand-surface/20 border border-brand-surface/40 rounded-3xl p-8 max-w-md mx-auto text-center">
+    <div className="bg-brand-surface border border-brand-border rounded-3xl p-8 max-w-md mx-auto text-center shadow-lg">
       <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
         <Smartphone className="text-brand-accent" size={32} />
       </div>
       
-      <h2 className="text-2xl font-extrabold tracking-tighter mb-2">Premium Content</h2>
-      <p className="text-brand-text/60 mb-8">Enter the phone number you used for payment to unlock this material.</p>
+      <h2 className="text-2xl font-bold tracking-tight mb-2">Premium Content</h2>
+      <p className="text-brand-muted mb-8">Enter the phone number you used for payment to unlock this material.</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="relative">
@@ -60,7 +60,7 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
             type="tel"
             required
             placeholder="e.g. 0712345678"
-            className="w-full bg-brand-bg border border-brand-surface/60 rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all text-center font-bold"
+            className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all text-center font-bold text-lg"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
           />
@@ -70,7 +70,7 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-red-400 text-sm text-left"
+            className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-red-500 text-sm text-left"
           >
             <AlertCircle className="shrink-0 mt-0.5" size={16} />
             <p>{error}</p>
@@ -80,14 +80,14 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-xl shadow-brand-accent/20"
+          className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
         >
           {loading ? <Loader2 className="animate-spin" size={20} /> : 'Unlock Content'}
         </button>
       </form>
 
-      <div className="mt-8 pt-8 border-t border-brand-surface/40">
-        <p className="text-sm text-brand-text/40 mb-4">Don't have a code yet?</p>
+      <div className="mt-8 pt-8 border-t border-brand-border">
+        <p className="text-sm text-brand-muted mb-4">Don't have a code yet?</p>
         <button
           onClick={onPayClick}
           className="text-brand-accent font-bold hover:underline"

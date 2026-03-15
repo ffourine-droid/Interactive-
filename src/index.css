@@ -1,44 +1,46 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-roboto: "Roboto", sans-serif;
   --color-brand-bg: var(--bg);
   --color-brand-text: var(--text);
   --color-brand-surface: var(--surface);
   --color-brand-accent: var(--accent);
+  --color-brand-muted: var(--muted);
+  --color-brand-border: var(--border);
 }
 
 :root {
-  --bg: #0F0F0F;
-  --text: #F5E6D3;
-  --surface: #2C1B12;
-  --accent: #FF7A00;
+  --bg: #f5f5f5;
+  --text: #1a1a1a;
+  --surface: #ffffff;
+  --accent: #F47B20;
+  --muted: #6b6b6b;
+  --border: #e0e0e0;
+  --radius-pill: 999px;
+  --radius-card: 14px;
 }
 
-.light {
-  --bg: #FDFCFB;
-  --text: #2C1B12;
-  --surface: #F5E6D3;
-  --accent: #FF7A00;
+.dark {
+  --bg: #121212;
+  --text: #f5f5f5;
+  --surface: #1e1e1e;
+  --accent: #F47B20;
+  --muted: #a0a0a0;
+  --border: #333333;
 }
 
-/* Base styles without @layer to ensure they apply regardless of Tailwind processing */
 body {
-  background-color: #0F0F0F; /* Hardcoded fallback */
   background-color: var(--bg);
-  color: #F5E6D3; /* Hardcoded fallback */
   color: var(--text);
-  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-roboto);
   margin: 0;
   padding: 0;
   min-height: 100vh;
   transition: background-color 300ms, color 300ms;
-}
-
-.light body {
-  background-color: #FDFCFB;
-  color: #2C1B12;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Custom Scrollbar */
@@ -49,9 +51,34 @@ body {
   background: var(--bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--surface);
+  background: var(--border);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent);
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: ripple-anim 0.6s linear;
+  background: rgba(0,0,0,0.1);
+  pointer-events: none;
+}
+
+.dark .ripple {
+  background: rgba(255,255,255,0.1);
+}
+
+@keyframes ripple-anim {
+  to { transform: scale(4); opacity: 0; }
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

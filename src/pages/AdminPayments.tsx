@@ -24,9 +24,11 @@ import {
   Database,
   Image as ImageIcon,
   Music,
-  User
+  User,
+  WifiOff
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useToast } from '../components/Toast';
 
 interface Payment {
   id: string;
@@ -36,7 +38,7 @@ interface Payment {
   lesson_id: string;
   phone_number: string;
   status: 'pending' | 'approved' | 'rejected';
-  submitted_at: string;
+  created_at: string;
   verified_at: string;
   rejection_reason: string;
 }
@@ -91,6 +93,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
+  const { showToast } = useToast();
 
   const ADMIN_PASSWORD = "azilearn-admin-2024"; // In real app, use env var
 
@@ -122,19 +125,25 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   }, [isAuthenticated]);
 
   const fetchExperiments = async () => {
-    const { data, error } = await supabase.from('experiments').select('*').order('title');
-    if (error) {
-      console.error('Error fetching experiments:', error);
+    try {
+      const { data, error } = await supabase.from('experiments').select('*').order('title');
+      if (error) throw error;
+      if (data) setExperiments(data);
+    } catch (err: any) {
+      console.error('Error fetching experiments:', err);
+      showToast('Failed to load experiments.', 'error');
     }
-    if (data) setExperiments(data);
   };
 
   const fetchProfiles = async () => {
-    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (error) {
-      console.error('Error fetching profiles:', error);
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) setProfiles(data);
+    } catch (err: any) {
+      console.error('Error fetching profiles:', err);
+      showToast('Failed to load user profiles.', 'error');
     }
-    if (data) setProfiles(data);
   };
 
   const fetchPayments = async (isManual = false) => {
@@ -145,7 +154,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       const { data, error } = await supabase
         .from('payments')
         .select('*')
-        .order('submitted_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -193,51 +202,77 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   const approvePayment = async (id: string, plan: string) => {
-    let days = 1;
-    if (plan === 'weekly') days = 7;
-    if (plan === 'monthly') days = 30;
+    if (!navigator.onLine) {
+      showToast("You are offline. Cannot approve payment.", "error");
+      return;
+    }
 
-    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    try {
+      let days = 1;
+      if (plan === 'weekly') days = 7;
+      if (plan === 'monthly') days = 30;
 
-    const { error } = await supabase
-      .from('payments')
-      .update({
-        status: 'approved',
-        verified_at: new Date().toISOString(),
-        expires_at: expiresAt
-      })
-      .eq('id', id);
-    
-    if (error) {
-      alert("Failed to approve payment: " + error.message);
-    } else {
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+      const { error } = await supabase
+        .from('payments')
+        .update({
+          status: 'approved',
+          verified_at: new Date().toISOString(),
+          expires_at: expiresAt
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      showToast("Payment approved successfully!", "success");
       fetchPayments();
+    } catch (err: any) {
+      console.error('Approval error:', err);
+      showToast("Failed to approve payment: " + err.message, "error");
     }
   };
 
   const rejectPayment = async (id: string, reason: string) => {
-    const { error } = await supabase
-      .from('payments')
-      .update({
-        status: 'rejected',
-        verified_at: new Date().toISOString(),
-        rejection_reason: reason || 'Invalid transaction'
-      })
-      .eq('id', id);
-    
-    if (error) {
-      alert("Failed to reject payment: " + error.message);
-    } else {
+    if (!navigator.onLine) {
+      showToast("You are offline. Cannot reject payment.", "error");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .update({
+          status: 'rejected',
+          verified_at: new Date().toISOString(),
+          rejection_reason: reason || 'Invalid transaction'
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      showToast("Payment rejected.", "info");
       setRejectingId(null);
       setRejectionReason('');
       fetchPayments();
+    } catch (err: any) {
+      console.error('Rejection error:', err);
+      showToast("Failed to reject payment: " + err.message, "error");
     }
   };
 
   const deleteExperiment = async (id: string | number) => {
-    await supabase.from('experiments').delete().eq('id', id);
-    setDeletingId(null);
-    fetchExperiments();
+    try {
+      const { error } = await supabase.from('experiments').delete().eq('id', id);
+      if (error) throw error;
+      
+      showToast("Experiment deleted.", "success");
+      setDeletingId(null);
+      fetchExperiments();
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      showToast("Failed to delete experiment: " + err.message, "error");
+    }
   };
   
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'slides' | 'audio') => {
@@ -297,9 +332,10 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       }
       
       console.log('Upload successful:', uploadedUrls);
+      showToast(`${type === 'slides' ? 'Slides' : 'Audio'} uploaded successfully!`, "success");
     } catch (err: any) {
       console.error('File upload error:', err);
-      alert('Upload failed: ' + err.message + '\n\nPlease ensure the "' + (type === 'slides' ? 'slides' : 'audio') + '" bucket exists in Supabase storage and is public.');
+      showToast('Upload failed: ' + err.message, "error");
     } finally {
       setIsUploading(false);
       // Clear the input so the same file can be selected again
@@ -318,15 +354,24 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     e.preventDefault();
     if (!editingExp) return;
 
-    if (editingExp.id) {
-      await supabase.from('experiments').update(editingExp).eq('id', editingExp.id);
-    } else {
-      await supabase.from('experiments').insert([editingExp]);
+    try {
+      if (editingExp.id) {
+        const { error } = await supabase.from('experiments').update(editingExp).eq('id', editingExp.id);
+        if (error) throw error;
+        showToast("Experiment updated successfully!", "success");
+      } else {
+        const { error } = await supabase.from('experiments').insert([editingExp]);
+        if (error) throw error;
+        showToast("New experiment created!", "success");
+      }
+      
+      setIsExpModalOpen(false);
+      setEditingExp(null);
+      fetchExperiments();
+    } catch (err: any) {
+      console.error('Save error:', err);
+      showToast("Failed to save experiment: " + err.message, "error");
     }
-    
-    setIsExpModalOpen(false);
-    setEditingExp(null);
-    fetchExperiments();
   };
 
   const handleLogout = () => {
@@ -352,18 +397,18 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <Home size={18} />
             Back to Home
           </button>
-          <div className="bg-brand-surface/20 border border-brand-surface/40 rounded-[2.5rem] p-8 text-center shadow-2xl">
+          <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 text-center shadow-2xl">
             <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Lock className="text-brand-accent" size={32} />
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tighter mb-8">Admin Access</h1>
+            <h1 className="text-2xl font-bold tracking-tight mb-8">Admin Access</h1>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
                   required
                   placeholder="Enter Admin Password"
-                  className="w-full bg-brand-bg border border-brand-surface/60 rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all text-center"
+                  className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all text-center font-bold"
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
@@ -373,7 +418,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-text/20 hover:text-brand-accent transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-accent transition-colors"
                 >
                   {showPassword ? <Lock size={18} /> : <Key size={18} />}
                 </button>
@@ -393,7 +438,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-brand-accent/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold hover:opacity-90 active:scale-95 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : 'Sign In to Dashboard'}
               </button>
@@ -412,7 +457,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           <div className="flex items-center gap-6">
             <button 
               onClick={onBack}
-              className="p-3 bg-brand-surface/20 border border-brand-surface/40 rounded-2xl text-brand-text/60 hover:text-brand-accent transition-all"
+              className="p-3 bg-brand-surface border border-brand-border rounded-2xl text-brand-muted hover:text-brand-accent transition-all shadow-sm"
             >
               <Home size={24} />
             </button>
@@ -421,45 +466,45 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <div className="p-2 bg-brand-accent/10 rounded-xl">
                   <Shield className="text-brand-accent" size={20} />
                 </div>
-                <span className="font-black uppercase tracking-widest text-xs text-brand-accent">Admin Dashboard</span>
+                <span className="font-bold uppercase tracking-widest text-[10px] text-brand-accent">Admin Dashboard</span>
               </div>
-              <h1 className="text-4xl font-extrabold tracking-tighter">Management Console</h1>
+              <h1 className="text-4xl font-bold tracking-tight">Management Console</h1>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex gap-4">
-              <div className="bg-brand-surface/20 border border-brand-surface/40 rounded-3xl p-4 flex items-center gap-4">
+              <div className="bg-brand-surface border border-brand-border rounded-3xl p-4 flex items-center gap-4 shadow-sm">
                 <div className="p-3 bg-brand-accent/10 rounded-2xl">
                   <TrendingUp className="text-brand-accent" size={24} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-text/40">Revenue Today</p>
-                  <p className="text-xl font-black tracking-tighter">KES {stats.revenueToday}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">Revenue Today</p>
+                  <p className="text-xl font-bold tracking-tight">KES {stats.revenueToday}</p>
                 </div>
               </div>
-              <div className="bg-brand-surface/20 border border-brand-surface/40 rounded-3xl p-4 flex items-center gap-4">
+              <div className="bg-brand-surface border border-brand-border rounded-3xl p-4 flex items-center gap-4 shadow-sm">
                 <div className="p-3 bg-indigo-500/10 rounded-2xl">
                   <TrendingUp className="text-indigo-500" size={24} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-text/40">Total Revenue</p>
-                  <p className="text-xl font-black tracking-tighter">KES {stats.totalRevenue}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">Total Revenue</p>
+                  <p className="text-xl font-bold tracking-tight">KES {stats.totalRevenue}</p>
                 </div>
               </div>
-              <div className="bg-brand-surface/20 border border-brand-surface/40 rounded-3xl p-4 flex items-center gap-4">
+              <div className="bg-brand-surface border border-brand-border rounded-3xl p-4 flex items-center gap-4 shadow-sm">
                 <div className="p-3 bg-amber-500/10 rounded-2xl">
                   <Clock className="text-amber-500" size={24} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-text/40">Pending</p>
-                  <p className="text-xl font-black tracking-tighter">{stats.pending}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">Pending</p>
+                  <p className="text-xl font-bold tracking-tight">{stats.pending}</p>
                 </div>
               </div>
               <button 
                 onClick={() => fetchPayments(true)}
                 disabled={refreshing}
-                className="p-4 bg-brand-surface/20 border border-brand-surface/40 rounded-3xl hover:bg-brand-surface/40 transition-all disabled:opacity-50"
+                className="p-4 bg-brand-surface border border-brand-border rounded-3xl hover:bg-brand-bg transition-all disabled:opacity-50 shadow-sm"
                 title="Refresh Data"
               >
                 <Database className={`${refreshing ? 'animate-spin' : ''}`} size={24} />
@@ -467,7 +512,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
             <button 
               onClick={handleLogout}
-              className="p-4 bg-red-500/10 text-red-500 border border-red-500/20 rounded-3xl hover:bg-red-500/20 transition-all"
+              className="p-4 bg-red-500/10 text-red-500 border border-red-500/20 rounded-3xl hover:bg-red-500/20 transition-all shadow-sm"
               title="Logout"
             >
               <LogOut size={24} />
@@ -588,7 +633,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         </td>
                         <td className="px-8 py-6 font-bold">KES {p.amount}</td>
                         <td className="px-8 py-6 text-xs text-brand-text/40">
-                          {new Date(p.submitted_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}
+                          {new Date(p.created_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}
                         </td>
                         <td className="px-8 py-6">
                           <span className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest ${
@@ -901,7 +946,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   <div className="space-y-3">
                     {payments
                       .filter(p => p.phone_number === selectedUser.phone_number)
-                      .sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())
+                      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                       .map((p) => (
                         <div key={p.id} className="p-4 bg-brand-surface/5 border border-brand-surface/20 rounded-2xl flex items-center justify-between">
                           <div>
@@ -916,7 +961,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                               </span>
                             </div>
                             <p className="text-[10px] text-brand-text/40 font-bold">
-                              {new Date(p.submitted_at).toLocaleString()} • {p.plan} plan
+                              {new Date(p.created_at).toLocaleString()} • {p.plan} plan
                             </p>
                           </div>
                           <div className="text-right">

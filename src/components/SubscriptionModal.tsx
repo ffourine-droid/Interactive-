@@ -13,8 +13,8 @@ interface Plan {
 
 const plans: Plan[] = [
   { id: 'daily', name: 'Daily', price: 10, duration: '1 day', days: 1 },
-  { id: 'weekly', name: 'Weekly', price: 40, duration: '7 days', days: 7 },
-  { id: 'monthly', name: 'Monthly', price: 100, duration: '30 days', days: 30 },
+  { id: 'weekly', name: 'Weekly', price: 50, duration: '7 days', days: 7 },
+  { id: 'monthly', name: 'Monthly', price: 120, duration: '30 days', days: 30 },
 ];
 
 interface SubscriptionModalProps {
@@ -53,22 +53,22 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       // Simulate M-Pesa STK Push
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Mock successful subscription entry in Supabase
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + selectedPlan.days);
-
+      // Mock successful payment entry in Supabase
       const { error: subError } = await supabase
-        .from('subscriptions')
+        .from('payments')
         .insert({
-          phone_number: phoneNumber,
-          plan_type: selectedPlan.id,
-          amount_paid: selectedPlan.price,
-          paid_at: new Date().toISOString(),
-          expires_at: expiresAt.toISOString(),
-          is_active: true
+          phone_number: mpesaNumber.trim(),
+          plan: selectedPlan.id,
+          amount: selectedPlan.price,
+          status: 'pending',
+          transaction_code: `SUB_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
         });
 
       if (subError) throw subError;
+
+      // Auto-login for immediate access
+      sessionStorage.setItem('azilearn_phone', mpesaNumber.trim());
+      window.dispatchEvent(new Event('storage'));
 
       onSubscriptionSuccess();
       onClose();
@@ -87,16 +87,16 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="w-full max-w-md bg-brand-bg border border-brand-surface/60 rounded-[2rem] overflow-hidden shadow-2xl"
+        className="w-full max-w-md bg-brand-bg border border-brand-border rounded-[2rem] overflow-hidden shadow-2xl"
       >
         <div className="p-8">
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-extrabold tracking-tighter">
+            <h2 className="text-2xl font-bold tracking-tight">
               {step === 'plans' ? 'Choose a Plan' : 'M-Pesa Payment'}
             </h2>
             <button 
               onClick={onClose}
-              className="p-2 hover:bg-brand-surface/40 rounded-xl transition-colors text-brand-text/60"
+              className="p-2 hover:bg-brand-surface rounded-xl transition-colors text-brand-muted"
             >
               <X size={24} />
             </button>
@@ -108,7 +108,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-red-400 text-sm"
+                className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-red-500 text-sm"
               >
                 <AlertCircle className="shrink-0 mt-0.5" size={16} />
                 <p>{error}</p>
@@ -127,20 +127,20 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   <button
                     key={plan.id}
                     onClick={() => handlePlanSelect(plan)}
-                    className="w-full p-6 bg-brand-surface/20 border border-brand-surface/40 rounded-2xl flex items-center justify-between hover:border-brand-accent/50 transition-all group"
+                    className="w-full p-6 bg-brand-surface border border-brand-border rounded-2xl flex items-center justify-between hover:border-brand-accent/50 transition-all group shadow-sm"
                   >
                     <div className="text-left">
                       <h3 className="font-bold text-lg">{plan.name}</h3>
-                      <p className="text-sm text-brand-text/40">{plan.duration} Access</p>
+                      <p className="text-sm text-brand-muted">{plan.duration} Access</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-brand-accent font-black text-xl">KES {plan.price}</div>
-                      <div className="text-[10px] uppercase tracking-widest text-brand-text/20">One-time payment</div>
+                      <div className="text-brand-accent font-bold text-xl">KES {plan.price}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-brand-muted/40">One-time payment</div>
                     </div>
                   </button>
                 ))}
                 <div className="pt-4 text-center">
-                  <p className="text-xs text-brand-text/40">
+                  <p className="text-xs text-brand-muted">
                     Unlock all study materials, past papers, and expert notes instantly.
                   </p>
                 </div>
@@ -156,31 +156,31 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               >
                 <div className="p-4 bg-brand-accent/5 border border-brand-accent/10 rounded-2xl flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-brand-text/40">Selected Plan</p>
+                    <p className="text-xs text-brand-muted">Selected Plan</p>
                     <p className="font-bold">{selectedPlan?.name} Access</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-brand-text/40">Amount</p>
+                    <p className="text-xs text-brand-muted">Amount</p>
                     <p className="font-bold text-brand-accent">KES {selectedPlan?.price}</p>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black uppercase tracking-widest text-brand-text/40 mb-2 ml-1">
+                  <label className="block text-xs font-bold uppercase tracking-widest text-brand-muted mb-2 ml-1">
                     M-Pesa Phone Number
                   </label>
                   <div className="relative">
-                    <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-text/20" size={18} />
+                    <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
                     <input
                       type="tel"
                       required
-                      placeholder="+254..."
-                      className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all"
+                      placeholder="e.g. 0712345678"
+                      className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold"
                       value={mpesaNumber}
                       onChange={(e) => setMpesaNumber(e.target.value)}
                     />
                   </div>
-                  <p className="text-[10px] text-brand-text/40 mt-2 ml-1 italic">
+                  <p className="text-[10px] text-brand-muted mt-2 ml-1 italic">
                     Enter your M-Pesa number to pay KES {selectedPlan?.price}
                   </p>
                 </div>
@@ -196,14 +196,14 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setStep('plans')}
-                    className="flex-1 bg-brand-surface/20 text-brand-text/60 py-4 rounded-2xl font-bold hover:bg-brand-surface/40 transition-all"
+                    className="flex-1 bg-brand-surface text-brand-muted py-4 rounded-2xl font-bold hover:bg-brand-border transition-all"
                   >
                     Back
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-[2] bg-brand-accent text-white py-4 rounded-2xl font-bold hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-xl shadow-brand-accent/20"
+                    className="flex-[2] bg-brand-accent text-white py-4 rounded-2xl font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
                   >
                     {loading ? <Loader2 className="animate-spin" size={20} /> : 'Pay Now'}
                   </button>
