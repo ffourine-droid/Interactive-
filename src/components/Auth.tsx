@@ -21,52 +21,53 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
     setLoading(true);
     setError(null);
 
+    const trimmedPhone = phone.trim();
+    const trimmedUsername = username.trim();
+
     try {
       if (isLogin) {
-        // Login: Check if profile exists with this phone number
+        // Login: Fetch existing profile
         const { data, error: fetchError } = await supabase
           .from('profiles')
           .select('*')
-          .eq('phone_number', phone.trim())
-          .single();
+          .eq('phone_number', trimmedPhone)
+          .maybeSingle();
 
-        if (fetchError || !data) {
+        if (fetchError) throw fetchError;
+        if (!data) {
           throw new Error('Account not found. Please sign up first.');
         }
 
+        // Sync to session storage
         sessionStorage.setItem('azilearn_phone', data.phone_number);
         sessionStorage.setItem('azilearn_username', data.username);
+        
         showToast(`Welcome back, ${data.username}!`, "success");
         onSuccess(data);
       } else {
-        // Sign Up: Create new profile
-        if (!username.trim()) throw new Error('Username is required');
+        // Sign Up / Update: Create or update profile in Supabase
+        if (!trimmedUsername) throw new Error('Username is required');
         
-        // Check if phone already exists
-        const { data: existing } = await supabase
+        const { data, error: upsertError } = await supabase
           .from('profiles')
-          .select('id')
-          .eq('phone_number', phone.trim())
-          .maybeSingle();
-
-        if (existing) {
-          throw new Error('Phone number already registered. Please login.');
-        }
-
-        const { data, error: insertError } = await supabase
-          .from('profiles')
-          .insert([{ 
-            username: username.trim(), 
-            phone_number: phone.trim() 
-          }])
+          .upsert(
+            { 
+              phone_number: trimmedPhone, 
+              username: trimmedUsername,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'phone_number' }
+          )
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (upsertError) throw upsertError;
 
+        // Sync to session storage
         sessionStorage.setItem('azilearn_phone', data.phone_number);
         sessionStorage.setItem('azilearn_username', data.username);
-        showToast(`Account created! Welcome, ${data.username}!`, "success");
+        
+        showToast(isLogin ? "Welcome back!" : "Account ready!", "success");
         onSuccess(data);
       }
     } catch (err: any) {

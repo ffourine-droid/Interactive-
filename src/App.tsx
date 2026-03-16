@@ -7,7 +7,7 @@
  * AziLearn - Subscription-based study materials platform
  */
 import React, { useState, useEffect } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key, Clock, FileText, PlayCircle, Mic2, User, Smartphone } from 'lucide-react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
 import { PremiumGate } from './components/PremiumGate';
@@ -236,18 +236,42 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
   setTheme: (theme: 'light' | 'dark') => void
 }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [category, setCategory] = useState<'all' | 'notes' | 'slides' | 'audio'>('all');
   const [results, setResults] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('azilearn_search_history');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [activeTab, setActiveTab] = useState('home');
   const { showToast } = useToast();
 
+  // Debounce search query
   useEffect(() => {
-    handleSearch(searchQuery, category);
-  }, [category]);
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    handleSearch(debouncedQuery, category);
+  }, [debouncedQuery, category]);
+
+  const addToHistory = (query: string) => {
+    if (!query.trim()) return;
+    const newHistory = [query, ...searchHistory.filter(h => h !== query)].slice(0, 5);
+    setSearchHistory(newHistory);
+    localStorage.setItem('azilearn_search_history', JSON.stringify(newHistory));
+  };
 
   const handleSearch = async (query: string, cat: string = category) => {
     if (!navigator.onLine) {
@@ -259,6 +283,10 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    
+    if (query) {
+      addToHistory(query);
+    }
     
     try {
       let supabaseQuery = supabase.from('experiments').select('id, title, keywords, html_content, slides, audio_url, subject');
@@ -335,8 +363,18 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
             className="flex-1 bg-transparent border-none outline-none font-sans text-[15px] text-brand-text placeholder:text-brand-muted/60"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
           />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="p-1 hover:bg-brand-bg rounded-full text-brand-muted transition-colors"
+            >
+              <X size={16} />
+            </button>
+          )}
           <button 
             onClick={(e) => {
               rippleEffect(e);
@@ -349,6 +387,43 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
             </span>
           </button>
         </div>
+
+        {/* SEARCH HISTORY DROPDOWN */}
+        <AnimatePresence>
+          {isSearchFocused && searchHistory.length > 0 && !searchQuery && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute left-3 right-3 top-20 bg-brand-surface rounded-3xl border border-brand-border shadow-xl p-4 pointer-events-auto"
+            >
+              <div className="flex items-center justify-between mb-3 px-2">
+                <span className="text-[11px] font-black uppercase tracking-widest text-brand-muted">Recent Searches</span>
+                <button 
+                  onClick={() => {
+                    setSearchHistory([]);
+                    localStorage.removeItem('azilearn_search_history');
+                  }}
+                  className="text-[10px] font-bold text-brand-accent hover:underline"
+                >
+                  Clear All
+                </button>
+              </div>
+              <div className="space-y-1">
+                {searchHistory.map((h, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setSearchQuery(h)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-brand-bg rounded-xl transition-colors text-left group"
+                  >
+                    <Clock size={14} className="text-brand-muted group-hover:text-brand-accent" />
+                    <span className="text-sm font-medium text-brand-text">{h}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* HERO */}
@@ -461,15 +536,34 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
             )}
 
             {results.length === 0 && hasSearched && (
-              <div className="text-center p-12 mx-4 bg-brand-surface rounded-3xl border border-dashed border-brand-border">
-                <p className="text-brand-muted text-sm mb-4">No lessons found for "{searchQuery}".</p>
-                <button 
-                  onClick={() => { setSearchQuery(''); handleSearch(''); }}
-                  className="px-6 py-2 bg-brand-accent text-white rounded-xl text-sm font-bold shadow-md"
-                >
-                  Show All Materials
-                </button>
-              </div>
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-center p-12 mx-4 bg-brand-surface rounded-[2rem] border border-brand-border shadow-sm"
+              >
+                <div className="w-16 h-16 bg-brand-bg rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Search className="text-brand-muted/40" size={32} />
+                </div>
+                <h3 className="text-lg font-bold mb-2">No matches found</h3>
+                <p className="text-brand-muted text-[13px] mb-8 leading-relaxed">
+                  We couldn't find any lessons for <span className="text-brand-text font-bold">"{searchQuery}"</span>. 
+                  Try searching for a different topic or subject.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => { setSearchQuery(''); handleSearch(''); }}
+                    className="w-full py-4 bg-brand-accent text-white rounded-2xl text-sm font-bold shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+                  >
+                    Clear Search
+                  </button>
+                  <button 
+                    onClick={() => setCategory('all')}
+                    className="w-full py-4 bg-brand-surface border border-brand-border text-brand-text rounded-2xl text-sm font-bold active:scale-95 transition-all"
+                  >
+                    Reset All Filters
+                  </button>
+                </div>
+              </motion.div>
             )}
           </>
         )}
