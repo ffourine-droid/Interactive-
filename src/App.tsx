@@ -15,6 +15,7 @@ import { Pay } from './pages/Pay';
 import { Access } from './pages/Access';
 import { AdminPayments } from './pages/AdminPayments';
 import { Auth } from './components/Auth';
+import { Onboarding } from './components/Onboarding';
 import { checkAccess, AccessResult } from './utils/checkAccess';
 import { CountdownTimer } from './components/CountdownTimer';
 import { SlidesViewer } from './components/SlidesViewer';
@@ -58,6 +59,12 @@ function AppContent() {
   const [accessResult, setAccessResult] = useState<AccessResult | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !localStorage.getItem('azilearn_onboarding_complete');
+    }
+    return false;
+  });
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('azilearn_theme') as 'light' | 'dark') || 'light';
@@ -220,6 +227,14 @@ function AppContent() {
 
   return (
     <div className={`min-h-screen bg-brand-bg text-brand-text selection:bg-brand-accent/30 transition-colors duration-500`}>
+      <AnimatePresence>
+        {showOnboarding && (
+          <Onboarding onComplete={() => {
+            localStorage.setItem('azilearn_onboarding_complete', 'true');
+            setShowOnboarding(false);
+          }} />
+        )}
+      </AnimatePresence>
       {renderPage()}
     </div>
   );
@@ -355,8 +370,8 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     <div className="max-w-[420px] mx-auto bg-brand-bg min-h-screen relative pb-32">
       {/* TOP SEARCH BAR */}
       <div className="sticky top-0 z-[100] p-3 pt-4 bg-transparent pointer-events-none">
-        <div className="flex items-center bg-brand-surface rounded-full shadow-md px-4 h-12 gap-3 pointer-events-auto border border-brand-border/50">
-          <Search className="text-brand-muted shrink-0" size={18} />
+        <div className={`flex items-center bg-brand-surface rounded-full shadow-lg px-4 h-14 gap-3 pointer-events-auto border transition-all duration-300 ${isSearchFocused ? 'border-brand-accent ring-4 ring-brand-accent/10' : 'border-brand-border/50'}`}>
+          <Search className={`${isSearchFocused ? 'text-brand-accent' : 'text-brand-muted'} transition-colors shrink-0`} size={20} />
           <input 
             type="text" 
             placeholder="Search for a topic..." 
@@ -367,25 +382,34 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
             onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
           />
-          {searchQuery && (
+          <div className="flex items-center gap-2 shrink-0">
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="p-1.5 hover:bg-brand-bg rounded-full text-brand-muted transition-colors"
+              >
+                <X size={18} />
+              </button>
+            )}
+            <div className="w-[1px] h-6 bg-brand-border/50 mx-1" />
             <button 
-              onClick={() => setSearchQuery('')}
-              className="p-1 hover:bg-brand-bg rounded-full text-brand-muted transition-colors"
+              onClick={(e) => {
+                rippleEffect(e);
+                setTheme(theme === 'dark' ? 'light' : 'dark');
+              }}
+              className="p-2 rounded-full text-brand-muted hover:text-brand-accent hover:bg-brand-accent/10 transition-all active:scale-90"
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              <X size={16} />
+              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-          )}
-          <button 
-            onClick={(e) => {
-              rippleEffect(e);
-              setTheme(theme === 'dark' ? 'light' : 'dark');
-            }}
-            className="w-9 h-9 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform relative overflow-hidden"
-          >
-            <span className="font-sans font-bold text-sm uppercase">
-              {profile?.username?.[0] || 'A'}
-            </span>
-          </button>
+            <button 
+              className="w-9 h-9 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform relative overflow-hidden shrink-0"
+            >
+              <span className="font-sans font-bold text-sm uppercase">
+                {profile?.username?.[0] || 'A'}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* SEARCH HISTORY DROPDOWN */}
