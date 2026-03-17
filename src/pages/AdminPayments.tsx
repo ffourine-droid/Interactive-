@@ -1046,7 +1046,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                       <div className="grid grid-cols-3 gap-2 mb-4">
                         {editingExp?.slides?.map((url, idx) => (
                           <div key={idx} className="relative aspect-square rounded-xl overflow-hidden group">
-                            <img src={url} alt={`Slide ${idx}`} className="w-full h-full object-cover" />
+                            <img src={url} alt={`Slide ${idx}`} className="w-full h-full object-cover" loading="lazy" />
                             <button 
                               type="button"
                               onClick={() => removeSlide(idx)}

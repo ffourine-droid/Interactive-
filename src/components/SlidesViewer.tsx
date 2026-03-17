@@ -120,6 +120,7 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
                 alt={`Slide ${index + 1}`} 
                 className="max-w-full max-h-full object-contain rounded-xl shadow-2xl pointer-events-none"
                 referrerPolicy="no-referrer"
+                loading="lazy"
               />
             </div>
           ))}

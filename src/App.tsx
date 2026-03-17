@@ -16,6 +16,7 @@ import { Access } from './pages/Access';
 import { AdminPayments } from './pages/AdminPayments';
 import { Auth } from './components/Auth';
 import { Onboarding } from './components/Onboarding';
+import { SubscriptionModal } from './components/SubscriptionModal';
 import { checkAccess, AccessResult } from './utils/checkAccess';
 import { CountdownTimer } from './components/CountdownTimer';
 import { SlidesViewer } from './components/SlidesViewer';
@@ -59,6 +60,7 @@ function AppContent() {
   const [accessResult, setAccessResult] = useState<AccessResult | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [showPlanSelection, setShowPlanSelection] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window !== 'undefined') {
       return !localStorage.getItem('azilearn_onboarding_complete');
@@ -218,6 +220,7 @@ function AppContent() {
               setProfile(null);
               setAccessResult(null);
             }}
+            onShowPlans={() => setShowPlanSelection(true)}
             theme={theme}
             setTheme={setTheme}
           />
@@ -234,19 +237,31 @@ function AppContent() {
             setShowOnboarding(false);
           }} />
         )}
+        {showPlanSelection && (
+          <SubscriptionModal 
+            isOpen={showPlanSelection}
+            onClose={() => setShowPlanSelection(false)}
+            onManualPay={(plan) => {
+              setSelectedPlan(plan);
+              setCurrentPage('pay');
+              setShowPlanSelection(false);
+            }}
+          />
+        )}
       </AnimatePresence>
       {renderPage()}
     </div>
   );
 }
 
-function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onLogout, theme, setTheme }: { 
+function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onLogout, onShowPlans, theme, setTheme }: { 
   accessResult: AccessResult | null,
   onPayPlan: (plan: Plan, lesson?: Experiment) => void,
   onEnterCode: () => void,
   onAdminClick: () => void,
   profile: Profile | null,
   onLogout: () => void,
+  onShowPlans: () => void,
   theme: 'light' | 'dark',
   setTheme: (theme: 'light' | 'dark') => void
 }) {
@@ -270,6 +285,11 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
   const [activeTab, setActiveTab] = useState('home');
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
+
+  // Initial load
+  useEffect(() => {
+    handleSearch('', 'all');
+  }, []);
 
   // Debounce search query
   useEffect(() => {
@@ -302,6 +322,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     if (searchCache[cacheKey]) {
       setResults(searchCache[cacheKey]);
       setHasSearched(true);
+      setLoading(false);
       return;
     }
 
@@ -331,7 +352,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
         supabaseQuery = supabaseQuery.or(filters.join(','));
       }
 
-      const { data, error } = await supabaseQuery.limit(50);
+      const { data, error } = await supabaseQuery.order('created_at', { ascending: false }).limit(20);
 
       if (error) {
         if (error.message.includes('network')) {
@@ -380,270 +401,438 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     setTimeout(() => r.remove(), 600);
   };
 
-  const availableResults = results.filter(r => accessResult?.access);
-  const lockedResults = results.filter(r => !accessResult?.access);
+  const availableResults = React.useMemo(() => results.filter(r => accessResult?.access), [results, accessResult]);
+  const lockedResults = React.useMemo(() => results.filter(r => !accessResult?.access), [results, accessResult]);
 
   return (
     <div className="max-w-[420px] mx-auto bg-brand-bg min-h-screen relative pb-32">
-      {/* TOP SEARCH BAR */}
-      <div className="sticky top-0 z-[100] p-3 pt-4 bg-transparent pointer-events-none">
-        <div className={`flex items-center bg-brand-surface rounded-full shadow-lg px-4 h-14 gap-3 pointer-events-auto border transition-all duration-300 ${isSearchFocused ? 'border-brand-accent ring-4 ring-brand-accent/10' : 'border-brand-border/50'}`}>
-          <Search className={`${isSearchFocused ? 'text-brand-accent' : 'text-brand-muted'} transition-colors shrink-0`} size={20} />
-          <input 
-            ref={searchInputRef}
-            type="text" 
-            placeholder="Search for a topic..." 
-            className="flex-1 bg-transparent border-none outline-none font-sans text-[15px] text-brand-text placeholder:text-brand-muted/60"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleSearch(searchQuery, category, true);
-              }
-            }}
-          />
-          <div className="flex items-center gap-2 shrink-0">
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="p-1.5 hover:bg-brand-bg rounded-full text-brand-muted transition-colors"
-              >
-                <X size={18} />
-              </button>
-            )}
-            <button 
-              onClick={() => handleSearch(searchQuery, category, true)}
-              className={`p-2 rounded-full transition-all active:scale-90 ${searchQuery ? 'text-brand-accent bg-brand-accent/10' : 'text-brand-muted'}`}
-              title="Search"
-            >
-              <Search size={20} />
-            </button>
-            <div className="w-[1px] h-6 bg-brand-border/50 mx-1" />
-            <button 
-              onClick={(e) => {
-                rippleEffect(e);
-                setTheme(theme === 'dark' ? 'light' : 'dark');
-              }}
-              className="p-2 rounded-full text-brand-muted hover:text-brand-accent hover:bg-brand-accent/10 transition-all active:scale-90"
-              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            <button 
-              className="w-9 h-9 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform relative overflow-hidden shrink-0"
-            >
-              <span className="font-sans font-bold text-sm uppercase">
-                {profile?.username?.[0] || 'A'}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* SEARCH HISTORY DROPDOWN */}
-        <AnimatePresence>
-          {isSearchFocused && searchHistory.length > 0 && !searchQuery && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="absolute left-3 right-3 top-20 bg-brand-surface rounded-3xl border border-brand-border shadow-xl p-4 pointer-events-auto"
-            >
-              <div className="flex items-center justify-between mb-3 px-2">
-                <span className="text-[11px] font-black uppercase tracking-widest text-brand-muted">Recent Searches</span>
-                <button 
-                  onClick={() => {
-                    setSearchHistory([]);
-                    localStorage.removeItem('azilearn_search_history');
-                  }}
-                  className="text-[10px] font-bold text-brand-accent hover:underline"
-                >
-                  Clear All
-                </button>
-              </div>
-              <div className="space-y-1">
-                {searchHistory.map((h, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setSearchQuery(h)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-brand-bg rounded-xl transition-colors text-left group"
-                  >
-                    <Clock size={14} className="text-brand-muted group-hover:text-brand-accent" />
-                    <span className="text-sm font-medium text-brand-text">{h}</span>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* HERO */}
-      <div className="px-4 py-6">
-        <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
-          Welcome, {profile?.username || 'Explorer'}.
-        </h1>
-        <p className="text-[13px] text-brand-muted mt-1 font-sans">What are we learning today?</p>
-      </div>
-
-      {/* FILTER CHIPS */}
-      <div className="flex gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
-        {[
-          { id: 'all', label: 'All Materials', icon: FlaskConical },
-          { id: 'notes', label: 'Study Notes', icon: FileText },
-          { id: 'slides', label: 'Slides', icon: PlayCircle },
-          { id: 'audio', label: 'Audio Lessons', icon: Mic2 },
-        ].map((cat) => (
-          <button
-            key={cat.id}
-            onClick={(e) => {
-              rippleEffect(e);
-              setCategory(cat.id as any);
-            }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap font-sans text-[13px] font-medium transition-all border relative overflow-hidden shrink-0 shadow-sm ${
-              category === cat.id 
-                ? 'bg-brand-accent border-brand-accent text-white' 
-                : 'bg-brand-surface border-brand-border text-brand-text'
-            }`}
+      {/* SEARCH OVERLAY */}
+      <AnimatePresence>
+        {activeTab === 'search' && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-brand-bg/98 backdrop-blur-xl flex flex-col p-6"
           >
-            <cat.icon size={15} />
-            {cat.label}
-          </button>
-        ))}
-      </div>
-
-      {/* CONTENT CARDS */}
-      <div className="mt-4">
-        {loading ? (
-          <div className="px-4 space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="h-4 w-32 bg-brand-surface/50 rounded animate-pulse" />
-              <div className="h-4 w-16 bg-brand-surface/30 rounded animate-pulse" />
+            <div className="flex justify-end pt-4">
+              <button 
+                onClick={() => setActiveTab('home')}
+                className="w-12 h-12 flex items-center justify-center bg-brand-surface rounded-full border border-brand-border text-brand-text shadow-sm active:scale-90 transition-transform"
+              >
+                <X size={24} />
+              </button>
             </div>
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="bg-brand-surface rounded-[14px] p-4 border border-brand-border/30 animate-pulse flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-brand-bg/50" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-brand-bg/50 rounded w-3/4" />
-                  <div className="h-3 bg-brand-bg/30 rounded w-1/2" />
+            
+            <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full -mt-20">
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                className="space-y-8"
+              >
+                <div className="text-center space-y-3">
+                  <div className="w-20 h-20 bg-brand-accent/10 rounded-[2.5rem] flex items-center justify-center mx-auto mb-2">
+                    <Search className="text-brand-accent" size={40} />
+                  </div>
+                  <h2 className="text-3xl font-black text-brand-text tracking-tight">Search Lessons</h2>
+                  <p className="text-brand-muted text-[15px] font-medium leading-relaxed">
+                    Find exactly what you need to learn today. Type a topic or subject.
+                  </p>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-brand-bg/30" />
-              </div>
-            ))}
-            <div className="text-center py-8">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-accent/5 rounded-full border border-brand-accent/10">
-                <Loader2 className="animate-spin text-brand-accent" size={16} />
-                <span className="text-xs font-bold text-brand-accent uppercase tracking-widest">Content Coming Soon...</span>
-              </div>
+                
+                <div className="relative group">
+                  <div className="absolute left-6 top-1/2 -translate-y-1/2 text-brand-accent group-focus-within:scale-110 transition-transform">
+                    <Search size={28} />
+                  </div>
+                  <input 
+                    autoFocus
+                    type="text"
+                    placeholder="Search for a topic..."
+                    className="w-full h-20 pl-16 pr-6 bg-brand-surface border-2 border-brand-accent rounded-3xl text-xl font-bold text-brand-text outline-none shadow-2xl shadow-brand-accent/20 placeholder:text-brand-muted/40"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSearch(searchQuery, category, true);
+                        setActiveTab('home');
+                      }
+                    }}
+                  />
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="text-[11px] font-black uppercase tracking-[0.2em] text-brand-muted text-center">Popular Subjects</div>
+                  <div className="flex flex-wrap justify-center gap-2.5">
+                    {['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Geography'].map(tag => (
+                      <button 
+                        key={tag}
+                        onClick={() => {
+                          setSearchQuery(tag);
+                          handleSearch(tag, category, true);
+                          setActiveTab('home');
+                        }}
+                        className="px-6 py-3 bg-brand-surface border border-brand-border rounded-2xl text-sm font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 shadow-sm"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* TOP SEARCH BAR */}
+      {activeTab === 'home' && (
+        <div className="sticky top-0 z-[100] p-3 pt-4 bg-transparent pointer-events-none">
+          <div className={`flex items-center bg-brand-surface rounded-full shadow-lg px-4 h-14 gap-3 pointer-events-auto border transition-all duration-300 ${isSearchFocused ? 'border-brand-accent ring-4 ring-brand-accent/10' : 'border-brand-border/50'}`}>
+            <Search className={`${isSearchFocused ? 'text-brand-accent' : 'text-brand-muted'} transition-colors shrink-0`} size={20} />
+            <input 
+              ref={searchInputRef}
+              type="text" 
+              placeholder="Search for a topic..." 
+              className="flex-1 bg-transparent border-none outline-none font-sans text-[15px] text-brand-text placeholder:text-brand-muted/60"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSearch(searchQuery, category, true);
+                }
+              }}
+            />
+            <div className="flex items-center gap-2 shrink-0">
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="p-1.5 hover:bg-brand-bg rounded-full text-brand-muted transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              )}
+              <button 
+                onClick={() => handleSearch(searchQuery, category, true)}
+                className={`p-2 rounded-full transition-all active:scale-90 ${searchQuery ? 'text-brand-accent bg-brand-accent/10' : 'text-brand-muted'}`}
+                title="Search"
+              >
+                <Search size={20} />
+              </button>
+              <div className="w-[1px] h-6 bg-brand-border/50 mx-1" />
+              <button 
+                className="w-9 h-9 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform relative overflow-hidden shrink-0"
+              >
+                <span className="font-sans font-bold text-sm uppercase">
+                  {profile?.username?.[0] || 'A'}
+                </span>
+              </button>
             </div>
           </div>
-        ) : (
-          <>
-            {availableResults.length > 0 && (
-              <div className="mb-6">
-                <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider">Available</div>
-                <div className="px-3 space-y-2.5">
-                  {availableResults.map((exp) => (
-                    <div 
-                      key={exp.id} 
-                      onClick={(e) => {
-                        rippleEffect(e);
-                        openExperiment(exp);
-                      }}
-                      className="bg-brand-surface rounded-[14px] p-3.5 flex items-center gap-3 shadow-sm active:scale-[0.985] transition-all relative overflow-hidden border border-brand-border/30"
-                    >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        exp.slides?.length ? 'bg-orange-50 text-brand-accent' : 
-                        exp.audio_url ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
-                      }`}>
-                        {exp.slides?.length ? <PlayCircle size={22} /> : exp.audio_url ? <Mic2 size={22} /> : <FileText size={22} />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-sans text-sm font-medium text-brand-text truncate">{exp.title}</div>
-                        <div className="text-[12px] text-brand-muted mt-0.5">{exp.subject || 'Study Material'}</div>
-                      </div>
-                      <button className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted hover:bg-brand-bg transition-colors">
-                        <ExternalLink size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {lockedResults.length > 0 && (
-              <div>
-                <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider">Locked</div>
-                <div className="px-3 space-y-2.5">
-                  {lockedResults.map((exp) => (
-                    <div 
-                      key={exp.id} 
-                      onClick={(e) => {
-                        rippleEffect(e);
-                        openExperiment(exp);
-                      }}
-                      className="bg-brand-surface rounded-[14px] p-3.5 flex items-center gap-3 shadow-sm active:scale-[0.985] transition-all relative overflow-hidden border border-brand-border/30 group"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-brand-bg flex items-center justify-center shrink-0 opacity-40">
-                        {exp.slides?.length ? <PlayCircle size={22} /> : exp.audio_url ? <Mic2 size={22} /> : <FileText size={22} />}
-                      </div>
-                      <div className="flex-1 min-w-0 opacity-40">
-                        <div className="font-sans text-sm font-medium text-brand-text truncate">{exp.title}</div>
-                        <div className="text-[12px] text-brand-muted mt-0.5">{exp.subject || 'Study Material'}</div>
-                      </div>
-                      <div className="absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-brand-accent/10 border border-brand-accent/30 rounded-full px-2.5 py-1">
-                        <Lock size={10} className="text-brand-accent" />
-                        <span className="font-sans text-[11px] font-bold text-brand-accent">UNLOCK</span>
-                      </div>
-                      <button className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted opacity-40">
-                        <ExternalLink size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {results.length === 0 && hasSearched && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
+          {/* SEARCH HISTORY DROPDOWN */}
+          <AnimatePresence>
+            {isSearchFocused && searchHistory.length > 0 && !searchQuery && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-center p-12 mx-4 bg-brand-surface rounded-[2rem] border border-brand-border shadow-sm"
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute left-3 right-3 top-20 bg-brand-surface rounded-3xl border border-brand-border shadow-xl p-4 pointer-events-auto"
               >
-                <div className="w-16 h-16 bg-brand-bg rounded-2xl flex items-center justify-center mx-auto mb-6">
-                  <Search className="text-brand-muted/40" size={32} />
+                <div className="flex items-center justify-between mb-3 px-2">
+                  <span className="text-[11px] font-black uppercase tracking-widest text-brand-muted">Recent Searches</span>
+                  <button 
+                    onClick={() => {
+                      setSearchHistory([]);
+                      localStorage.removeItem('azilearn_search_history');
+                    }}
+                    className="text-[10px] font-bold text-brand-accent hover:underline"
+                  >
+                    Clear All
+                  </button>
                 </div>
-                <h3 className="text-lg font-bold mb-2">No matches found</h3>
-                <p className="text-brand-muted text-[13px] mb-8 leading-relaxed">
-                  We couldn't find any lessons for <span className="text-brand-text font-bold">"{searchQuery}"</span>. 
-                  Try searching for a different topic or subject.
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button 
-                    onClick={() => { setSearchQuery(''); handleSearch(''); }}
-                    className="w-full py-4 bg-brand-accent text-white rounded-2xl text-sm font-bold shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
-                  >
-                    Clear Search
-                  </button>
-                  <button 
-                    onClick={() => setCategory('all')}
-                    className="w-full py-4 bg-brand-surface border border-brand-border text-brand-text rounded-2xl text-sm font-bold active:scale-95 transition-all"
-                  >
-                    Reset All Filters
-                  </button>
+                <div className="space-y-1">
+                  {searchHistory.map((h, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setSearchQuery(h)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-brand-bg rounded-xl transition-colors text-left group"
+                    >
+                      <Clock size={14} className="text-brand-muted group-hover:text-brand-accent" />
+                      <span className="text-sm font-medium text-brand-text">{h}</span>
+                    </button>
+                  ))}
                 </div>
               </motion.div>
             )}
-          </>
-        )}
-      </div>
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* HERO & CONTENT */}
+      {activeTab === 'home' && (
+        <>
+          <div className="px-4 py-6">
+            <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
+              Welcome, {profile?.username || 'Explorer'}.
+            </h1>
+            <p className="text-[13px] text-brand-muted mt-1 font-sans">What are we learning today?</p>
+          </div>
+
+          {/* FILTER CHIPS */}
+          <div className="flex gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
+            {[
+              { id: 'all', label: 'All Materials', icon: FlaskConical },
+              { id: 'notes', label: 'Study Notes', icon: FileText },
+              { id: 'slides', label: 'Slides', icon: PlayCircle },
+              { id: 'audio', label: 'Audio Lessons', icon: Mic2 },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={(e) => {
+                  rippleEffect(e);
+                  setCategory(cat.id as any);
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap font-sans text-[13px] font-medium transition-all border relative overflow-hidden shrink-0 shadow-sm ${
+                  category === cat.id 
+                    ? 'bg-brand-accent border-brand-accent text-white' 
+                    : 'bg-brand-surface border-brand-border text-brand-text'
+                }`}
+              >
+                <cat.icon size={15} />
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* CONTENT CARDS */}
+          <div className="mt-4">
+            {loading ? (
+              <div className="px-4 space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="h-4 w-32 bg-brand-surface/50 rounded animate-pulse" />
+                  <div className="h-4 w-16 bg-brand-surface/30 rounded animate-pulse" />
+                </div>
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="bg-brand-surface rounded-[14px] p-4 border border-brand-border/30 animate-pulse flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-brand-bg/50" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-brand-bg/50 rounded w-3/4" />
+                      <div className="h-3 bg-brand-bg/30 rounded w-1/2" />
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-brand-bg/30" />
+                  </div>
+                ))}
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-accent/5 rounded-full border border-brand-accent/10">
+                    <Loader2 className="animate-spin text-brand-accent" size={16} />
+                    <span className="text-xs font-bold text-brand-accent uppercase tracking-widest">Content Coming Soon...</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {availableResults.length > 0 && (
+                  <div className="mb-6">
+                    <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider">Available</div>
+                    <div className="px-3 space-y-2.5">
+                      {availableResults.map((exp) => (
+                        <div 
+                          key={exp.id} 
+                          onClick={(e) => {
+                            rippleEffect(e);
+                            openExperiment(exp);
+                          }}
+                          className="bg-brand-surface rounded-[14px] p-3.5 flex items-center gap-3 shadow-sm active:scale-[0.985] transition-all relative overflow-hidden border border-brand-border/30"
+                        >
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            exp.slides?.length ? 'bg-orange-50 text-brand-accent' : 
+                            exp.audio_url ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
+                          }`}>
+                            {exp.slides?.length ? <PlayCircle size={22} /> : exp.audio_url ? <Mic2 size={22} /> : <FileText size={22} />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-sans text-sm font-medium text-brand-text truncate">{exp.title}</div>
+                            <div className="text-[12px] text-brand-muted mt-0.5">{exp.subject || 'Study Material'}</div>
+                          </div>
+                          <button className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted hover:bg-brand-bg transition-colors">
+                            <ExternalLink size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {lockedResults.length > 0 && (
+                  <div>
+                    <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider">Locked</div>
+                    <div className="px-3 space-y-2.5">
+                      {lockedResults.map((exp) => (
+                        <div 
+                          key={exp.id} 
+                          onClick={(e) => {
+                            rippleEffect(e);
+                            openExperiment(exp);
+                          }}
+                          className="bg-brand-surface rounded-[14px] p-3.5 flex items-center gap-3 shadow-sm active:scale-[0.985] transition-all relative overflow-hidden border border-brand-border/30 group"
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-brand-bg flex items-center justify-center shrink-0 opacity-40">
+                            {exp.slides?.length ? <PlayCircle size={22} /> : exp.audio_url ? <Mic2 size={22} /> : <FileText size={22} />}
+                          </div>
+                          <div className="flex-1 min-w-0 opacity-40">
+                            <div className="font-sans text-sm font-medium text-brand-text truncate">{exp.title}</div>
+                            <div className="text-[12px] text-brand-muted mt-0.5">{exp.subject || 'Study Material'}</div>
+                          </div>
+                          <div className="absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-brand-accent/10 border border-brand-accent/30 rounded-full px-2.5 py-1">
+                            <Lock size={10} className="text-brand-accent" />
+                            <span className="font-sans text-[11px] font-bold text-brand-accent">UNLOCK</span>
+                          </div>
+                          <button className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted opacity-40">
+                            <ExternalLink size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {results.length === 0 && hasSearched && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center p-12 mx-4 bg-brand-surface rounded-[2rem] border border-brand-border shadow-sm"
+                  >
+                    <div className="w-16 h-16 bg-brand-bg rounded-2xl flex items-center justify-center mx-auto mb-6">
+                      <Search className="text-brand-muted/40" size={32} />
+                    </div>
+                    <h3 className="text-lg font-bold mb-2">No matches found</h3>
+                    <p className="text-brand-muted text-[13px] mb-8 leading-relaxed">
+                      We couldn't find any lessons for <span className="text-brand-text font-bold">"{searchQuery}"</span>. 
+                      Try searching for a different topic or subject.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={() => { setSearchQuery(''); handleSearch(''); }}
+                        className="w-full py-4 bg-brand-accent text-white rounded-2xl text-sm font-bold shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+                      >
+                        Clear Search
+                      </button>
+                      <button 
+                        onClick={() => setCategory('all')}
+                        className="w-full py-4 bg-brand-surface border border-brand-border text-brand-text rounded-2xl text-sm font-bold active:scale-95 transition-all"
+                      >
+                        Reset All Filters
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* SETTINGS VIEW */}
+      {activeTab === 'settings' && (
+        <motion.div 
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="px-4 py-8 space-y-8"
+        >
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-brand-text tracking-tight">Settings</h2>
+            <p className="text-brand-muted text-sm font-medium">Manage your account and preferences</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 shadow-sm space-y-6">
+              {/* Theme Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent">
+                    {theme === 'dark' ? <Moon size={24} /> : <Sun size={24} />}
+                  </div>
+                  <div>
+                    <p className="font-bold text-brand-text">Appearance</p>
+                    <p className="text-xs text-brand-muted">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={(e) => {
+                    rippleEffect(e);
+                    setTheme(theme === 'dark' ? 'light' : 'dark');
+                  }}
+                  className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 relative overflow-hidden ${theme === 'dark' ? 'bg-brand-accent' : 'bg-brand-muted/20'}`}
+                >
+                  <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              <div className="h-px bg-brand-border/50" />
+
+              {/* WhatsApp Link */}
+              <a 
+                href="https://wa.me/254799426863" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-500">
+                    <Smartphone size={24} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-brand-text group-hover:text-brand-accent transition-colors">Let's Talk</p>
+                    <p className="text-xs text-brand-muted">Chat with us on WhatsApp</p>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ExternalLink size={18} />
+                </div>
+              </a>
+
+              <div className="h-px bg-brand-border/50" />
+
+              {/* Admin Link */}
+              <button 
+                onClick={onAdminClick}
+                className="w-full flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent">
+                    <Shield size={24} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-brand-text group-hover:text-brand-accent transition-colors">Admin Dashboard</p>
+                    <p className="text-xs text-brand-muted">Manage payments and content</p>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ChevronLeft size={18} className="rotate-180" />
+                </div>
+              </button>
+            </div>
+
+            {/* Logout Button */}
+            <button 
+              onClick={onLogout}
+              className="w-full py-5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-red-500/20 transition-all active:scale-95"
+            >
+              <User size={20} />
+              Sign Out
+            </button>
+          </div>
+        </motion.div>
+      )}
 
       {/* FAB PAYMENT BUTTON */}
       <button 
         onClick={(e) => {
           rippleEffect(e);
-          onPayPlan('daily');
+          onShowPlans();
         }}
         className="fixed bottom-24 right-4 bg-brand-accent text-white rounded-full h-[52px] px-5 flex items-center gap-2 shadow-lg shadow-brand-accent/40 active:scale-95 transition-all z-[199] font-sans text-sm font-bold relative overflow-hidden"
       >
@@ -658,8 +847,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
           {[
             { id: 'home', label: 'Home', icon: FlaskConical, action: () => setActiveTab('home') },
             { id: 'search', label: 'Search', icon: Search, action: () => setActiveTab('search') },
-            { id: 'admin', label: 'Admin', icon: Shield, action: onAdminClick },
-            { id: 'logout', label: 'Logout', icon: User, action: onLogout },
+            { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -690,7 +878,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
           <PremiumGate 
             lessonId={selectedExperiment.id.toString()}
             onClose={() => setSelectedExperiment(null)}
-            onPayClick={() => onPayPlan('daily', selectedExperiment)}
+            onPayClick={() => onShowPlans()}
             onEnterCode={onEnterCode}
           >
             <div className="fixed inset-0 z-[300] bg-brand-bg flex flex-col">
