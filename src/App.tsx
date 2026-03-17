@@ -73,7 +73,27 @@ function AppContent() {
     }
     return 'light';
   });
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const { showToast } = useToast();
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      showToast('You are back online!', 'success');
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+      showToast('You are offline. Some features may be limited.', 'error');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [showToast]);
 
   useEffect(() => {
     document.body.className = theme;
@@ -231,6 +251,17 @@ function AppContent() {
   return (
     <div className={`min-h-screen bg-brand-bg text-brand-text selection:bg-brand-accent/30 transition-colors duration-500`}>
       <AnimatePresence>
+        {isOffline && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-red-500 text-white text-[10px] font-bold py-1 px-4 flex items-center justify-center gap-2 sticky top-0 z-[1000]"
+          >
+            <WifiOff size={12} />
+            <span>OFFLINE MODE — LOADING FROM CACHE</span>
+          </motion.div>
+        )}
         {showOnboarding && (
           <Onboarding onComplete={() => {
             localStorage.setItem('azilearn_onboarding_complete', 'true');
