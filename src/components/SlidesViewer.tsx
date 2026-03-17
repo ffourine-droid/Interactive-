@@ -15,14 +15,28 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Preload adjacent slides
+  useEffect(() => {
+    const preloadIndices = [currentIndex - 1, currentIndex + 1];
+    preloadIndices.forEach(index => {
+      if (index >= 0 && index < slides.length) {
+        const img = new Image();
+        img.src = slides[index];
+      }
+    });
+  }, [currentIndex, slides]);
+
   useEffect(() => {
     if (audioUrl) {
-      audioRef.current = new Audio(audioUrl);
-      audioRef.current.loop = true;
+      const audio = new Audio();
+      audio.src = audioUrl;
+      audio.loop = true;
+      audio.preload = "auto";
+      audioRef.current = audio;
       
       const playAudio = async () => {
         try {
-          await audioRef.current?.play();
+          await audio.play();
           setIsPlaying(true);
         } catch (err) {
           console.log('Autoplay blocked');
@@ -32,7 +46,8 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
       playAudio();
 
       return () => {
-        audioRef.current?.pause();
+        audio.pause();
+        audio.src = "";
         audioRef.current = null;
       };
     }

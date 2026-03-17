@@ -265,12 +265,17 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     }
     return [];
   });
+  const [searchCache, setSearchCache] = useState<Record<string, Experiment[]>>({});
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [activeTab, setActiveTab] = useState('home');
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
   // Debounce search query
   useEffect(() => {
+    if (searchQuery.trim()) {
+      setLoading(true);
+    }
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
     }, 400);
@@ -288,7 +293,18 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     localStorage.setItem('azilearn_search_history', JSON.stringify(newHistory));
   };
 
-  const handleSearch = async (query: string, cat: string = category) => {
+  const handleSearch = async (query: string, cat: string = category, shouldBlur: boolean = false) => {
+    if (shouldBlur && searchInputRef.current) {
+      searchInputRef.current.blur();
+    }
+
+    const cacheKey = `${query}-${cat}`;
+    if (searchCache[cacheKey]) {
+      setResults(searchCache[cacheKey]);
+      setHasSearched(true);
+      return;
+    }
+
     if (!navigator.onLine) {
       setError("You are offline. Results may be outdated.");
       showToast("You are offline", "error");
@@ -336,6 +352,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       }
 
       setResults(filteredData);
+      setSearchCache(prev => ({ ...prev, [cacheKey]: filteredData }));
     } catch (err: any) {
       console.error('Search error:', err);
       setError(err.message);
@@ -373,6 +390,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
         <div className={`flex items-center bg-brand-surface rounded-full shadow-lg px-4 h-14 gap-3 pointer-events-auto border transition-all duration-300 ${isSearchFocused ? 'border-brand-accent ring-4 ring-brand-accent/10' : 'border-brand-border/50'}`}>
           <Search className={`${isSearchFocused ? 'text-brand-accent' : 'text-brand-muted'} transition-colors shrink-0`} size={20} />
           <input 
+            ref={searchInputRef}
             type="text" 
             placeholder="Search for a topic..." 
             className="flex-1 bg-transparent border-none outline-none font-sans text-[15px] text-brand-text placeholder:text-brand-muted/60"
@@ -380,7 +398,11 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSearch(searchQuery, category, true);
+              }
+            }}
           />
           <div className="flex items-center gap-2 shrink-0">
             {searchQuery && (
@@ -391,6 +413,13 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                 <X size={18} />
               </button>
             )}
+            <button 
+              onClick={() => handleSearch(searchQuery, category, true)}
+              className={`p-2 rounded-full transition-all active:scale-90 ${searchQuery ? 'text-brand-accent bg-brand-accent/10' : 'text-brand-muted'}`}
+              title="Search"
+            >
+              <Search size={20} />
+            </button>
             <div className="w-[1px] h-6 bg-brand-border/50 mx-1" />
             <button 
               onClick={(e) => {
@@ -487,10 +516,27 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       {/* CONTENT CARDS */}
       <div className="mt-4">
         {loading ? (
-          <div className="px-4 space-y-3">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-20 bg-brand-surface/50 rounded-2xl animate-pulse border border-brand-border/50" />
+          <div className="px-4 space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="h-4 w-32 bg-brand-surface/50 rounded animate-pulse" />
+              <div className="h-4 w-16 bg-brand-surface/30 rounded animate-pulse" />
+            </div>
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="bg-brand-surface rounded-[14px] p-4 border border-brand-border/30 animate-pulse flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-brand-bg/50" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-brand-bg/50 rounded w-3/4" />
+                  <div className="h-3 bg-brand-bg/30 rounded w-1/2" />
+                </div>
+                <div className="w-8 h-8 rounded-full bg-brand-bg/30" />
+              </div>
             ))}
+            <div className="text-center py-8">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-accent/5 rounded-full border border-brand-accent/10">
+                <Loader2 className="animate-spin text-brand-accent" size={16} />
+                <span className="text-xs font-bold text-brand-accent uppercase tracking-widest">Content Coming Soon...</span>
+              </div>
+            </div>
           </div>
         ) : (
           <>
@@ -678,9 +724,34 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                 ) : selectedExperiment.html_content ? (
                   <iframe
                     title={selectedExperiment.title}
-                    srcDoc={selectedExperiment.html_content}
+                    srcDoc={`
+                      <!DOCTYPE html>
+                      <html>
+                        <head>
+                          <meta charset="utf-8">
+                          <meta name="viewport" content="width=device-width, initial-scale=1">
+                          <style>
+                            body { 
+                              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                              line-height: 1.6;
+                              color: #1a1a1a;
+                              padding: 24px;
+                              margin: 0;
+                              background: #ffffff;
+                            }
+                            img { max-width: 100%; height: auto; border-radius: 12px; }
+                            h1, h2, h3 { color: #000; margin-top: 1.5em; }
+                            p { margin-bottom: 1em; }
+                          </style>
+                        </head>
+                        <body>
+                          ${selectedExperiment.html_content}
+                        </body>
+                      </html>
+                    `}
                     className="w-full h-full border-none bg-white"
                     sandbox="allow-scripts allow-modals"
+                    loading="lazy"
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-brand-muted gap-4 bg-brand-bg">
