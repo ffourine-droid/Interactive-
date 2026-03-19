@@ -49,6 +49,8 @@ interface Experiment {
   keywords: string;
   html_content: string;
   subject?: string;
+  grade?: string;
+  category?: string;
   slides?: string[];
   audio_url?: string;
 }
@@ -754,7 +756,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <h2 className="text-2xl font-bold">Experiments & Lessons</h2>
               <button 
                 onClick={() => {
-                  setEditingExp({ title: '', keywords: '', html_content: '', subject: '' });
+                  setEditingExp({ title: '', keywords: '', html_content: '', subject: '', grade: '', category: 'notes' });
                   setIsExpModalOpen(true);
                 }}
                 className="flex items-center gap-2 px-6 py-3 bg-brand-accent text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-xl shadow-brand-accent/20"
@@ -791,10 +793,20 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   </div>
                   <h3 className="text-lg font-bold mb-2 line-clamp-1">{exp.title}</h3>
                   <p className="text-xs text-brand-text/40 mb-4 line-clamp-2">{exp.keywords}</p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-3 py-1 bg-brand-surface/40 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-text/60">
                       {exp.subject || 'General'}
                     </span>
+                    {exp.grade && (
+                      <span className="px-3 py-1 bg-brand-accent/10 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-accent">
+                        {exp.grade}
+                      </span>
+                    )}
+                    {exp.category && (
+                      <span className="px-3 py-1 bg-indigo-500/10 rounded-full text-[10px] font-black uppercase tracking-widest text-indigo-500">
+                        {exp.category}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1019,6 +1031,38 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         value={editingExp?.subject || ''}
                         onChange={e => setEditingExp({...editingExp!, subject: e.target.value})}
                       />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">Grade / Form</label>
+                      <select 
+                        className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all appearance-none"
+                        value={editingExp?.grade || ''}
+                        onChange={e => setEditingExp({...editingExp!, grade: e.target.value})}
+                      >
+                        <option value="">Select Class</option>
+                        {[...Array(12)].map((_, i) => (
+                          <option key={i} value={`Grade ${i + 1}`}>Grade {i + 1}</option>
+                        ))}
+                        {[...Array(4)].map((_, i) => (
+                          <option key={i} value={`Form ${i + 1}`}>Form {i + 1}</option>
+                        ))}
+                        <option value="KCSE">KCSE Revision</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">Category</label>
+                      <select 
+                        className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all appearance-none"
+                        value={editingExp?.category || 'notes'}
+                        onChange={e => setEditingExp({...editingExp!, category: e.target.value})}
+                      >
+                        <option value="notes">Notes</option>
+                        <option value="slides">Slides</option>
+                        <option value="audio">Audio</option>
+                      </select>
                     </div>
                   </div>
                   <div className="space-y-2">

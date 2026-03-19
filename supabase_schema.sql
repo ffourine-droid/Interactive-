@@ -2,8 +2,9 @@
 -- This script drops the existing table to ensure it is created correctly.
 -- WARNING: This will delete any existing data in the 'payments' table.
 
--- 1. Fix experiments table if subject column is missing
+-- 1. Fix experiments table if columns are missing
 ALTER TABLE experiments ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE experiments ADD COLUMN IF NOT EXISTS grade TEXT;
 
 -- 2. Drop existing table to fix any previous broken attempts
 DROP TABLE IF EXISTS payments CASCADE;

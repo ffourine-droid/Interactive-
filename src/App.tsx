@@ -31,6 +31,7 @@ interface Experiment {
   subject?: string;
   slides?: string[];
   audio_url?: string;
+  grade?: string;
 }
 
 interface Profile {
@@ -311,15 +312,40 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     }
     return [];
   });
-  const [searchCache, setSearchCache] = useState<Record<string, Experiment[]>>({});
+  const [searchCache, setSearchCache] = useState<Record<string, Experiment[]>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('azilearn_search_cache');
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [activeTab, setActiveTab] = useState('home');
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const middleSearchRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
+
+  // Save cache to localStorage
+  useEffect(() => {
+    localStorage.setItem('azilearn_search_cache', JSON.stringify(searchCache));
+  }, [searchCache]);
+
+  useEffect(() => {
+    if (selectedClass && !hasSearched && middleSearchRef.current) {
+      middleSearchRef.current.focus();
+    }
+  }, [selectedClass, hasSearched]);
+
+  useEffect(() => {
+    if (hasSearched && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [hasSearched]);
 
   // Initial load
   useEffect(() => {
-    handleSearch('', 'all');
+    // No initial load, wait for class selection and search
   }, []);
 
   // Debounce search query
@@ -335,7 +361,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
   useEffect(() => {
     handleSearch(debouncedQuery, category);
-  }, [debouncedQuery, category]);
+  }, [debouncedQuery, category, selectedClass]);
 
   const addToHistory = (query: string) => {
     if (!query.trim()) return;
@@ -349,18 +375,13 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       searchInputRef.current.blur();
     }
 
-    const cacheKey = `${query}-${cat}`;
+    const cacheKey = `${query}-${cat}-${selectedClass || 'none'}`;
     if (searchCache[cacheKey]) {
       setResults(searchCache[cacheKey]);
       setHasSearched(true);
       setLoading(false);
-      return;
-    }
-
-    if (!navigator.onLine) {
-      setError("You are offline. Results may be outdated.");
-      showToast("You are offline", "error");
-      return;
+      // Still try to fetch in background to update cache if online
+      if (!navigator.onLine) return;
     }
 
     setLoading(true);
@@ -372,7 +393,11 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     }
     
     try {
-      let supabaseQuery = supabase.from('experiments').select('id, title, keywords, html_content, slides, audio_url, subject');
+      let supabaseQuery = supabase.from('experiments').select('id, title, keywords, html_content, slides, audio_url, subject, grade');
+      
+      if (selectedClass) {
+        supabaseQuery = supabaseQuery.eq('grade', selectedClass);
+      }
       
       const filters: string[] = [];
       if (query) {
@@ -407,8 +432,10 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       setSearchCache(prev => ({ ...prev, [cacheKey]: filteredData }));
     } catch (err: any) {
       console.error('Search error:', err);
-      setError(err.message);
-      showToast(err.message || "Failed to load content.", "error");
+      if (!searchCache[cacheKey]) {
+        setError(err.message || "Could not load results. Check your connection.");
+        showToast(err.message || "Failed to load content.", "error");
+      }
     } finally {
       setLoading(false);
     }
@@ -517,7 +544,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       </AnimatePresence>
 
       {/* TOP SEARCH BAR */}
-      {activeTab === 'home' && (
+      {activeTab === 'home' && selectedClass && (
         <div className="sticky top-0 z-[100] p-3 pt-4 bg-transparent pointer-events-none">
           <div className={`flex items-center bg-brand-surface rounded-full shadow-lg px-4 h-14 gap-3 pointer-events-auto border transition-all duration-300 ${isSearchFocused ? 'border-brand-accent ring-4 ring-brand-accent/10' : 'border-brand-border/50'}`}>
             <Search className={`${isSearchFocused ? 'text-brand-accent' : 'text-brand-muted'} transition-colors shrink-0`} size={20} />
@@ -605,15 +632,91 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       {/* HERO & CONTENT */}
       {activeTab === 'home' && (
         <>
-          <div className="px-4 py-6">
-            <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
-              Welcome, {profile?.username || 'Explorer'}.
-            </h1>
-            <p className="text-[13px] text-brand-muted mt-1 font-sans">What are we learning today?</p>
-          </div>
+          {!selectedClass ? (
+            <div className="px-4 py-6 space-y-8">
+              <div className="space-y-1">
+                <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
+                  Welcome, {profile?.username || 'Explorer'}.
+                </h1>
+                <p className="text-[13px] text-brand-muted font-sans">Select your class to start learning</p>
+              </div>
 
-          {/* FILTER CHIPS */}
-          <div className="flex gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-brand-muted">Primary & Junior School</h2>
+                  <div className="grid grid-cols-3 gap-3">
+                    {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((grade, i) => (
+                      <button
+                        key={grade}
+                        onClick={(e) => {
+                          rippleEffect(e);
+                          setSelectedClass(grade);
+                          setSearchQuery('');
+                        }}
+                        className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group"
+                      >
+                        <span className="text-lg">{i + 1}</span>
+                        <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Grade</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-brand-muted">Secondary School</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    {Array.from({ length: 4 }, (_, i) => `Form ${i + 1}`).map((form, i) => (
+                      <button
+                        key={form}
+                        onClick={(e) => {
+                          rippleEffect(e);
+                          setSelectedClass(form);
+                          setSearchQuery('');
+                        }}
+                        className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group"
+                      >
+                        <span className="text-lg">{i + 1}</span>
+                        <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Form</span>
+                      </button>
+                    ))}
+                    <button
+                      onClick={(e) => {
+                        rippleEffect(e);
+                        setSelectedClass('KCSE');
+                        setSearchQuery('');
+                      }}
+                      className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group col-span-2"
+                    >
+                      <span className="text-lg">KCSE</span>
+                      <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Revision</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="px-4 py-6 flex items-center gap-4">
+                <button 
+                  onClick={() => {
+                    setSelectedClass(null);
+                    setHasSearched(false);
+                    setSearchQuery('');
+                  }}
+                  className="w-10 h-10 rounded-full bg-brand-surface border border-brand-border flex items-center justify-center text-brand-text active:scale-90 transition-transform"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <div>
+                  <h1 className="font-sans text-xl font-bold text-brand-text leading-tight">
+                    {selectedClass}
+                  </h1>
+                  <p className="text-[12px] text-brand-muted font-sans">Search for notes and materials</p>
+                </div>
+              </div>
+
+              {/* RESULTS LIST */}
+              <div className="flex gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
             {[
               { id: 'all', label: 'All Materials', icon: FlaskConical },
               { id: 'notes', label: 'Study Notes', icon: FileText },
@@ -765,45 +868,23 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
           </div>
         </>
       )}
+    </>
+  )}
 
       {/* SETTINGS VIEW */}
       {activeTab === 'settings' && (
         <motion.div 
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="px-4 py-8 space-y-8"
+          className="px-4 py-6 space-y-6"
         >
-          <div className="space-y-2">
-            <h2 className="text-3xl font-black text-brand-text tracking-tight">Settings</h2>
-            <p className="text-brand-muted text-sm font-medium">Manage your account and preferences</p>
+          <div className="space-y-1">
+            <h2 className="text-2xl font-black text-brand-text tracking-tight">Settings</h2>
+            <p className="text-brand-muted text-[13px] font-medium">Manage your account and preferences</p>
           </div>
 
-          <div className="space-y-4">
-            <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 shadow-sm space-y-6">
-              {/* Theme Toggle */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent">
-                    {theme === 'dark' ? <Moon size={24} /> : <Sun size={24} />}
-                  </div>
-                  <div>
-                    <p className="font-bold text-brand-text">Appearance</p>
-                    <p className="text-xs text-brand-muted">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={(e) => {
-                    rippleEffect(e);
-                    setTheme(theme === 'dark' ? 'light' : 'dark');
-                  }}
-                  className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 relative overflow-hidden ${theme === 'dark' ? 'bg-brand-accent' : 'bg-brand-muted/20'}`}
-                >
-                  <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`} />
-                </button>
-              </div>
-
-              <div className="h-px bg-brand-border/50" />
-
+          <div className="space-y-3">
+            <div className="bg-brand-surface border border-brand-border rounded-2xl p-4 shadow-sm space-y-4">
               {/* WhatsApp Link */}
               <a 
                 href="https://wa.me/254799426863" 
@@ -811,17 +892,17 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                 rel="noopener noreferrer"
                 className="flex items-center justify-between group"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-500">
-                    <Smartphone size={24} />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500">
+                    <Smartphone size={20} />
                   </div>
                   <div>
-                    <p className="font-bold text-brand-text group-hover:text-brand-accent transition-colors">Let's Talk</p>
-                    <p className="text-xs text-brand-muted">Chat with us on WhatsApp</p>
+                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Let's Talk</p>
+                    <p className="text-[11px] text-brand-muted">Chat with us on WhatsApp</p>
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
-                  <ExternalLink size={18} />
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ExternalLink size={16} />
                 </div>
               </a>
 
@@ -832,17 +913,17 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                 onClick={onAdminClick}
                 className="w-full flex items-center justify-between group"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent">
-                    <Shield size={24} />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
+                    <Shield size={20} />
                   </div>
                   <div>
-                    <p className="font-bold text-brand-text group-hover:text-brand-accent transition-colors">Admin Dashboard</p>
-                    <p className="text-xs text-brand-muted">Manage payments and content</p>
+                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Admin Dashboard</p>
+                    <p className="text-[11px] text-brand-muted">Manage payments and content</p>
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
-                  <ChevronLeft size={18} className="rotate-180" />
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ChevronLeft size={16} className="rotate-180" />
                 </div>
               </button>
             </div>
@@ -850,9 +931,9 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
             {/* Logout Button */}
             <button 
               onClick={onLogout}
-              className="w-full py-5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-red-500/20 transition-all active:scale-95"
+              className="w-full py-4 bg-red-500/10 text-red-500 border border-red-500/20 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-500/20 transition-all active:scale-95 text-sm"
             >
-              <User size={20} />
+              <User size={18} />
               Sign Out
             </button>
           </div>
@@ -877,7 +958,6 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
         <div className="flex justify-around px-2 pb-4">
           {[
             { id: 'home', label: 'Home', icon: FlaskConical, action: () => setActiveTab('home') },
-            { id: 'search', label: 'Search', icon: Search, action: () => setActiveTab('search') },
             { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
           ].map((tab) => (
             <button
