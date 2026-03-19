@@ -324,6 +324,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const middleSearchRef = React.useRef<HTMLInputElement>(null);
+  const lastRequestId = React.useRef(0);
   const { showToast } = useToast();
 
   // Save cache to localStorage
@@ -348,6 +349,77 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     // No initial load, wait for class selection and search
   }, []);
 
+  const addToHistory = (query: string) => {
+    if (!query.trim()) return;
+    const newHistory = [query, ...searchHistory.filter(h => h !== query)].slice(0, 5);
+    setSearchHistory(newHistory);
+    localStorage.setItem('azilearn_search_history', JSON.stringify(newHistory));
+  };
+
+  const handleSearch = async (query: string, cat: string = category, currentClass: string | null = selectedClass, shouldBlur: boolean = false) => {
+    const requestId = ++lastRequestId.current;
+    
+    if (shouldBlur && searchInputRef.current) {
+      searchInputRef.current.blur();
+    }
+
+    setLoading(true);
+    setError(null);
+    setHasSearched(true);
+    
+    if (query) {
+      addToHistory(query);
+    }
+    
+    try {
+      console.log(`[Request ${requestId}] Searching with:`, { query, cat, currentClass });
+      let supabaseQuery = supabase
+        .from('experiments')
+        .select('id, title, keywords, html_content, slides, audio_url, subject, grade, created_at');
+      
+      if (currentClass) {
+        supabaseQuery = supabaseQuery.eq('grade', currentClass);
+      }
+      
+      if (query.trim()) {
+        supabaseQuery = supabaseQuery.or(`keywords.ilike.%${query}%,title.ilike.%${query}%,subject.ilike.%${query}%`);
+      }
+
+      const { data, error } = await supabaseQuery.order('created_at', { ascending: false }).limit(100);
+
+      if (error) throw error;
+      
+      // If this is not the latest request, ignore the results
+      if (requestId !== lastRequestId.current) {
+        console.log(`[Request ${requestId}] Ignored (newer request exists)`);
+        return;
+      }
+
+      let filteredData = data || [];
+      console.log(`[Request ${requestId}] Found ${filteredData.length} results before category filter`);
+      
+      if (cat !== 'all') {
+        filteredData = filteredData.filter(exp => {
+          if (cat === 'slides') return exp.slides && exp.slides.length > 0;
+          if (cat === 'audio') return !!exp.audio_url;
+          if (cat === 'notes') return !!exp.html_content && (!exp.slides || exp.slides.length === 0);
+          return true;
+        });
+      }
+
+      setResults(filteredData);
+    } catch (err: any) {
+      if (requestId !== lastRequestId.current) return;
+      console.error(`[Request ${requestId}] Search error:`, err);
+      setError(err.message || "Could not load results.");
+      showToast(err.message || "Failed to load content.", "error");
+    } finally {
+      if (requestId === lastRequestId.current) {
+        setLoading(false);
+      }
+    }
+  };
+
   // Debounce search query
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -360,86 +432,8 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
   }, [searchQuery]);
 
   useEffect(() => {
-    handleSearch(debouncedQuery, category);
+    handleSearch(debouncedQuery, category, selectedClass);
   }, [debouncedQuery, category, selectedClass]);
-
-  const addToHistory = (query: string) => {
-    if (!query.trim()) return;
-    const newHistory = [query, ...searchHistory.filter(h => h !== query)].slice(0, 5);
-    setSearchHistory(newHistory);
-    localStorage.setItem('azilearn_search_history', JSON.stringify(newHistory));
-  };
-
-  const handleSearch = async (query: string, cat: string = category, shouldBlur: boolean = false) => {
-    if (shouldBlur && searchInputRef.current) {
-      searchInputRef.current.blur();
-    }
-
-    const cacheKey = `${query}-${cat}-${selectedClass || 'none'}`;
-    if (searchCache[cacheKey]) {
-      setResults(searchCache[cacheKey]);
-      setHasSearched(true);
-      setLoading(false);
-      // Still try to fetch in background to update cache if online
-      if (!navigator.onLine) return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setHasSearched(true);
-    
-    if (query) {
-      addToHistory(query);
-    }
-    
-    try {
-      let supabaseQuery = supabase.from('experiments').select('id, title, keywords, html_content, slides, audio_url, subject, grade');
-      
-      if (selectedClass) {
-        supabaseQuery = supabaseQuery.eq('grade', selectedClass);
-      }
-      
-      const filters: string[] = [];
-      if (query) {
-        filters.push(`keywords.ilike.%${query}%,title.ilike.%${query}%,subject.ilike.%${query}%`);
-      }
-
-      if (filters.length > 0) {
-        supabaseQuery = supabaseQuery.or(filters.join(','));
-      }
-
-      const { data, error } = await supabaseQuery.order('created_at', { ascending: false }).limit(20);
-
-      if (error) {
-        if (error.message.includes('network')) {
-          throw new Error("Network error. Please check your connection.");
-        }
-        throw error;
-      }
-      
-      let filteredData = data || [];
-      
-      if (cat !== 'all') {
-        filteredData = filteredData.filter(exp => {
-          if (cat === 'slides') return exp.slides && exp.slides.length > 0;
-          if (cat === 'audio') return !!exp.audio_url;
-          if (cat === 'notes') return !!exp.html_content && (!exp.slides || exp.slides.length === 0);
-          return true;
-        });
-      }
-
-      setResults(filteredData);
-      setSearchCache(prev => ({ ...prev, [cacheKey]: filteredData }));
-    } catch (err: any) {
-      console.error('Search error:', err);
-      if (!searchCache[cacheKey]) {
-        setError(err.message || "Could not load results. Check your connection.");
-        showToast(err.message || "Failed to load content.", "error");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const openExperiment = (exp: Experiment) => {
     setSelectedExperiment(exp);
@@ -512,7 +506,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        handleSearch(searchQuery, category, true);
+                        handleSearch(searchQuery, category, selectedClass, true);
                         setActiveTab('home');
                       }
                     }}
@@ -527,7 +521,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                         key={tag}
                         onClick={() => {
                           setSearchQuery(tag);
-                          handleSearch(tag, category, true);
+                          handleSearch(tag, category, selectedClass, true);
                           setActiveTab('home');
                         }}
                         className="px-6 py-3 bg-brand-surface border border-brand-border rounded-2xl text-sm font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 shadow-sm"
@@ -559,21 +553,24 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
               onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  handleSearch(searchQuery, category, true);
+                  handleSearch(searchQuery, category, selectedClass, true);
                 }
               }}
             />
             <div className="flex items-center gap-2 shrink-0">
               {searchQuery && (
                 <button 
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => {
+                    setSearchQuery('');
+                    handleSearch('', category, selectedClass, true);
+                  }}
                   className="p-1.5 hover:bg-brand-bg rounded-full text-brand-muted transition-colors"
                 >
                   <X size={18} />
                 </button>
               )}
               <button 
-                onClick={() => handleSearch(searchQuery, category, true)}
+                onClick={() => handleSearch(searchQuery, category, selectedClass, true)}
                 className={`p-2 rounded-full transition-all active:scale-90 ${searchQuery ? 'text-brand-accent bg-brand-accent/10' : 'text-brand-muted'}`}
                 title="Search"
               >
