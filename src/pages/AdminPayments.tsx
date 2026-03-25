@@ -51,6 +51,7 @@ interface Experiment {
   subject?: string;
   grade?: string;
   category?: string;
+  is_free?: boolean;
   slides?: string[];
   audio_url?: string;
 }
@@ -93,11 +94,12 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   // Deletion state
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
+  const [selectedExpGrade, setSelectedExpGrade] = useState<string>('All');
 
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
   const { showToast } = useToast();
 
-  const ADMIN_PASSWORD = "azilearn-admin-2024"; // In real app, use env var
+  const ADMIN_PASSWORD = (import.meta as any).env?.VITE_ADMIN_PASSWORD || "azilearn-admin-2024";
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -166,7 +168,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       }
     } catch (err: any) {
       console.error('Fetch payments error:', err);
-      alert('Failed to fetch payments: ' + err.message);
+      showToast('Failed to fetch payments: ' + err.message, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -372,7 +374,81 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       fetchExperiments();
     } catch (err: any) {
       console.error('Save error:', err);
-      showToast("Failed to save experiment: " + err.message, "error");
+      if (err.message?.includes('column "is_free" of relation "experiments" does not exist')) {
+        showToast("Database error: Missing 'is_free' column. Please run the SQL fix in Supabase.", "error");
+      } else {
+        showToast("Failed to save experiment: " + err.message, "error");
+      }
+    }
+  };
+
+  const seedSampleData = async () => {
+    if (!window.confirm("This will add 5 sample lessons to your database. Continue?")) return;
+    
+    setRefreshing(true);
+    try {
+      const sampleData = [
+        { 
+          title: 'Introduction to Photosynthesis', 
+          keywords: 'biology, plants, energy', 
+          subject: 'Biology', 
+          grade: 'Grade 7', 
+          html_content: '<h1>Photosynthesis</h1><p>Photosynthesis is the process by which green plants and some other organisms use sunlight to synthesize foods with the help of chlorophyll pigments.</p>', 
+          category: 'notes',
+          is_free: true
+        },
+        { 
+          title: 'Chemical Reactions Basics', 
+          keywords: 'chemistry, reactions, atoms', 
+          subject: 'Chemistry', 
+          grade: 'Grade 8', 
+          html_content: '<h1>Chemical Reactions</h1><p>A chemical reaction is a process that leads to the chemical transformation of one set of chemical substances to another.</p>', 
+          category: 'notes',
+          is_free: false
+        },
+        { 
+          title: 'Newton\'s Laws of Motion', 
+          keywords: 'physics, motion, force', 
+          subject: 'Physics', 
+          grade: 'Grade 9', 
+          html_content: '<h1>Newton\'s Laws</h1><p>Newton\'s laws of motion are three physical laws that, together, laid the foundation for classical mechanics.</p>', 
+          category: 'notes',
+          is_free: true
+        },
+        { 
+          title: 'Algebraic Expressions', 
+          keywords: 'math, algebra, variables', 
+          subject: 'Mathematics', 
+          grade: 'Grade 10', 
+          html_content: '<h1>Algebra</h1><p>Algebra is one of the broad areas of mathematics, together with number theory, geometry and analysis.</p>', 
+          category: 'notes',
+          is_free: false
+        },
+        { 
+          title: 'Plate Tectonics', 
+          keywords: 'geography, earth, plates', 
+          subject: 'Geography', 
+          grade: 'Grade 11', 
+          html_content: '<h1>Plate Tectonics</h1><p>Plate tectonics is a scientific theory describing the large-scale motion of seven large plates and the movements of a larger number of smaller plates of Earth\'s lithosphere.</p>', 
+          category: 'notes',
+          is_free: true
+        }
+      ];
+
+      const { error } = await supabase.from('experiments').insert(sampleData);
+      if (error) throw error;
+      
+      showToast("Sample data seeded successfully!", "success");
+      fetchExperiments();
+    } catch (err: any) {
+      console.error('Seed error:', err);
+      if (err.message?.includes('column "is_free" of relation "experiments" does not exist')) {
+        showToast("Database error: Missing 'is_free' column. Please run the SQL fix in Supabase.", "error");
+      } else {
+        showToast("Failed to seed data: " + err.message, "error");
+      }
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -593,6 +669,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <thead>
                   <tr className="text-[10px] font-black uppercase tracking-widest text-brand-text/40 border-b border-brand-surface/40">
                     <th className="px-8 py-4">Phone Number</th>
+                    <th className="px-8 py-4">Transaction Code</th>
                     <th className="px-8 py-4">Plan / Lesson</th>
                     <th className="px-8 py-4">Amount</th>
                     <th className="px-8 py-4">Submitted</th>
@@ -616,6 +693,21 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <button 
                               onClick={() => {
                                 navigator.clipboard.writeText(p.phone_number);
+                                showToast("Phone number copied!", "success");
+                              }}
+                              className="p-1.5 text-brand-text/20 hover:text-brand-accent transition-colors"
+                            >
+                              <Copy size={14} />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold tracking-widest uppercase">{p.transaction_code}</span>
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(p.transaction_code);
+                                showToast("Code copied!", "success");
                               }}
                               className="p-1.5 text-brand-text/20 hover:text-brand-accent transition-colors"
                             >
@@ -753,10 +845,20 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         ) : (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Experiments & Lessons</h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-bold">Experiments & Lessons</h2>
+                <button 
+                  onClick={seedSampleData}
+                  disabled={refreshing}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-surface border border-brand-border rounded-xl text-xs font-bold hover:text-brand-accent transition-all disabled:opacity-50"
+                >
+                  <Database size={14} />
+                  Seed Sample Data
+                </button>
+              </div>
               <button 
                 onClick={() => {
-                  setEditingExp({ title: '', keywords: '', html_content: '', subject: '', grade: '', category: 'notes' });
+                  setEditingExp({ title: '', keywords: '', html_content: '', subject: '', grade: selectedExpGrade === 'All' ? '' : selectedExpGrade, category: 'notes' });
                   setIsExpModalOpen(true);
                 }}
                 className="flex items-center gap-2 px-6 py-3 bg-brand-accent text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-xl shadow-brand-accent/20"
@@ -766,8 +868,26 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               </button>
             </div>
 
+            <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+              {['All', 'Form 1', 'Form 2', 'Form 3', 'Form 4', 'KCSE'].map((grade) => (
+                <button
+                  key={grade}
+                  onClick={() => setSelectedExpGrade(grade)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap ${
+                    selectedExpGrade === grade 
+                      ? 'bg-brand-accent border-brand-accent text-white shadow-lg shadow-brand-accent/20' 
+                      : 'bg-brand-surface border-brand-border text-brand-text/60 hover:border-brand-accent/40'
+                  }`}
+                >
+                  {grade}
+                </button>
+              ))}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {experiments.map((exp) => (
+              {experiments
+                .filter(exp => selectedExpGrade === 'All' || exp.grade === selectedExpGrade)
+                .map((exp) => (
                 <div key={exp.id} className="bg-brand-surface/20 border border-brand-surface/40 rounded-3xl p-6 hover:border-brand-accent/30 transition-all group">
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-3 bg-brand-accent/10 rounded-2xl">
@@ -1065,6 +1185,19 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                       </select>
                     </div>
                   </div>
+                  <div className="flex items-center gap-3 p-4 bg-brand-surface/10 rounded-2xl border border-brand-surface/20">
+                    <input 
+                      type="checkbox"
+                      id="is_free"
+                      className="w-5 h-5 rounded-lg border-brand-surface/40 text-brand-accent focus:ring-brand-accent transition-all cursor-pointer"
+                      checked={editingExp?.is_free || false}
+                      onChange={e => setEditingExp({...editingExp!, is_free: e.target.checked})}
+                    />
+                    <label htmlFor="is_free" className="text-sm font-bold cursor-pointer select-none">
+                      Mark as Free Content (No subscription required)
+                    </label>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">Keywords (Comma separated)</label>
                     <input 

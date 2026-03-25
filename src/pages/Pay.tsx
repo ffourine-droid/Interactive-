@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Smartphone, Info, CheckCircle2, Clock, ArrowRight } from 'lucide-react';
+import { ChevronLeft, Smartphone, Info, CheckCircle2, Clock, ArrowRight, MessageSquare } from 'lucide-react';
 import { PaymentForm } from '../components/PaymentForm';
 
 interface PayProps {
@@ -13,6 +13,7 @@ interface PayProps {
 
 export const Pay: React.FC<PayProps> = ({ plan, lessonId, lessonTitle, onSuccess, onBack }) => {
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'whatsapp'>('mpesa');
 
   const getAmount = () => {
     switch (plan) {
@@ -25,6 +26,7 @@ export const Pay: React.FC<PayProps> = ({ plan, lessonId, lessonTitle, onSuccess
 
   const amount = getAmount();
   const TILL_NUMBER = "3400897"; 
+  const WHATSAPP_NUMBER = "254799426863";
 
   const getPlanName = () => {
     switch (plan) {
@@ -63,83 +65,180 @@ export const Pay: React.FC<PayProps> = ({ plan, lessonId, lessonTitle, onSuccess
 
             <div className="space-y-8">
               <div className="text-center">
-                <h1 className="text-3xl font-bold tracking-tight mb-2 font-sans">Payment Instructions</h1>
+                <h1 className="text-3xl font-bold tracking-tight mb-2 font-sans">Payment Options</h1>
                 <p className="text-brand-muted text-sm font-sans">
                   Unlock {getPlanName()} {lessonTitle ? `for "${lessonTitle}"` : ''} for KES {amount}.
                 </p>
               </div>
 
-              {/* Instructions Card */}
-              <div className="bg-brand-accent text-white rounded-[2rem] p-8 shadow-lg shadow-brand-accent/20 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-                
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 bg-white/20 rounded-xl">
-                      <Smartphone size={24} />
-                    </div>
-                    <span className="font-bold uppercase tracking-widest text-[10px] opacity-60 font-sans">Lipa na M-Pesa</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-6 mb-10">
-                    <div>
-                      <p className="text-white/60 text-[10px] uppercase tracking-widest font-bold mb-1 font-sans">Till Number</p>
-                      <p className="text-4xl font-bold tracking-tight font-sans">{TILL_NUMBER}</p>
-                    </div>
-                    <div>
-                      <p className="text-white/60 text-[10px] uppercase tracking-widest font-bold mb-1 font-sans">Amount</p>
-                      <p className="text-4xl font-bold tracking-tight font-sans">KES {amount}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <p className="font-bold text-sm font-sans">Business Name: <span className="opacity-80">FOURINE SHIHAFFU</span></p>
-                    <div className="h-px bg-white/20 w-full" />
-                    <ol className="text-sm space-y-2 opacity-90 font-sans">
-                      <li className="flex gap-3">
-                        <span className="font-bold opacity-40">01</span>
-                        <span>Open M-Pesa on your phone</span>
-                      </li>
-                      <li className="flex gap-3">
-                        <span className="font-bold opacity-40">02</span>
-                        <span>Select <strong>Lipa na M-Pesa</strong></span>
-                      </li>
-                      <li className="flex gap-3">
-                        <span className="font-bold opacity-40">03</span>
-                        <span>Select <strong>Buy Goods and Services</strong></span>
-                      </li>
-                      <li className="flex gap-3">
-                        <span className="font-bold opacity-40">04</span>
-                        <span>Enter Till Number: <strong>{TILL_NUMBER}</strong></span>
-                      </li>
-                      <li className="flex gap-3">
-                        <span className="font-bold opacity-40">05</span>
-                        <span>Enter Amount: <strong>KES {amount}</strong></span>
-                      </li>
-                      <li className="flex gap-3">
-                        <span className="font-bold opacity-40">06</span>
-                        <span>Enter your M-Pesa PIN and confirm</span>
-                      </li>
-                    </ol>
-                  </div>
-                </div>
+              {/* Payment Method Selector */}
+              <div className="flex p-1 bg-brand-surface border border-brand-border rounded-2xl shadow-sm">
+                <button
+                  onClick={() => setPaymentMethod('mpesa')}
+                  className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                    paymentMethod === 'mpesa' 
+                      ? 'bg-brand-accent text-white shadow-md' 
+                      : 'text-brand-muted hover:text-brand-text'
+                  }`}
+                >
+                  <Smartphone size={18} />
+                  Lipa na M-Pesa
+                </button>
+                <button
+                  onClick={() => setPaymentMethod('whatsapp')}
+                  className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                    paymentMethod === 'whatsapp' 
+                      ? 'bg-[#25D366] text-white shadow-md' 
+                      : 'text-brand-muted hover:text-brand-text'
+                  }`}
+                >
+                  <MessageSquare size={18} />
+                  WhatsApp
+                </button>
               </div>
 
-              <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-8 shadow-sm">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="p-2 bg-brand-accent/10 rounded-xl">
-                    <Info className="text-brand-accent" size={20} />
-                  </div>
-                  <h2 className="text-xl font-bold font-sans">Submit Transaction Code</h2>
-                </div>
+              {paymentMethod === 'mpesa' ? (
+                <>
+                  {/* Instructions Card */}
+                  <div className="bg-brand-accent text-white rounded-[2rem] p-8 shadow-lg shadow-brand-accent/20 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
+                    
+                    <div className="relative z-10">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 bg-white/20 rounded-xl">
+                          <Smartphone size={24} />
+                        </div>
+                        <span className="font-bold uppercase tracking-widest text-[10px] opacity-60 font-sans">Lipa na M-Pesa</span>
+                      </div>
 
-                <PaymentForm 
-                  plan={plan} 
-                  lessonId={lessonId} 
-                  amount={amount} 
-                  onSuccess={handleFormSuccess} 
-                />
-              </div>
+                      <div className="grid grid-cols-1 gap-6 mb-10">
+                        <div>
+                          <p className="text-white/60 text-[10px] uppercase tracking-widest font-bold mb-1 font-sans">Till Number</p>
+                          <p className="text-4xl font-bold tracking-tight font-sans">{TILL_NUMBER}</p>
+                        </div>
+                        <div>
+                          <p className="text-white/60 text-[10px] uppercase tracking-widest font-bold mb-1 font-sans">Amount</p>
+                          <p className="text-4xl font-bold tracking-tight font-sans">KES {amount}</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <p className="font-bold text-sm font-sans">Business Name: <span className="opacity-80">FOURINE SHIHAFFU</span></p>
+                        <div className="h-px bg-white/20 w-full" />
+                        <ol className="text-sm space-y-2 opacity-90 font-sans">
+                          <li className="flex gap-3">
+                            <span className="font-bold opacity-40">01</span>
+                            <span>Open M-Pesa on your phone</span>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="font-bold opacity-40">02</span>
+                            <span>Select <strong>Lipa na M-Pesa</strong></span>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="font-bold opacity-40">03</span>
+                            <span>Select <strong>Buy Goods and Services</strong></span>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="font-bold opacity-40">04</span>
+                            <span>Enter Till Number: <strong>{TILL_NUMBER}</strong></span>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="font-bold opacity-40">05</span>
+                            <span>Enter Amount: <strong>KES {amount}</strong></span>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="font-bold opacity-40">06</span>
+                            <span>Enter your M-Pesa PIN and confirm</span>
+                          </li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-8 shadow-sm">
+                    <div className="flex items-center gap-3 mb-8">
+                      <div className="p-2 bg-brand-accent/10 rounded-xl">
+                        <Info className="text-brand-accent" size={20} />
+                      </div>
+                      <h2 className="text-xl font-bold font-sans">Submit Transaction Code</h2>
+                    </div>
+
+                    <PaymentForm 
+                      plan={plan} 
+                      lessonId={lessonId} 
+                      amount={amount} 
+                      onSuccess={handleFormSuccess} 
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-6">
+                  <div className="bg-[#25D366] text-white rounded-[2rem] p-8 shadow-lg shadow-[#25D366]/20 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
+                    
+                    <div className="relative z-10">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 bg-white/20 rounded-xl">
+                          <MessageSquare size={24} />
+                        </div>
+                        <span className="font-bold uppercase tracking-widest text-[10px] opacity-60 font-sans">WhatsApp Payment</span>
+                      </div>
+
+                      <div className="space-y-6 mb-8">
+                        <div>
+                          <h3 className="text-2xl font-bold mb-2 font-sans">Request Payment Prompt</h3>
+                          <p className="text-white/80 text-sm leading-relaxed font-sans">
+                            Click the button below to send a message to our support team on WhatsApp. 
+                            We will send a payment prompt directly to your phone.
+                          </p>
+                        </div>
+                        
+                        <div className="bg-white/10 rounded-2xl p-4 border border-white/20">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-white/60 text-[10px] uppercase tracking-widest font-bold font-sans">Plan</span>
+                            <span className="font-bold font-sans">{getPlanName()}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-white/60 text-[10px] uppercase tracking-widest font-bold font-sans">Amount</span>
+                            <span className="font-bold font-sans">KES {amount}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <a 
+                        href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+                          `Hello, I would like to request a payment prompt for the ${getPlanName()} plan. Amount: KES ${amount}. ${lessonTitle ? `Lesson: ${lessonTitle}` : ''}`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full bg-white text-[#25D366] py-5 rounded-2xl font-bold hover:bg-white/90 active:scale-95 transition-all shadow-xl flex items-center justify-center gap-3 font-sans"
+                      >
+                        <MessageSquare size={24} />
+                        Request on WhatsApp
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-8 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-brand-accent/10 rounded-xl">
+                        <Info className="text-brand-accent" size={20} />
+                      </div>
+                      <h2 className="text-xl font-bold font-sans">Already Paid?</h2>
+                    </div>
+                    <p className="text-brand-muted text-sm mb-6 font-sans">
+                      If you've already received the prompt and paid, please submit your phone number below to gain access.
+                    </p>
+
+                    <PaymentForm 
+                      plan={plan} 
+                      lessonId={lessonId} 
+                      amount={amount} 
+                      onSuccess={handleFormSuccess} 
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center gap-3 p-6 bg-brand-surface rounded-2xl border border-brand-border shadow-sm">
                 <CheckCircle2 className="text-brand-muted/40 shrink-0" size={20} />

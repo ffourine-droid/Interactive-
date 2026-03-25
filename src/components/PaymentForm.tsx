@@ -13,6 +13,7 @@ interface PaymentFormProps {
 
 export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount, onSuccess }) => {
   const [phone, setPhone] = useState(sessionStorage.getItem('azilearn_phone') || '');
+  const [transactionCode, setTransactionCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -31,9 +32,16 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
     setError(null);
 
     const trimmedPhone = phone.trim();
+    const trimmedCode = transactionCode.trim().toUpperCase();
 
     if (!trimmedPhone || trimmedPhone.length < 10) {
       setError("Please enter a valid phone number (at least 10 digits)");
+      setLoading(false);
+      return;
+    }
+
+    if (!trimmedCode || trimmedCode.length < 6) {
+      setError("Please enter a valid M-Pesa transaction code (e.g. RCK8...)");
       setLoading(false);
       return;
     }
@@ -43,7 +51,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
       const { error: insertError } = await supabase
         .from('payments')
         .insert({
-          transaction_code: `PAY_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          transaction_code: trimmedCode,
           amount,
           plan,
           lesson_id: lessonId,
@@ -95,9 +103,15 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
         >
           Start Learning Now
         </button>
-        <div className="mt-6 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-          <p className="text-xs uppercase tracking-widest font-bold text-emerald-500/40 mb-1">Your Phone Number</p>
-          <p className="font-mono text-lg font-bold text-emerald-500 tracking-widest">{phone}</p>
+        <div className="mt-6 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex flex-col gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest font-bold text-emerald-500/40 mb-1">Your Phone Number</p>
+            <p className="font-mono text-lg font-bold text-emerald-500 tracking-widest">{phone}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-widest font-bold text-emerald-500/40 mb-1">Transaction Code</p>
+            <p className="font-mono text-lg font-bold text-emerald-500 tracking-widest">{transactionCode.toUpperCase()}</p>
+          </div>
         </div>
       </motion.div>
     );
@@ -119,6 +133,23 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
               className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-widest text-brand-muted mb-2 ml-1">
+            M-Pesa Transaction Code
+          </label>
+          <div className="relative">
+            <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
+            <input
+              type="text"
+              required
+              placeholder="e.g. RCK8..."
+              className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold uppercase tracking-widest"
+              value={transactionCode}
+              onChange={(e) => setTransactionCode(e.target.value)}
             />
           </div>
         </div>

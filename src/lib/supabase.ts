@@ -13,7 +13,7 @@ const getSupabaseConfig = () => {
 
   // Basic validation to prevent crash and handle common placeholder patterns
   const isPlaceholder = (s: string) => 
-    !s || s.includes('YOUR_') || s.includes('INSERT_') || s.length < 10;
+    !s || s.toUpperCase().includes('YOUR_') || s.toUpperCase().includes('INSERT_') || s.length < 10 || s.includes('your-');
 
   if (isPlaceholder(url) || !url.startsWith('http')) {
     console.warn('Supabase URL is missing or invalid. Using fallback for development.');

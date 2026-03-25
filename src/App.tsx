@@ -7,7 +7,7 @@
  * AziLearn - Subscription-based study materials platform
  */
 import React, { useState, useEffect } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X } from 'lucide-react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, ChevronRight, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
 import { PremiumGate } from './components/PremiumGate';
@@ -32,6 +32,7 @@ interface Experiment {
   slides?: string[];
   audio_url?: string;
   grade?: string;
+  is_free?: boolean;
 }
 
 interface Profile {
@@ -103,21 +104,33 @@ function AppContent() {
 
   const refreshAccess = async () => {
     const saved = sessionStorage.getItem('azilearn_phone');
+    console.log('Refreshing access for:', saved);
+    
     if (saved) {
       try {
         const result = await checkAccess(saved);
+        console.log('Access result:', result.reason);
         setAccessResult(result);
       } catch (err) {
         console.error('Access check failed:', err);
         showToast('Failed to verify access. Please check your connection.', 'error');
       }
     } else {
+      console.log('No phone for access refresh');
       setAccessResult(null);
     }
   };
 
   const checkProfile = async () => {
     const savedPhone = sessionStorage.getItem('azilearn_phone');
+    console.log('Checking profile for:', savedPhone);
+    
+    // Safety timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.warn('Profile check timed out, forcing loading to false');
+      setIsAuthLoading(false);
+    }, 5000);
+
     if (savedPhone) {
       try {
         const { data, error } = await supabase
@@ -128,14 +141,22 @@ function AppContent() {
         
         if (error) throw error;
         if (data) {
+          console.log('Profile found:', data.username);
           setProfile(data);
+        } else {
+          console.log('No profile found for this phone');
         }
       } catch (err) {
         console.error('Profile check failed:', err);
         showToast('Failed to load profile.', 'error');
       }
+    } else {
+      console.log('No phone found in session storage');
     }
+    
+    clearTimeout(timeoutId);
     setIsAuthLoading(false);
+    console.log('Auth loading finished');
   };
 
   useEffect(() => {
@@ -346,7 +367,17 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
   // Initial load
   useEffect(() => {
-    // No initial load, wait for class selection and search
+    const testConnection = async () => {
+      try {
+        const { error } = await supabase.from('experiments').select('id').limit(1);
+        if (error) {
+          showToast('Supabase connection failed. Check your configuration.', 'error');
+        }
+      } catch (err) {
+        // Silent fail for connection test
+      }
+    };
+    testConnection();
   }, []);
 
   const addToHistory = (query: string) => {
@@ -358,12 +389,24 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
   const handleSearch = async (query: string, cat: string = category, currentClass: string | null = selectedClass, shouldBlur: boolean = false) => {
     const requestId = ++lastRequestId.current;
+    const cacheKey = `${query.trim().toLowerCase()}-${cat}-${currentClass || 'all'}`;
     
     if (shouldBlur && searchInputRef.current) {
       searchInputRef.current.blur();
     }
 
-    setLoading(true);
+    // Check cache first for immediate results
+    if (searchCache[cacheKey]) {
+      console.log(`[Request ${requestId}] Serving from cache: ${cacheKey}`);
+      setResults(searchCache[cacheKey]);
+      // We still fetch in background to refresh cache, but don't show loading if we have cache
+      // unless it's a manual refresh
+    } else {
+      setLoading(true);
+      // Only clear results if we don't have cache to prevent flickering
+      setResults([]); 
+    }
+
     setError(null);
     setHasSearched(true);
     
@@ -372,10 +415,11 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     }
     
     try {
-      console.log(`[Request ${requestId}] Searching with:`, { query, cat, currentClass });
+      // Optimized query: only fetch metadata for the list
+      // We'll fetch full content (html_content, slides) when the item is opened
       let supabaseQuery = supabase
         .from('experiments')
-        .select('id, title, keywords, html_content, slides, audio_url, subject, grade, created_at');
+        .select('id, title, keywords, subject, grade, created_at, is_free, audio_url, slides');
       
       if (currentClass) {
         supabaseQuery = supabaseQuery.eq('grade', currentClass);
@@ -385,29 +429,38 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
         supabaseQuery = supabaseQuery.or(`keywords.ilike.%${query}%,title.ilike.%${query}%,subject.ilike.%${query}%`);
       }
 
-      const { data, error } = await supabaseQuery.order('created_at', { ascending: false }).limit(100);
+      // If it's the initial load (empty query, all cat, no class), limit to 10
+      if (!query.trim() && cat === 'all' && !currentClass) {
+        supabaseQuery = supabaseQuery.limit(10);
+      } else {
+        supabaseQuery = supabaseQuery.limit(50); // Limit search results for performance
+      }
+
+      const { data, error } = await supabaseQuery.order('created_at', { ascending: false });
 
       if (error) throw error;
       
-      // If this is not the latest request, ignore the results
-      if (requestId !== lastRequestId.current) {
-        console.log(`[Request ${requestId}] Ignored (newer request exists)`);
-        return;
-      }
+      if (requestId !== lastRequestId.current) return;
 
       let filteredData = data || [];
-      console.log(`[Request ${requestId}] Found ${filteredData.length} results before category filter`);
       
       if (cat !== 'all') {
         filteredData = filteredData.filter(exp => {
-          if (cat === 'slides') return exp.slides && exp.slides.length > 0;
+          if (cat === 'slides') return exp.slides && Array.isArray(exp.slides) && exp.slides.length > 0;
           if (cat === 'audio') return !!exp.audio_url;
-          if (cat === 'notes') return !!exp.html_content && (!exp.slides || exp.slides.length === 0);
+          if (cat === 'notes') return true; // Notes are default if no slides/audio or just general
           return true;
         });
       }
 
       setResults(filteredData);
+      
+      // Update cache
+      setSearchCache(prev => ({
+        ...prev,
+        [cacheKey]: filteredData
+      }));
+
     } catch (err: any) {
       if (requestId !== lastRequestId.current) return;
       console.error(`[Request ${requestId}] Search error:`, err);
@@ -435,8 +488,34 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     handleSearch(debouncedQuery, category, selectedClass);
   }, [debouncedQuery, category, selectedClass]);
 
-  const openExperiment = (exp: Experiment) => {
-    setSelectedExperiment(exp);
+  const openExperiment = async (exp: Experiment) => {
+    // If we already have the content, just open it
+    if (exp.html_content || (exp.slides && exp.slides.length > 0)) {
+      setSelectedExperiment(exp);
+      return;
+    }
+
+    // Otherwise, fetch the full content
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('experiments')
+        .select('*')
+        .eq('id', exp.id)
+        .single();
+      
+      if (error) throw error;
+      if (data) {
+        setSelectedExperiment(data);
+        // Update the results list with the full data so we don't fetch again
+        setResults(prev => prev.map(item => item.id === data.id ? data : item));
+      }
+    } catch (err: any) {
+      console.error('Error fetching full experiment:', err);
+      showToast('Failed to load material content.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const rippleEffect = (e: React.MouseEvent<HTMLElement>) => {
@@ -453,8 +532,33 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     setTimeout(() => r.remove(), 600);
   };
 
-  const availableResults = React.useMemo(() => results.filter(r => accessResult?.access), [results, accessResult]);
-  const lockedResults = React.useMemo(() => results.filter(r => !accessResult?.access), [results, accessResult]);
+  const availableResults = React.useMemo(() => results.filter(r => r.is_free || accessResult?.access), [results, accessResult]);
+  const lockedResults = React.useMemo(() => results.filter(r => !r.is_free && !accessResult?.access), [results, accessResult]);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20, scale: 0.95, filter: 'blur(4px)' },
+    show: { 
+      opacity: 1, 
+      y: 0, 
+      scale: 1,
+      filter: 'blur(0px)',
+      transition: {
+        type: "spring",
+        damping: 20,
+        stiffness: 300
+      }
+    }
+  };
 
   return (
     <div className="max-w-[420px] mx-auto bg-brand-bg min-h-screen relative pb-32">
@@ -739,59 +843,56 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
           </div>
 
           {/* CONTENT CARDS */}
-          <div className="mt-4">
+          <div className="mt-4 min-h-[400px]">
             {loading ? (
               <div className="px-4 space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="h-4 w-32 bg-brand-surface/50 rounded animate-pulse" />
-                  <div className="h-4 w-16 bg-brand-surface/30 rounded animate-pulse" />
-                </div>
-                {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="bg-brand-surface rounded-[14px] p-4 border border-brand-border/30 animate-pulse flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-brand-bg/50" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-brand-bg/50 rounded w-3/4" />
-                      <div className="h-3 bg-brand-bg/30 rounded w-1/2" />
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-brand-bg/30" />
-                  </div>
+                {[1, 2, 3, 4, 5].map(i => (
+                  <SkeletonCard key={i} />
                 ))}
-                <div className="text-center py-8">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-accent/5 rounded-full border border-brand-accent/10">
-                    <Loader2 className="animate-spin text-brand-accent" size={16} />
-                    <span className="text-xs font-bold text-brand-accent uppercase tracking-widest">Content Coming Soon...</span>
-                  </div>
-                </div>
               </div>
             ) : (
-              <>
+              <div className="pb-10" key={`${debouncedQuery}-${category}-${selectedClass}`}>
                 {availableResults.length > 0 && (
                   <div className="mb-6">
-                    <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider">Available</div>
-                    <div className="px-3 space-y-2.5">
-                      {availableResults.map((exp) => (
-                        <div 
+                    <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span>Available Materials</span>
+                        <button 
+                          onClick={() => handleSearch(debouncedQuery, category, selectedClass)}
+                          className={`p-1 hover:text-brand-accent transition-colors ${loading ? 'animate-spin' : ''}`}
+                        >
+                          <Clock size={12} />
+                        </button>
+                      </div>
+                      <span className="text-[10px] bg-brand-accent/10 text-brand-accent px-2 py-0.5 rounded-full">{availableResults.length}</span>
+                    </div>
+                    <div className="px-3 flex flex-col gap-2.5">
+                      {availableResults.map((exp, idx) => (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: idx * 0.05 }}
                           key={exp.id} 
                           onClick={(e) => {
                             rippleEffect(e);
                             openExperiment(exp);
                           }}
-                          className="bg-brand-surface rounded-[14px] p-3.5 flex items-center gap-3 shadow-sm active:scale-[0.985] transition-all relative overflow-hidden border border-brand-border/30"
+                          className="bg-brand-surface rounded-2xl p-4 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden border border-brand-border/40"
                         >
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
                             exp.slides?.length ? 'bg-orange-50 text-brand-accent' : 
                             exp.audio_url ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
                           }`}>
-                            {exp.slides?.length ? <PlayCircle size={22} /> : exp.audio_url ? <Mic2 size={22} /> : <FileText size={22} />}
+                            {exp.slides?.length ? <PlayCircle size={24} /> : exp.audio_url ? <Mic2 size={24} /> : <FileText size={24} />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="font-sans text-sm font-medium text-brand-text truncate">{exp.title}</div>
-                            <div className="text-[12px] text-brand-muted mt-0.5">{exp.subject || 'Study Material'}</div>
+                            <div className="font-sans text-[15px] font-bold text-brand-text truncate">{exp.title}</div>
+                            <div className="text-[12px] text-brand-muted mt-0.5 font-medium">{exp.subject || 'Study Material'}</div>
                           </div>
-                          <button className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted hover:bg-brand-bg transition-colors">
-                            <ExternalLink size={16} />
-                          </button>
-                        </div>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted/40 group-hover:text-brand-accent transition-colors">
+                            <ChevronRight size={20} />
+                          </div>
+                        </motion.div>
                       ))}
                     </div>
                   </div>
@@ -799,38 +900,77 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
                 {lockedResults.length > 0 && (
                   <div>
-                    <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider">Locked</div>
-                    <div className="px-3 space-y-2.5">
-                      {lockedResults.map((exp) => (
-                        <div 
+                    <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider flex items-center justify-between">
+                      <span>Premium Content</span>
+                      <span className="text-[10px] bg-brand-muted/10 text-brand-muted px-2 py-0.5 rounded-full">{lockedResults.length}</span>
+                    </div>
+                    <div className="px-3 flex flex-col gap-2.5">
+                      {lockedResults.map((exp, idx) => (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: (availableResults.length + idx) * 0.05 }}
                           key={exp.id} 
                           onClick={(e) => {
                             rippleEffect(e);
                             openExperiment(exp);
                           }}
-                          className="bg-brand-surface rounded-[14px] p-3.5 flex items-center gap-3 shadow-sm active:scale-[0.985] transition-all relative overflow-hidden border border-brand-border/30 group"
+                          className="bg-brand-surface rounded-2xl p-4 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden border border-brand-border/40 group"
                         >
-                          <div className="w-10 h-10 rounded-xl bg-brand-bg flex items-center justify-center shrink-0 opacity-40">
-                            {exp.slides?.length ? <PlayCircle size={22} /> : exp.audio_url ? <Mic2 size={22} /> : <FileText size={22} />}
+                          <div className="w-12 h-12 rounded-2xl bg-brand-bg flex items-center justify-center shrink-0 opacity-40">
+                            {exp.slides?.length ? <PlayCircle size={24} /> : exp.audio_url ? <Mic2 size={24} /> : <FileText size={24} />}
                           </div>
                           <div className="flex-1 min-w-0 opacity-40">
-                            <div className="font-sans text-sm font-medium text-brand-text truncate">{exp.title}</div>
-                            <div className="text-[12px] text-brand-muted mt-0.5">{exp.subject || 'Study Material'}</div>
+                            <div className="font-sans text-[15px] font-bold text-brand-text truncate">{exp.title}</div>
+                            <div className="text-[12px] text-brand-muted mt-0.5 font-medium">{exp.subject || 'Study Material'}</div>
                           </div>
-                          <div className="absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-brand-accent/10 border border-brand-accent/30 rounded-full px-2.5 py-1">
+                          <div className="absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-brand-accent/10 border border-brand-accent/30 rounded-full px-3 py-1">
                             <Lock size={10} className="text-brand-accent" />
-                            <span className="font-sans text-[11px] font-bold text-brand-accent">UNLOCK</span>
+                            <span className="font-sans text-[10px] font-black text-brand-accent uppercase tracking-wider">UNLOCK</span>
                           </div>
-                          <button className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted opacity-40">
-                            <ExternalLink size={16} />
-                          </button>
-                        </div>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted/20">
+                            <ChevronRight size={20} />
+                          </div>
+                        </motion.div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {results.length === 0 && hasSearched && (
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center p-12 mx-4 bg-red-500/5 rounded-[2rem] border border-red-500/20 shadow-sm mb-6"
+                  >
+                    <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                      <AlertCircle className="text-red-500" size={32} />
+                    </div>
+                    <h3 className="text-lg font-bold mb-2 text-red-500">Search Error</h3>
+                    <p className="text-brand-muted text-[13px] mb-8 leading-relaxed">
+                      {error}
+                    </p>
+                    <button 
+                      onClick={() => handleSearch(searchQuery, category, selectedClass)}
+                      className="w-full py-4 bg-red-500 text-white rounded-2xl text-sm font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-all mb-4"
+                    >
+                      Try Again
+                    </button>
+                    
+                    <div className="mt-4 p-4 bg-black/10 rounded-xl text-left overflow-auto max-h-40">
+                      <p className="text-[10px] font-mono text-brand-muted break-all">
+                        <strong>Error:</strong> {error}<br/>
+                        <strong>Class:</strong> {selectedClass}<br/>
+                        <strong>Query:</strong> {searchQuery}<br/>
+                        <strong>Category:</strong> {category}<br/>
+                        <strong>Supabase URL:</strong> {(supabase as any).supabaseUrl}<br/>
+                        <strong>Supabase Key:</strong> {(supabase as any).supabaseKey?.substring(0, 10)}...
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {results.length === 0 && !loading && !error && (
                   <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -839,28 +979,29 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                     <div className="w-16 h-16 bg-brand-bg rounded-2xl flex items-center justify-center mx-auto mb-6">
                       <Search className="text-brand-muted/40" size={32} />
                     </div>
-                    <h3 className="text-lg font-bold mb-2">No matches found</h3>
+                    <h3 className="text-lg font-bold mb-2">No materials found</h3>
                     <p className="text-brand-muted text-[13px] mb-8 leading-relaxed">
-                      We couldn't find any lessons for <span className="text-brand-text font-bold">"{searchQuery}"</span>. 
-                      Try searching for a different topic or subject.
+                      {selectedClass 
+                        ? `We couldn't find any ${category === 'all' ? '' : category} materials for ${selectedClass}.`
+                        : "Try searching for a different topic or subject."}
                     </p>
                     <div className="flex flex-col gap-3">
                       <button 
-                        onClick={() => { setSearchQuery(''); handleSearch(''); }}
+                        onClick={() => {
+                          setSearchQuery('');
+                          setDebouncedQuery('');
+                          setCategory('all');
+                          setSelectedClass(null);
+                          handleSearch('', 'all', null);
+                        }}
                         className="w-full py-4 bg-brand-accent text-white rounded-2xl text-sm font-bold shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
                       >
-                        Clear Search
-                      </button>
-                      <button 
-                        onClick={() => setCategory('all')}
-                        className="w-full py-4 bg-brand-surface border border-brand-border text-brand-text rounded-2xl text-sm font-bold active:scale-95 transition-all"
-                      >
-                        Reset All Filters
+                        Clear All Filters
                       </button>
                     </div>
                   </motion.div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </>
@@ -1066,12 +1207,13 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
 function SkeletonCard() {
   return (
-    <div className="bg-brand-surface/10 border border-brand-surface/20 p-4 rounded-2xl animate-pulse">
-      <div className="h-6 bg-brand-surface/30 rounded-lg w-3/4 mb-3"></div>
-      <div className="flex gap-2">
-        <div className="h-4 bg-brand-surface/20 rounded-full w-16"></div>
-        <div className="h-4 bg-brand-surface/20 rounded-full w-20"></div>
+    <div className="bg-brand-surface rounded-2xl p-4 border border-brand-border/40 animate-pulse flex items-center gap-4 shadow-sm">
+      <div className="w-12 h-12 rounded-2xl bg-brand-bg/50" />
+      <div className="flex-1 space-y-2">
+        <div className="h-4 bg-brand-bg/50 rounded-lg w-3/4" />
+        <div className="h-3 bg-brand-bg/30 rounded-lg w-1/2" />
       </div>
+      <div className="w-8 h-8 rounded-full bg-brand-bg/20" />
     </div>
   );
 }

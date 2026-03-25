@@ -31,7 +31,7 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
           setError("Your payment is still being verified. Please check back in 30 minutes.");
           break;
         case 'rejected':
-          setError(`Access Denied. Your payment was not verified. Reason: ${result.rejection_reason || 'Invalid transaction'}. Please confirm your payment and try again.`);
+          setError(`Access Denied. Your payment verification failed. Reason: ${result.rejection_reason || 'Invalid transaction'}. Please ensure your transaction code and phone number are correct, then try again or contact support.`);
           break;
         case 'expired':
           setError("Your access has expired. Please make a new payment.");
