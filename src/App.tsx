@@ -341,6 +341,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     return {};
   });
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
+  const [isOpening, setIsOpening] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
@@ -496,11 +497,12 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     }
 
     // Otherwise, fetch the full content
-    setLoading(true);
+    setIsOpening(true);
     try {
+      // Faster fetch: only select what's needed
       const { data, error } = await supabase
         .from('experiments')
-        .select('*')
+        .select('id, title, keywords, html_content, slides, audio_url, subject, grade, created_at, is_free')
         .eq('id', exp.id)
         .single();
       
@@ -514,7 +516,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       console.error('Error fetching full experiment:', err);
       showToast('Failed to load material content.', 'error');
     } finally {
-      setLoading(false);
+      setIsOpening(false);
     }
   };
 
@@ -1120,6 +1122,27 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
           ))}
         </div>
       </div>
+
+      {/* LOADING OVERLAY FOR OPENING MATERIAL */}
+      <AnimatePresence>
+        {isOpening && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[400] bg-brand-bg/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4"
+          >
+            <div className="w-16 h-16 bg-brand-accent rounded-3xl flex items-center justify-center shadow-2xl shadow-brand-accent/20 animate-bounce">
+              <FlaskConical className="text-white" size={32} />
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <h3 className="text-brand-text font-black tracking-tighter text-xl">Opening Material...</h3>
+              <p className="text-brand-muted text-[10px] font-black uppercase tracking-widest">Getting things ready for you</p>
+            </div>
+            <Loader2 className="animate-spin text-brand-accent mt-4" size={24} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Experiment Modal */}
       <AnimatePresence>
