@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Smartphone, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Smartphone, Loader2, CheckCircle2 } from 'lucide-react';
 import { checkAccess } from '../utils/checkAccess';
 
 interface AccessPromptProps {
@@ -12,12 +12,10 @@ interface AccessPromptProps {
 export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess, onPayClick }) => {
   const [phone, setPhone] = useState(sessionStorage.getItem('azilearn_phone') || '');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
 
     const result = await checkAccess(phone);
 
@@ -26,21 +24,9 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
       window.dispatchEvent(new Event('storage'));
       onSuccess(phone.trim());
     } else {
-      switch (result.reason) {
-        case 'pending':
-          setError("Your payment is still being verified. Please check back in 30 minutes.");
-          break;
-        case 'rejected':
-          setError(`Access Denied. Your payment verification failed. Reason: ${result.rejection_reason || 'Invalid transaction'}. Please ensure your transaction code and phone number are correct, then try again or contact support.`);
-          break;
-        case 'expired':
-          setError("Your access has expired. Please make a new payment.");
-          break;
-        case 'not_found':
-        default:
-          setError("No approved payment found for this phone number. Please ensure you have submitted your payment details.");
-          break;
-      }
+      // For any failure (not found, expired, rejected), lead directly to payment instructions
+      // as requested to avoid confusing error messages for children.
+      onPayClick();
     }
     setLoading(false);
   };
@@ -65,17 +51,6 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
             onChange={(e) => setPhone(e.target.value)}
           />
         </div>
-
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-red-500 text-sm text-left"
-          >
-            <AlertCircle className="shrink-0 mt-0.5" size={16} />
-            <p>{error}</p>
-          </motion.div>
-        )}
 
         <button
           type="submit"

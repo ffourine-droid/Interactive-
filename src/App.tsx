@@ -735,6 +735,24 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       {/* HERO & CONTENT */}
       {activeTab === 'home' && (
         <>
+          {/* VERIFICATION PENDING BANNER */}
+          {accessResult?.status === 'pending' && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mx-4 mt-4 p-4 bg-brand-accent/10 border border-brand-accent/20 rounded-2xl flex items-center gap-3 shadow-sm"
+            >
+              <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-brand-accent/20">
+                <Clock className="text-white animate-pulse" size={20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-black tracking-tight text-brand-text">Verification Pending</p>
+                <p className="text-[10px] text-brand-muted font-bold">Materials are unlocked while we confirm your code.</p>
+              </div>
+              <CheckCircle2 className="text-emerald-500" size={20} />
+            </motion.div>
+          )}
+
           {!selectedClass ? (
             <div className="px-4 py-6 space-y-8">
               <div className="space-y-1">

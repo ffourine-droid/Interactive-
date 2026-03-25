@@ -118,36 +118,36 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-4">
-        <div>
-          <label className="block text-xs font-bold uppercase tracking-widest text-brand-muted mb-2 ml-1">
-            Phone Number (Used for Payment)
+        <div className="space-y-2">
+          <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted ml-1">
+            Phone Number
           </label>
-          <div className="relative">
-            <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
+          <div className="relative group">
+            <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
             <input
               type="tel"
               required
-              placeholder="e.g. 0712345678"
-              className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold"
+              placeholder="0712345678"
+              className="w-full bg-brand-surface border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-bold uppercase tracking-widest text-brand-muted mb-2 ml-1">
-            M-Pesa Transaction Code
+        <div className="space-y-2">
+          <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted ml-1">
+            M-Pesa Code
           </label>
-          <div className="relative">
-            <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
+          <div className="relative group">
+            <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
             <input
               type="text"
               required
-              placeholder="e.g. RCK8..."
-              className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold uppercase tracking-widest"
+              placeholder="RCK8..."
+              className="w-full bg-brand-surface border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold uppercase tracking-widest"
               value={transactionCode}
               onChange={(e) => setTransactionCode(e.target.value)}
             />
@@ -157,11 +157,11 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
 
       {error && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-red-500 text-sm"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl flex items-start gap-3 text-red-500 text-[11px] font-bold"
         >
-          <AlertCircle className="shrink-0 mt-0.5" size={16} />
+          <AlertCircle className="shrink-0 mt-0.5" size={14} />
           <p>{error}</p>
         </motion.div>
       )}
@@ -169,9 +169,16 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+        className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-xl shadow-brand-accent/20"
       >
-        {loading ? <Loader2 className="animate-spin" size={20} /> : 'Submit Payment'}
+        {loading ? (
+          <Loader2 className="animate-spin" size={20} />
+        ) : (
+          <>
+            <CheckCircle2 size={20} />
+            Submit & Unlock
+          </>
+        )}
       </button>
     </form>
   );
