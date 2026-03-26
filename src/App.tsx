@@ -123,76 +123,89 @@ function AppContent() {
 
   const checkProfile = async () => {
     const savedPhone = sessionStorage.getItem('azilearn_phone');
-    console.log('Checking profile for:', savedPhone);
+    if (!savedPhone) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    console.log('Checking profile and access for:', savedPhone);
     
     // Safety timeout to prevent infinite loading
     const timeoutId = setTimeout(() => {
-      console.warn('Profile check timed out, forcing loading to false');
+      console.warn('Initial check timed out, forcing loading to false');
       setIsAuthLoading(false);
     }, 5000);
 
-    if (savedPhone) {
-      try {
-        const { data, error } = await supabase
+    try {
+      // Parallelize profile and access check for faster initial load
+      const [profileRes, accessRes] = await Promise.all([
+        supabase
           .from('profiles')
           .select('*')
           .eq('phone_number', savedPhone)
-          .maybeSingle();
-        
-        if (error) throw error;
-        if (data) {
-          console.log('Profile found:', data.username);
-          setProfile(data);
-        } else {
-          console.log('No profile found for this phone');
-        }
-      } catch (err) {
-        console.error('Profile check failed:', err);
-        showToast('Failed to load profile.', 'error');
+          .maybeSingle(),
+        checkAccess(savedPhone)
+      ]);
+      
+      const { data, error } = profileRes;
+      if (error) throw error;
+      
+      if (data) {
+        console.log('Profile found:', data.username);
+        setProfile(data);
+        setAccessResult(accessRes);
+      } else {
+        console.log('No profile found for this phone');
+        sessionStorage.removeItem('azilearn_phone');
       }
-    } else {
-      console.log('No phone found in session storage');
+    } catch (err) {
+      console.error('Initial check failed:', err);
+      showToast('Failed to load profile.', 'error');
+    } finally {
+      clearTimeout(timeoutId);
+      setIsAuthLoading(false);
+      console.log('Auth loading finished');
     }
-    
-    clearTimeout(timeoutId);
-    setIsAuthLoading(false);
-    console.log('Auth loading finished');
   };
 
   useEffect(() => {
     checkProfile();
-    refreshAccess();
     
     // Listen for storage changes (e.g. from PaymentForm or AccessPrompt)
     const handleStorage = () => refreshAccess();
     window.addEventListener('storage', handleStorage);
     
-    // Real-time subscription
-    const saved = sessionStorage.getItem('azilearn_phone');
-    let channel: any;
-    if (saved) {
-      channel = supabase
-        .channel('global_payment_status')
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'payments',
-            filter: `phone_number=eq.${saved}`,
-          },
-          () => {
-            refreshAccess();
-          }
-        )
-        .subscribe();
-    }
-
     return () => {
       window.removeEventListener('storage', handleStorage);
-      if (channel) supabase.removeChannel(channel);
     };
   }, []);
+
+  // Real-time subscription for payment updates
+  useEffect(() => {
+    if (!profile?.phone_number) return;
+
+    console.log('Setting up real-time subscription for:', profile.phone_number);
+    const channel = supabase
+      .channel(`payment_updates_${profile.phone_number}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'payments',
+          filter: `phone_number=eq.${profile.phone_number}`,
+        },
+        () => {
+          console.log('Payment updated, refreshing access...');
+          refreshAccess();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.phone_number]);
 
   // Simple router
   const renderPage = () => {
@@ -205,9 +218,13 @@ function AppContent() {
     }
 
     if (!profile && currentPage !== 'admin') {
-      return <Auth onSuccess={(p) => {
+      return <Auth onSuccess={(p, access) => {
         setProfile(p);
-        refreshAccess();
+        if (access) {
+          setAccessResult(access);
+        } else {
+          refreshAccess();
+        }
       }} />;
     }
 
@@ -976,17 +993,6 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                     >
                       Try Again
                     </button>
-                    
-                    <div className="mt-4 p-4 bg-black/10 rounded-xl text-left overflow-auto max-h-40">
-                      <p className="text-[10px] font-mono text-brand-muted break-all">
-                        <strong>Error:</strong> {error}<br/>
-                        <strong>Class:</strong> {selectedClass}<br/>
-                        <strong>Query:</strong> {searchQuery}<br/>
-                        <strong>Category:</strong> {category}<br/>
-                        <strong>Supabase URL:</strong> {(supabase as any).supabaseUrl}<br/>
-                        <strong>Supabase Key:</strong> {(supabase as any).supabaseKey?.substring(0, 10)}...
-                      </p>
-                    </div>
                   </motion.div>
                 )}
 

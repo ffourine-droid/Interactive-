@@ -40,8 +40,8 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
       return;
     }
 
-    if (!trimmedCode || trimmedCode.length < 6) {
-      setError("Please enter a valid M-Pesa transaction code (e.g. RCK8...)");
+    if (!trimmedCode || trimmedCode.length < 4) {
+      setError("Please enter at least the last 4 digits of your M-Pesa code");
       setLoading(false);
       return;
     }
@@ -139,14 +139,14 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
 
         <div className="space-y-2">
           <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted ml-1">
-            M-Pesa Code
+            M-Pesa Code (Last 4 Digits)
           </label>
           <div className="relative group">
             <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
             <input
               type="text"
               required
-              placeholder="RCK8..."
+              placeholder="e.g. 8A2B"
               className="w-full bg-brand-surface border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold uppercase tracking-widest"
               value={transactionCode}
               onChange={(e) => setTransactionCode(e.target.value)}
