@@ -41,7 +41,9 @@ export class ErrorBoundary extends (Component as any) {
               We encountered an unexpected error. Don't worry, your data is safe.
               {this.state.error && (
                 <span className="block mt-4 p-3 bg-brand-bg rounded-xl font-mono text-[10px] opacity-60 overflow-hidden text-ellipsis">
-                  {this.state.error.message}
+                  {this.state.error.message.includes('supabase') || this.state.error.message.includes('apiKey') 
+                    ? 'Connection error. Please check your internet.' 
+                    : this.state.error.message}
                 </span>
               )}
             </p>

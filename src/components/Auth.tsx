@@ -27,17 +27,13 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
 
     try {
       if (view === 'login') {
-        // Login: Fetch existing profile and access status in parallel for speed
-        const [profileRes, accessRes] = await Promise.all([
-          supabase
-            .from('profiles')
-            .select('*')
-            .eq('phone_number', trimmedPhone)
-            .maybeSingle(),
-          checkAccess(trimmedPhone)
-        ]);
+        // Login: Fetch existing profile
+        const { data, error: fetchError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('phone_number', trimmedPhone)
+          .maybeSingle();
 
-        const { data, error: fetchError } = profileRes;
         if (fetchError) throw fetchError;
         if (!data) {
           throw new Error('Account not found. Please sign up first.');
@@ -48,37 +44,33 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
         sessionStorage.setItem('azilearn_username', data.username);
         
         // Call onSuccess immediately to trigger transition
-        onSuccess(data, accessRes);
+        // App.tsx will handle the access check lazily
+        onSuccess(data);
         showToast(`Welcome back, ${data.username}!`, "success");
       } else {
         // Sign Up / Update: Create or update profile in Supabase
         if (!trimmedUsername) throw new Error('Username is required');
         
-        // Parallelize upsert and access check
-        const [upsertRes, accessRes] = await Promise.all([
-          supabase
-            .from('profiles')
-            .upsert(
-              { 
-                phone_number: trimmedPhone, 
-                username: trimmedUsername,
-                updated_at: new Date().toISOString()
-              },
-              { onConflict: 'phone_number' }
-            )
-            .select()
-            .single(),
-          checkAccess(trimmedPhone)
-        ]);
+        const { data, error: upsertError } = await supabase
+          .from('profiles')
+          .upsert(
+            { 
+              phone_number: trimmedPhone, 
+              username: trimmedUsername,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'phone_number' }
+          )
+          .select()
+          .single();
 
-        const { data, error: upsertError } = upsertRes;
         if (upsertError) throw upsertError;
 
         // Sync to session storage
         sessionStorage.setItem('azilearn_phone', data.phone_number);
         sessionStorage.setItem('azilearn_username', data.username);
         
-        onSuccess(data, accessRes);
+        onSuccess(data);
         showToast("Account ready!", "success");
       }
     } catch (err: any) {

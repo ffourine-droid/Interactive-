@@ -16,7 +16,7 @@ const getSupabaseConfig = () => {
     !s || s.toUpperCase().includes('YOUR_') || s.toUpperCase().includes('INSERT_') || s.length < 10 || s.includes('your-');
 
   if (isPlaceholder(url) || !url.startsWith('http')) {
-    console.warn('Supabase URL is missing or invalid. Using fallback for development.');
+    // Silently fallback in production-like environments to avoid exposing config
     url = defaultUrl;
   }
 

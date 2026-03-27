@@ -7,17 +7,11 @@
  * AziLearn - Subscription-based study materials platform
  */
 import React, { useState, useEffect } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, ChevronRight, Shield, Settings, Sun, Moon, Download, Trash2, WifiOff, CheckCircle2, Lock, Key, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X } from 'lucide-react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, ChevronRight, Settings, WifiOff, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
-import { PremiumGate } from './components/PremiumGate';
-import { Pay } from './pages/Pay';
-import { Access } from './pages/Access';
-import { AdminPayments } from './pages/AdminPayments';
 import { Auth } from './components/Auth';
 import { Onboarding } from './components/Onboarding';
-import { SubscriptionModal } from './components/SubscriptionModal';
-import { checkAccess, AccessResult } from './utils/checkAccess';
 import { CountdownTimer } from './components/CountdownTimer';
 import { SlidesViewer } from './components/SlidesViewer';
 import { ToastProvider, useToast } from './components/Toast';
@@ -32,7 +26,6 @@ interface Experiment {
   slides?: string[];
   audio_url?: string;
   grade?: string;
-  is_free?: boolean;
 }
 
 interface Profile {
@@ -42,8 +35,7 @@ interface Profile {
   created_at: string;
 }
 
-type Page = 'home' | 'pay' | 'access' | 'admin';
-type Plan = 'daily' | 'weekly' | 'monthly';
+type Page = 'home';
 
 export default function App() {
   return (
@@ -57,12 +49,9 @@ export default function App() {
 
 function AppContent() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
-  const [selectedPlan, setSelectedPlan] = useState<Plan>('daily');
   const [selectedLesson, setSelectedLesson] = useState<Experiment | null>(null);
-  const [accessResult, setAccessResult] = useState<AccessResult | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [showPlanSelection, setShowPlanSelection] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window !== 'undefined') {
       return !localStorage.getItem('azilearn_onboarding_complete');
@@ -77,6 +66,48 @@ function AppContent() {
   });
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const { showToast } = useToast();
+
+  const checkProfile = React.useCallback(async () => {
+    const savedPhone = sessionStorage.getItem('azilearn_phone');
+
+    if (!savedPhone) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    console.log('Checking profile for:', savedPhone);
+    
+    // Safety timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.warn('Initial check timed out, forcing loading to false');
+      setIsAuthLoading(false);
+    }, 5000);
+
+    try {
+      const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('phone_number', savedPhone)
+          .maybeSingle();
+      
+      if (error) throw error;
+      
+      if (data) {
+        console.log('Profile found:', data.username);
+        setProfile(data);
+      } else {
+        console.log('No profile found for this phone');
+        sessionStorage.removeItem('azilearn_phone');
+      }
+    } catch (err) {
+      console.error('Initial check failed:', err);
+      showToast('Failed to load profile.', 'error');
+    } finally {
+      clearTimeout(timeoutId);
+      setIsAuthLoading(false);
+      console.log('Auth loading finished');
+    }
+  }, [showToast]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -102,127 +133,9 @@ function AppContent() {
     localStorage.setItem('azilearn_theme', theme);
   }, [theme]);
 
-  const refreshAccess = async () => {
-    const saved = sessionStorage.getItem('azilearn_phone');
-    console.log('Refreshing access for:', saved);
-    
-    if (saved) {
-      try {
-        const result = await checkAccess(saved);
-        console.log('Access result:', result.reason);
-        setAccessResult(result);
-      } catch (err) {
-        console.error('Access check failed:', err);
-        showToast('Failed to verify access. Please check your connection.', 'error');
-      }
-    } else {
-      console.log('No phone for access refresh');
-      setAccessResult(null);
-    }
-  };
-
-  const checkProfile = async () => {
-    const savedPhone = sessionStorage.getItem('azilearn_phone');
-    if (!savedPhone) {
-      setIsAuthLoading(false);
-      return;
-    }
-
-    console.log('Checking profile and access for:', savedPhone);
-    
-    // Safety timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      console.warn('Initial check timed out, forcing loading to false');
-      setIsAuthLoading(false);
-    }, 5000);
-
-    try {
-      // Parallelize profile and access check for faster initial load
-      const [profileRes, accessRes] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('phone_number', savedPhone)
-          .maybeSingle(),
-        checkAccess(savedPhone)
-      ]);
-      
-      const { data, error } = profileRes;
-      if (error) throw error;
-      
-      if (data) {
-        console.log('Profile found:', data.username);
-        setProfile(data);
-        setAccessResult(accessRes);
-      } else {
-        console.log('No profile found for this phone');
-        sessionStorage.removeItem('azilearn_phone');
-      }
-    } catch (err) {
-      console.error('Initial check failed:', err);
-      showToast('Failed to load profile.', 'error');
-    } finally {
-      clearTimeout(timeoutId);
-      setIsAuthLoading(false);
-      console.log('Auth loading finished');
-    }
-  };
-
   useEffect(() => {
     checkProfile();
-    
-    // Listen for storage changes (e.g. from PaymentForm or AccessPrompt)
-    const handleStorage = () => refreshAccess();
-    window.addEventListener('storage', handleStorage);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-    };
   }, []);
-
-  // Real-time subscription for payment updates
-  useEffect(() => {
-    if (!profile?.phone_number) return;
-
-    console.log('Setting up real-time subscription for:', profile.phone_number);
-    const channel = supabase
-      .channel(`payment_updates_${profile.phone_number}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'payments',
-          filter: `phone_number=eq.${profile.phone_number}`,
-        },
-        (payload) => {
-          console.log('Payment updated:', payload.new.status);
-          const newStatus = payload.new.status;
-          
-          if (newStatus === 'approved') {
-            showToast('Payment approved! You now have full access.', 'success');
-          } else if (newStatus === 'rejected') {
-            const reason = payload.new.rejection_reason ? `: ${payload.new.rejection_reason}` : '';
-            showToast(`Payment rejected${reason}. Please check your details.`, 'error');
-          }
-          
-          refreshAccess();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [profile?.phone_number]);
-
-  // Auto-redirect to home when access is granted
-  useEffect(() => {
-    if (accessResult?.access && (currentPage === 'pay' || currentPage === 'access')) {
-      console.log('Access granted, redirecting to home...');
-      setCurrentPage('home');
-    }
-  }, [accessResult?.access, currentPage]);
 
   // Simple router
   const renderPage = () => {
@@ -234,71 +147,23 @@ function AppContent() {
       );
     }
 
-    if (!profile && currentPage !== 'admin') {
-      return <Auth onSuccess={(p, access) => {
+    if (!profile) {
+      return <Auth onSuccess={(p) => {
         setProfile(p);
-        if (access) {
-          setAccessResult(access);
-        } else {
-          refreshAccess();
-        }
       }} />;
     }
 
     switch (currentPage) {
-      case 'pay':
-        return (
-          <Pay 
-            plan={selectedPlan} 
-            lessonId={selectedLesson?.id.toString()} 
-            lessonTitle={selectedLesson?.title}
-            onSuccess={() => {
-              refreshAccess();
-              if (selectedLesson) {
-                setCurrentPage('home');
-                // The lesson modal will still be open or can be re-opened
-              } else {
-                setCurrentPage('home');
-              }
-            }}
-            onBack={() => setCurrentPage('home')} 
-          />
-        );
-      case 'access':
-        return (
-          <Access 
-            onBack={() => setCurrentPage('home')} 
-            onSuccess={() => {
-              refreshAccess();
-              setCurrentPage('home');
-            }}
-            onPayClick={() => setCurrentPage('pay')}
-          />
-        );
-      case 'admin':
-        return <AdminPayments onBack={() => setCurrentPage('home')} />;
       case 'home':
       default:
         return (
           <Home 
-            accessResult={accessResult}
-            onPayPlan={(plan, lesson) => {
-              setSelectedPlan(plan);
-              setSelectedLesson(lesson || null);
-              setCurrentPage('pay');
-            }}
-            onEnterCode={() => setCurrentPage('access')}
-            onAdminClick={() => setCurrentPage('admin')}
             profile={profile}
             onLogout={() => {
               sessionStorage.removeItem('azilearn_phone');
               sessionStorage.removeItem('azilearn_username');
               setProfile(null);
-              setAccessResult(null);
             }}
-            onShowPlans={() => setShowPlanSelection(true)}
-            theme={theme}
-            setTheme={setTheme}
           />
         );
     }
@@ -324,33 +189,15 @@ function AppContent() {
             setShowOnboarding(false);
           }} />
         )}
-        {showPlanSelection && (
-          <SubscriptionModal 
-            isOpen={showPlanSelection}
-            onClose={() => setShowPlanSelection(false)}
-            onManualPay={(plan) => {
-              setSelectedPlan(plan);
-              setCurrentPage('pay');
-              setShowPlanSelection(false);
-            }}
-          />
-        )}
       </AnimatePresence>
       {renderPage()}
     </div>
   );
 }
 
-function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onLogout, onShowPlans, theme, setTheme }: { 
-  accessResult: AccessResult | null,
-  onPayPlan: (plan: Plan, lesson?: Experiment) => void,
-  onEnterCode: () => void,
-  onAdminClick: () => void,
+function Home({ profile, onLogout }: { 
   profile: Profile | null,
-  onLogout: () => void,
-  onShowPlans: () => void,
-  theme: 'light' | 'dark',
-  setTheme: (theme: 'light' | 'dark') => void
+  onLogout: () => void
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -378,10 +225,20 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
   const [isOpening, setIsOpening] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const middleSearchRef = React.useRef<HTMLInputElement>(null);
   const lastRequestId = React.useRef(0);
   const { showToast } = useToast();
+
+  const handleClassSelect = (grade: string) => {
+    setSelectedClass(grade);
+    setHasSearched(false);
+    setSearchQuery('');
+    setDebouncedQuery('');
+    // Pre-load the class results
+    handleSearch('', category, grade);
+  };
 
   // Save cache to localStorage
   useEffect(() => {
@@ -432,13 +289,11 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
     // Check cache first for immediate results
     if (searchCache[cacheKey]) {
-      console.log(`[Request ${requestId}] Serving from cache: ${cacheKey}`);
       setResults(searchCache[cacheKey]);
-      // We still fetch in background to refresh cache, but don't show loading if we have cache
-      // unless it's a manual refresh
+      // If we have cache, we don't show the main loader to avoid flickering
+      if (!query.trim() && !currentClass) setLoading(false);
     } else {
       setLoading(true);
-      // Only clear results if we don't have cache to prevent flickering
       setResults([]); 
     }
 
@@ -450,11 +305,9 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     }
     
     try {
-      // Optimized query: only fetch metadata for the list
-      // We'll fetch full content (html_content, slides) when the item is opened
       let supabaseQuery = supabase
         .from('experiments')
-        .select('id, title, keywords, subject, grade, created_at, is_free, audio_url, slides');
+        .select('id, title, keywords, subject, grade, created_at, audio_url, slides');
       
       if (currentClass) {
         supabaseQuery = supabaseQuery.eq('grade', currentClass);
@@ -464,16 +317,15 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
         supabaseQuery = supabaseQuery.or(`keywords.ilike.%${query}%,title.ilike.%${query}%,subject.ilike.%${query}%`);
       }
 
-      // If it's the initial load (empty query, all cat, no class), limit to 10
       if (!query.trim() && cat === 'all' && !currentClass) {
         supabaseQuery = supabaseQuery.limit(10);
       } else {
-        supabaseQuery = supabaseQuery.limit(50); // Limit search results for performance
+        supabaseQuery = supabaseQuery.limit(50);
       }
 
-      const { data, error } = await supabaseQuery.order('created_at', { ascending: false });
+      const { data, error: fetchError } = await supabaseQuery.order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
       
       if (requestId !== lastRequestId.current) return;
 
@@ -483,24 +335,17 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
         filteredData = filteredData.filter(exp => {
           if (cat === 'slides') return exp.slides && Array.isArray(exp.slides) && exp.slides.length > 0;
           if (cat === 'audio') return !!exp.audio_url;
-          if (cat === 'notes') return true; // Notes are default if no slides/audio or just general
           return true;
         });
       }
 
       setResults(filteredData);
-      
-      // Update cache
-      setSearchCache(prev => ({
-        ...prev,
-        [cacheKey]: filteredData
-      }));
+      setSearchCache(prev => ({ ...prev, [cacheKey]: filteredData }));
 
     } catch (err: any) {
       if (requestId !== lastRequestId.current) return;
       console.error(`[Request ${requestId}] Search error:`, err);
       setError(err.message || "Could not load results.");
-      showToast(err.message || "Failed to load content.", "error");
     } finally {
       if (requestId === lastRequestId.current) {
         setLoading(false);
@@ -533,10 +378,9 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     // Otherwise, fetch the full content
     setIsOpening(true);
     try {
-      // Faster fetch: only select what's needed
       const { data, error } = await supabase
         .from('experiments')
-        .select('id, title, keywords, html_content, slides, audio_url, subject, grade, created_at, is_free')
+        .select('id, title, keywords, html_content, slides, audio_url, subject, grade, created_at')
         .eq('id', exp.id)
         .single();
       
@@ -568,9 +412,6 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
     setTimeout(() => r.remove(), 600);
   };
 
-  const availableResults = React.useMemo(() => results.filter(r => r.is_free || accessResult?.access), [results, accessResult]);
-  const lockedResults = React.useMemo(() => results.filter(r => !r.is_free && !accessResult?.access), [results, accessResult]);
-
   const containerVariants = {
     hidden: { opacity: 0 },
     show: {
@@ -598,85 +439,6 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
 
   return (
     <div className="max-w-[420px] mx-auto bg-brand-bg min-h-screen relative pb-32">
-      {/* SEARCH OVERLAY */}
-      <AnimatePresence>
-        {activeTab === 'search' && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] bg-brand-bg/98 backdrop-blur-xl flex flex-col p-6"
-          >
-            <div className="flex justify-end pt-4">
-              <button 
-                onClick={() => setActiveTab('home')}
-                className="w-12 h-12 flex items-center justify-center bg-brand-surface rounded-full border border-brand-border text-brand-text shadow-sm active:scale-90 transition-transform"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full -mt-20">
-              <motion.div
-                initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                className="space-y-8"
-              >
-                <div className="text-center space-y-3">
-                  <div className="w-20 h-20 bg-brand-accent/10 rounded-[2.5rem] flex items-center justify-center mx-auto mb-2">
-                    <Search className="text-brand-accent" size={40} />
-                  </div>
-                  <h2 className="text-3xl font-black text-brand-text tracking-tight">Search Lessons</h2>
-                  <p className="text-brand-muted text-[15px] font-medium leading-relaxed">
-                    Find exactly what you need to learn today. Type a topic or subject.
-                  </p>
-                </div>
-                
-                <div className="relative group">
-                  <div className="absolute left-6 top-1/2 -translate-y-1/2 text-brand-accent group-focus-within:scale-110 transition-transform">
-                    <Search size={28} />
-                  </div>
-                  <input 
-                    autoFocus
-                    type="text"
-                    placeholder="Search for a topic..."
-                    className="w-full h-20 pl-16 pr-6 bg-brand-surface border-2 border-brand-accent rounded-3xl text-xl font-bold text-brand-text outline-none shadow-2xl shadow-brand-accent/20 placeholder:text-brand-muted/40"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSearch(searchQuery, category, selectedClass, true);
-                        setActiveTab('home');
-                      }
-                    }}
-                  />
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="text-[11px] font-black uppercase tracking-[0.2em] text-brand-muted text-center">Popular Subjects</div>
-                  <div className="flex flex-wrap justify-center gap-2.5">
-                    {['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Geography'].map(tag => (
-                      <button 
-                        key={tag}
-                        onClick={() => {
-                          setSearchQuery(tag);
-                          handleSearch(tag, category, selectedClass, true);
-                          setActiveTab('home');
-                        }}
-                        className="px-6 py-3 bg-brand-surface border border-brand-border rounded-2xl text-sm font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 shadow-sm"
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* TOP SEARCH BAR */}
       {activeTab === 'home' && selectedClass && (
         <div className="sticky top-0 z-[100] p-3 pt-4 bg-transparent pointer-events-none">
@@ -685,7 +447,7 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
             <input 
               ref={searchInputRef}
               type="text" 
-              placeholder="Search for a topic..." 
+              placeholder="Search topic or enter code..." 
               className="flex-1 bg-transparent border-none outline-none font-sans text-[15px] text-brand-text placeholder:text-brand-muted/60"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -769,290 +531,203 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
       {/* HERO & CONTENT */}
       {activeTab === 'home' && (
         <>
-          {/* VERIFICATION PENDING BANNER */}
-          {accessResult?.status === 'pending' && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mx-4 mt-4 p-4 bg-brand-accent/10 border border-brand-accent/20 rounded-2xl flex items-center gap-3 shadow-sm"
-            >
-              <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-brand-accent/20">
-                <Clock className="text-white animate-pulse" size={20} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-black tracking-tight text-brand-text">Verification Pending</p>
-                <p className="text-[10px] text-brand-muted font-bold">Materials are unlocked while we confirm your code.</p>
-              </div>
-              <CheckCircle2 className="text-emerald-500" size={20} />
-            </motion.div>
-          )}
-
-          {!selectedClass ? (
-            <div className="px-4 py-6 space-y-8">
-              <div className="space-y-1">
-                <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
-                  Welcome, {profile?.username || 'Explorer'}.
-                </h1>
-                <p className="text-[13px] text-brand-muted font-sans">Select your class to start learning</p>
-              </div>
-
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-brand-muted">Primary & Junior School</h2>
-                  <div className="grid grid-cols-3 gap-3">
-                    {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((grade, i) => (
-                      <button
-                        key={grade}
-                        onClick={(e) => {
-                          rippleEffect(e);
-                          setSelectedClass(grade);
-                          setSearchQuery('');
-                        }}
-                        className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group"
-                      >
-                        <span className="text-lg">{i + 1}</span>
-                        <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Grade</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-brand-muted">Secondary School</h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    {Array.from({ length: 4 }, (_, i) => `Form ${i + 1}`).map((form, i) => (
-                      <button
-                        key={form}
-                        onClick={(e) => {
-                          rippleEffect(e);
-                          setSelectedClass(form);
-                          setSearchQuery('');
-                        }}
-                        className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group"
-                      >
-                        <span className="text-lg">{i + 1}</span>
-                        <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Form</span>
-                      </button>
-                    ))}
-                    <button
-                      onClick={(e) => {
-                        rippleEffect(e);
-                        setSelectedClass('KCSE');
-                        setSearchQuery('');
-                      }}
-                      className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group col-span-2"
-                    >
-                      <span className="text-lg">KCSE</span>
-                      <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Revision</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="px-4 py-6 flex items-center gap-4">
-                <button 
-                  onClick={() => {
-                    setSelectedClass(null);
-                    setHasSearched(false);
-                    setSearchQuery('');
-                  }}
-                  className="w-10 h-10 rounded-full bg-brand-surface border border-brand-border flex items-center justify-center text-brand-text active:scale-90 transition-transform"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <div>
-                  <h1 className="font-sans text-xl font-bold text-brand-text leading-tight">
-                    {selectedClass}
-                  </h1>
-                  <p className="text-[12px] text-brand-muted font-sans">Search for notes and materials</p>
-                </div>
-              </div>
-
-              {/* RESULTS LIST */}
-              <div className="flex gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
-            {[
-              { id: 'all', label: 'All Materials', icon: FlaskConical },
-              { id: 'notes', label: 'Study Notes', icon: FileText },
-              { id: 'slides', label: 'Slides', icon: PlayCircle },
-              { id: 'audio', label: 'Audio Lessons', icon: Mic2 },
-            ].map((cat) => (
-              <button
-                key={cat.id}
-                onClick={(e) => {
-                  rippleEffect(e);
-                  setCategory(cat.id as any);
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap font-sans text-[13px] font-medium transition-all border relative overflow-hidden shrink-0 shadow-sm ${
-                  category === cat.id 
-                    ? 'bg-brand-accent border-brand-accent text-white' 
-                    : 'bg-brand-surface border-brand-border text-brand-text'
-                }`}
+          <AnimatePresence mode="wait">
+            {!selectedClass ? (
+              <motion.div 
+                key="class-selection"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="px-4 py-6 space-y-8"
               >
-                <cat.icon size={15} />
-                {cat.label}
-              </button>
-            ))}
-          </div>
+                <div className="space-y-1">
+                  <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
+                    Welcome, {profile?.username || 'Explorer'}.
+                  </h1>
+                  <p className="text-[13px] text-brand-muted font-sans">Select your class to start learning</p>
+                </div>
 
-          {/* CONTENT CARDS */}
-          <div className="mt-4 min-h-[400px]">
-            {loading ? (
-              <div className="px-4 space-y-4">
-                {[1, 2, 3, 4, 5].map(i => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
-            ) : (
-              <div className="pb-10" key={`${debouncedQuery}-${category}-${selectedClass}`}>
-                {availableResults.length > 0 && (
-                  <div className="mb-6">
-                    <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span>Available Materials</span>
-                        <button 
-                          onClick={() => handleSearch(debouncedQuery, category, selectedClass)}
-                          className={`p-1 hover:text-brand-accent transition-colors ${loading ? 'animate-spin' : ''}`}
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-brand-muted">Primary & Junior School</h2>
+                    <div className="grid grid-cols-3 gap-3">
+                      {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((grade, i) => (
+                        <button
+                          key={grade}
+                          onClick={(e) => {
+                            rippleEffect(e);
+                            handleClassSelect(grade);
+                          }}
+                          className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group"
                         >
-                          <Clock size={12} />
+                          <span className="text-lg">{i + 1}</span>
+                          <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Grade</span>
                         </button>
-                      </div>
-                      <span className="text-[10px] bg-brand-accent/10 text-brand-accent px-2 py-0.5 rounded-full">{availableResults.length}</span>
-                    </div>
-                    <div className="px-3 flex flex-col gap-2.5">
-                      {availableResults.map((exp, idx) => (
-                        <motion.div 
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.05 }}
-                          key={exp.id} 
-                          onClick={(e) => {
-                            rippleEffect(e);
-                            openExperiment(exp);
-                          }}
-                          className="bg-brand-surface rounded-2xl p-4 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden border border-brand-border/40"
-                        >
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                            exp.slides?.length ? 'bg-orange-50 text-brand-accent' : 
-                            exp.audio_url ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
-                          }`}>
-                            {exp.slides?.length ? <PlayCircle size={24} /> : exp.audio_url ? <Mic2 size={24} /> : <FileText size={24} />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-sans text-[15px] font-bold text-brand-text truncate">{exp.title}</div>
-                            <div className="text-[12px] text-brand-muted mt-0.5 font-medium">{exp.subject || 'Study Material'}</div>
-                          </div>
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted/40 group-hover:text-brand-accent transition-colors">
-                            <ChevronRight size={20} />
-                          </div>
-                        </motion.div>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {lockedResults.length > 0 && (
-                  <div>
-                    <div className="font-sans text-[13px] font-medium text-brand-muted px-4 py-2 uppercase tracking-wider flex items-center justify-between">
-                      <span>Premium Content</span>
-                      <span className="text-[10px] bg-brand-muted/10 text-brand-muted px-2 py-0.5 rounded-full">{lockedResults.length}</span>
-                    </div>
-                    <div className="px-3 flex flex-col gap-2.5">
-                      {lockedResults.map((exp, idx) => (
-                        <motion.div 
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: (availableResults.length + idx) * 0.05 }}
-                          key={exp.id} 
+                  <div className="space-y-3">
+                    <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-brand-muted">Secondary School</h2>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Array.from({ length: 4 }, (_, i) => `Form ${i + 1}`).map((form, i) => (
+                        <button
+                          key={form}
                           onClick={(e) => {
                             rippleEffect(e);
-                            openExperiment(exp);
+                            handleClassSelect(form);
                           }}
-                          className="bg-brand-surface rounded-2xl p-4 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden border border-brand-border/40 group"
+                          className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group"
                         >
-                          <div className="w-12 h-12 rounded-2xl bg-brand-bg flex items-center justify-center shrink-0 opacity-40">
-                            {exp.slides?.length ? <PlayCircle size={24} /> : exp.audio_url ? <Mic2 size={24} /> : <FileText size={24} />}
-                          </div>
-                          <div className="flex-1 min-w-0 opacity-40">
-                            <div className="font-sans text-[15px] font-bold text-brand-text truncate">{exp.title}</div>
-                            <div className="text-[12px] text-brand-muted mt-0.5 font-medium">{exp.subject || 'Study Material'}</div>
-                          </div>
-                          <div className="absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-brand-accent/10 border border-brand-accent/30 rounded-full px-3 py-1">
-                            <Lock size={10} className="text-brand-accent" />
-                            <span className="font-sans text-[10px] font-black text-brand-accent uppercase tracking-wider">UNLOCK</span>
-                          </div>
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted/20">
-                            <ChevronRight size={20} />
-                          </div>
-                        </motion.div>
+                          <span className="text-lg">{i + 1}</span>
+                          <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Form</span>
+                        </button>
                       ))}
+                      <button
+                        onClick={(e) => {
+                          rippleEffect(e);
+                          handleClassSelect('KCSE');
+                        }}
+                        className="h-16 bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1 font-bold text-brand-text hover:border-brand-accent hover:text-brand-accent transition-all active:scale-95 shadow-sm group col-span-2"
+                      >
+                        <span className="text-lg">KCSE</span>
+                        <span className="text-[10px] uppercase tracking-tighter opacity-60 group-hover:opacity-100">Revision</span>
+                      </button>
                     </div>
                   </div>
-                )}
-
-                {error && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-center p-12 mx-4 bg-red-500/5 rounded-[2rem] border border-red-500/20 shadow-sm mb-6"
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div 
+                key="materials-view"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="min-h-screen bg-brand-bg pb-20"
+              >
+              {/* Class Header */}
+              <div className="bg-brand-surface border-b border-brand-border sticky top-0 z-40 px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-4 mb-4">
+                  <button 
+                    onClick={() => {
+                      setSelectedClass(null);
+                      setHasSearched(false);
+                      setResults([]);
+                      setSearchQuery('');
+                    }}
+                    className="w-10 h-10 rounded-full bg-brand-bg border border-brand-border flex items-center justify-center text-brand-text active:scale-90 transition-transform"
                   >
-                    <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                      <AlertCircle className="text-red-500" size={32} />
-                    </div>
-                    <h3 className="text-lg font-bold mb-2 text-red-500">Search Error</h3>
-                    <p className="text-brand-muted text-[13px] mb-8 leading-relaxed">
-                      {error}
-                    </p>
+                    <ChevronLeft size={20} />
+                  </button>
+                  <div>
+                    <h2 className="text-xl font-black tracking-tight">{selectedClass}</h2>
+                    <p className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">Study Materials</p>
+                  </div>
+                </div>
+
+                {/* Search in Class */}
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
+                  <input 
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder={`Search in ${selectedClass}...`}
+                    className="w-full bg-brand-bg border-2 border-brand-border rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-brand-accent transition-all font-bold text-sm"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="px-4 pt-6">
+                {/* Filter & Stats Bar */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsFilterDrawerOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-brand-surface border-2 border-brand-border rounded-2xl text-[10px] font-black uppercase tracking-widest text-brand-text hover:border-brand-accent transition-all active:scale-95 shadow-sm"
+                    >
+                      <Settings size={14} className="text-brand-accent" />
+                      Filters
+                      {category !== 'all' && (
+                        <span className="w-2 h-2 bg-brand-accent rounded-full animate-pulse" />
+                      )}
+                    </button>
+                    {category !== 'all' && (
+                      <button 
+                        onClick={() => setCategory('all')}
+                        className="text-[10px] font-bold text-brand-muted hover:text-brand-accent transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">
+                    {results.length} Materials
+                  </div>
+                </div>
+
+                {loading && results.length === 0 ? (
+                  <div className="grid grid-cols-1 gap-4">
+                    {[1, 2, 3, 4].map(i => <SkeletonCard key={i} />)}
+                  </div>
+                ) : error ? (
+                  <div className="text-center py-20 bg-brand-surface/50 rounded-[3rem] border-2 border-dashed border-brand-border">
+                    <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
+                    <p className="text-brand-text font-bold">{error}</p>
                     <button 
-                      onClick={() => handleSearch(searchQuery, category, selectedClass)}
-                      className="w-full py-4 bg-red-500 text-white rounded-2xl text-sm font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-all mb-4"
+                      onClick={() => handleSearch(searchQuery)}
+                      className="mt-4 text-brand-accent font-black uppercase tracking-widest text-xs"
                     >
                       Try Again
                     </button>
-                  </motion.div>
-                )}
-
-                {results.length === 0 && !loading && !error && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-center p-12 mx-4 bg-brand-surface rounded-[2rem] border border-brand-border shadow-sm"
-                  >
-                    <div className="w-16 h-16 bg-brand-bg rounded-2xl flex items-center justify-center mx-auto mb-6">
-                      <Search className="text-brand-muted/40" size={32} />
+                  </div>
+                ) : results.length === 0 ? (
+                  <div className="text-center py-20 bg-brand-surface/50 rounded-[3rem] border-2 border-dashed border-brand-border">
+                    <div className="w-20 h-20 bg-brand-accent/10 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+                      <Search className="text-brand-accent" size={40} />
                     </div>
-                    <h3 className="text-lg font-bold mb-2">No materials found</h3>
-                    <p className="text-brand-muted text-[13px] mb-8 leading-relaxed">
-                      {selectedClass 
-                        ? `We couldn't find any ${category === 'all' ? '' : category} materials for ${selectedClass}.`
-                        : "Try searching for a different topic or subject."}
-                    </p>
-                    <div className="flex flex-col gap-3">
-                      <button 
-                        onClick={() => {
-                          setSearchQuery('');
-                          setDebouncedQuery('');
-                          setCategory('all');
-                          setSelectedClass(null);
-                          handleSearch('', 'all', null);
-                        }}
-                        className="w-full py-4 bg-brand-accent text-white rounded-2xl text-sm font-bold shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+                    <h3 className="text-xl font-black mb-2">No materials found</h3>
+                    <p className="text-brand-muted text-sm font-medium px-10">We couldn't find any materials for this search. Try a different keyword!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between px-2">
+                        <h3 className="text-xs font-black uppercase tracking-widest text-brand-muted">Study Materials</h3>
+                        <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full">
+                          {results.length} Items
+                        </span>
+                      </div>
+                      <motion.div 
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="show"
+                        className="grid grid-cols-1 gap-4"
                       >
-                        Clear All Filters
-                      </button>
+                        {results.map((exp, idx) => (
+                          <motion.div key={exp.id} variants={itemVariants}>
+                            <MaterialCard 
+                              exp={exp} 
+                              onClick={(e) => {
+                                rippleEffect(e);
+                                openExperiment(exp);
+                              }}
+                            />
+                          </motion.div>
+                        ))}
+                      </motion.div>
                     </div>
-                  </motion.div>
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        </>
-      )}
-    </>
-  )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </>
+    )}
 
-      {/* SETTINGS VIEW */}
+    {/* SETTINGS VIEW */}
       {activeTab === 'settings' && (
         <motion.div 
           initial={{ opacity: 0, x: 20 }}
@@ -1086,27 +761,6 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
                   <ExternalLink size={16} />
                 </div>
               </a>
-
-              <div className="h-px bg-brand-border/50" />
-
-              {/* Admin Link */}
-              <button 
-                onClick={onAdminClick}
-                className="w-full flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
-                    <Shield size={20} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Admin Dashboard</p>
-                    <p className="text-[11px] text-brand-muted">Manage payments and content</p>
-                  </div>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
-                  <ChevronLeft size={16} className="rotate-180" />
-                </div>
-              </button>
             </div>
 
             {/* Logout Button */}
@@ -1120,18 +774,6 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
           </div>
         </motion.div>
       )}
-
-      {/* FAB PAYMENT BUTTON */}
-      <button 
-        onClick={(e) => {
-          rippleEffect(e);
-          onShowPlans();
-        }}
-        className="fixed bottom-24 right-4 bg-brand-accent text-white rounded-full h-[52px] px-5 flex items-center gap-2 shadow-lg shadow-brand-accent/40 active:scale-95 transition-all z-[199] font-sans text-sm font-bold relative overflow-hidden"
-      >
-        <Smartphone size={18} />
-        Payment Plans
-      </button>
 
       {/* BOTTOM SHEET NAV */}
       <div className="fixed bottom-0 left-0 right-0 z-[200] bg-brand-surface border-t border-brand-border shadow-[0_-2px_20px_rgba(0,0,0,0.1)] pb-safe">
@@ -1185,86 +827,168 @@ function Home({ accessResult, onPayPlan, onEnterCode, onAdminClick, profile, onL
         )}
       </AnimatePresence>
 
+      {/* FILTER DRAWER */}
+      <AnimatePresence>
+        {isFilterDrawerOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsFilterDrawerOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500]"
+            />
+            <motion.div 
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-brand-surface rounded-t-[3rem] z-[501] p-8 pb-12 shadow-2xl border-t border-brand-border"
+            >
+              <div className="w-12 h-1.5 bg-brand-border rounded-full mx-auto mb-8" />
+              <h3 className="text-xl font-black mb-6 text-center tracking-tight">Filter Materials</h3>
+              
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <label className="text-[11px] font-black uppercase tracking-widest text-brand-muted px-2">Content Type</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { id: 'all', label: 'Everything', icon: FileText },
+                      { id: 'notes', label: 'Study Notes', icon: FileText },
+                      { id: 'slides', label: 'Slides/PDF', icon: PlayCircle },
+                      { id: 'audio', label: 'Audio Lessons', icon: Mic2 },
+                    ].map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          setCategory(cat.id as any);
+                          setIsFilterDrawerOpen(false);
+                        }}
+                        className={`flex items-center gap-3 p-4 rounded-2xl text-sm font-bold transition-all border-2 ${
+                          category === cat.id 
+                            ? 'bg-brand-accent border-brand-accent text-white shadow-lg shadow-brand-accent/20' 
+                            : 'bg-brand-bg border-brand-border text-brand-text hover:border-brand-accent/40'
+                        }`}
+                      >
+                        <cat.icon size={18} />
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button 
+                    onClick={() => setIsFilterDrawerOpen(false)}
+                    className="w-full py-4 bg-brand-text text-brand-surface rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Experiment Modal */}
       <AnimatePresence>
         {selectedExperiment && (
-          <PremiumGate 
-            lessonId={selectedExperiment.id.toString()}
-            onClose={() => setSelectedExperiment(null)}
-            onPayClick={() => onShowPlans()}
-            onEnterCode={onEnterCode}
-          >
-            <div className="fixed inset-0 z-[300] bg-brand-bg flex flex-col">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border bg-brand-surface/80 backdrop-blur-xl">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setSelectedExperiment(null)}
-                    className="w-10 h-10 rounded-xl border border-brand-border flex items-center justify-center hover:bg-brand-surface transition-colors"
-                  >
-                    <ChevronLeft size={20} />
-                  </button>
-                  <div className="min-w-0">
-                    <h2 className="font-bold text-base text-brand-text leading-none mb-1 truncate max-w-[200px]">{selectedExperiment.title}</h2>
-                    <p className="text-[10px] text-brand-accent font-bold uppercase tracking-wider">Study Material</p>
-                  </div>
-                </div>
+          <div className="fixed inset-0 z-[300] bg-brand-bg flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border bg-brand-surface/80 backdrop-blur-xl">
+              <div className="flex items-center gap-3">
                 <button
                   onClick={() => setSelectedExperiment(null)}
-                  className="bg-brand-accent text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm"
+                  className="w-10 h-10 rounded-xl border border-brand-border flex items-center justify-center hover:bg-brand-surface transition-colors"
                 >
-                  Exit
+                  <ChevronLeft size={20} />
                 </button>
+                <div className="min-w-0">
+                  <h2 className="font-bold text-base text-brand-text leading-none mb-1 truncate max-w-[200px]">{selectedExperiment.title}</h2>
+                  <p className="text-[10px] text-brand-accent font-bold uppercase tracking-wider">Study Material</p>
+                </div>
               </div>
-              
-              <div className="flex-1 bg-black">
-                {selectedExperiment.slides && selectedExperiment.slides.length > 0 ? (
-                  <SlidesViewer 
-                    slides={selectedExperiment.slides} 
-                    audioUrl={selectedExperiment.audio_url} 
-                  />
-                ) : selectedExperiment.html_content ? (
-                  <iframe
-                    title={selectedExperiment.title}
-                    srcDoc={`
-                      <!DOCTYPE html>
-                      <html>
-                        <head>
-                          <meta charset="utf-8">
-                          <meta name="viewport" content="width=device-width, initial-scale=1">
-                          <style>
-                            body { 
-                              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                              line-height: 1.6;
-                              color: #1a1a1a;
-                              padding: 24px;
-                              margin: 0;
-                              background: #ffffff;
-                            }
-                            img { max-width: 100%; height: auto; border-radius: 12px; }
-                            h1, h2, h3 { color: #000; margin-top: 1.5em; }
-                            p { margin-bottom: 1em; }
-                          </style>
-                        </head>
-                        <body>
-                          ${selectedExperiment.html_content}
-                        </body>
-                      </html>
-                    `}
-                    className="w-full h-full border-none bg-white"
-                    sandbox="allow-scripts allow-modals"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-brand-muted gap-4 bg-brand-bg">
-                    <AlertCircle size={48} className="text-brand-accent/20" />
-                    <p className="font-bold">No content available.</p>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={() => setSelectedExperiment(null)}
+                className="bg-brand-accent text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm"
+              >
+                Exit
+              </button>
             </div>
-          </PremiumGate>
+            
+            <div className="flex-1 bg-black">
+              {selectedExperiment.slides && selectedExperiment.slides.length > 0 ? (
+                <SlidesViewer 
+                  slides={selectedExperiment.slides} 
+                  audioUrl={selectedExperiment.audio_url} 
+                />
+              ) : selectedExperiment.html_content ? (
+                <iframe
+                  title={selectedExperiment.title}
+                  srcDoc={`
+                    <!DOCTYPE html>
+                    <html>
+                      <head>
+                        <meta charset="utf-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1">
+                        <style>
+                          body { 
+                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                            line-height: 1.6;
+                            color: #1a1a1a;
+                            padding: 24px;
+                            margin: 0;
+                            background: #ffffff;
+                          }
+                          img { max-width: 100%; height: auto; border-radius: 12px; }
+                          h1, h2, h3 { color: #000; margin-top: 1.5em; }
+                          p { margin-bottom: 1em; }
+                        </style>
+                      </head>
+                      <body>
+                        ${selectedExperiment.html_content}
+                      </body>
+                    </html>
+                  `}
+                  className="w-full h-full border-none bg-white"
+                  sandbox="allow-scripts allow-modals"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-brand-muted gap-4 bg-brand-bg">
+                  <AlertCircle size={48} className="text-brand-accent/20" />
+                  <p className="font-bold">No content available.</p>
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function MaterialCard({ exp, onClick }: { exp: Experiment, onClick: (e: React.MouseEvent) => void }) {
+  return (
+    <div 
+      onClick={onClick}
+      className={`bg-brand-surface rounded-2xl p-4 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden border group cursor-pointer border-brand-border/40`}
+    >
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+        exp.slides?.length ? 'bg-brand-accent/10 text-brand-accent' : 
+        exp.audio_url ? 'bg-indigo-500/10 text-indigo-500' : 'bg-emerald-500/10 text-emerald-500'
+      }`}>
+        {exp.slides?.length ? <PlayCircle size={24} /> : exp.audio_url ? <Mic2 size={24} /> : <FileText size={24} />}
+      </div>
+      <div className={`flex-1 min-w-0`}>
+        <div className="font-sans text-[15px] font-bold text-brand-text truncate">{exp.title}</div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">{exp.subject || 'Study Material'}</span>
+        </div>
+      </div>
+      <div className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted/20 group-hover:text-brand-accent transition-colors">
+        <ChevronRight size={20} />
+      </div>
     </div>
   );
 }

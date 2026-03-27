@@ -218,16 +218,19 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
-      const { error } = await supabase
+      console.log(`Approving payment ${id} with plan ${plan}, expires at ${expiresAt}`);
+      const { data, error } = await supabase
         .from('payments')
         .update({
           status: 'approved',
           verified_at: new Date().toISOString(),
           expires_at: expiresAt
         })
-        .eq('id', id);
+        .eq('id', id)
+        .select();
       
       if (error) throw error;
+      console.log('Payment approved successfully:', data);
       
       showToast("Payment approved successfully!", "success");
       fetchPayments();
@@ -244,16 +247,19 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
 
     try {
-      const { error } = await supabase
+      console.log(`Rejecting payment ${id} for reason: ${reason}`);
+      const { data, error } = await supabase
         .from('payments')
         .update({
           status: 'rejected',
           verified_at: new Date().toISOString(),
           rejection_reason: reason || 'Invalid transaction'
         })
-        .eq('id', id);
+        .eq('id', id)
+        .select();
       
       if (error) throw error;
+      console.log('Payment rejected successfully:', data);
       
       showToast("Payment rejected.", "info");
       setRejectingId(null);
