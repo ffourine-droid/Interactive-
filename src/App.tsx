@@ -195,8 +195,17 @@ function AppContent() {
           table: 'payments',
           filter: `phone_number=eq.${profile.phone_number}`,
         },
-        () => {
-          console.log('Payment updated, refreshing access...');
+        (payload) => {
+          console.log('Payment updated:', payload.new.status);
+          const newStatus = payload.new.status;
+          
+          if (newStatus === 'approved') {
+            showToast('Payment approved! You now have full access.', 'success');
+          } else if (newStatus === 'rejected') {
+            const reason = payload.new.rejection_reason ? `: ${payload.new.rejection_reason}` : '';
+            showToast(`Payment rejected${reason}. Please check your details.`, 'error');
+          }
+          
           refreshAccess();
         }
       )
@@ -206,6 +215,14 @@ function AppContent() {
       supabase.removeChannel(channel);
     };
   }, [profile?.phone_number]);
+
+  // Auto-redirect to home when access is granted
+  useEffect(() => {
+    if (accessResult?.access && (currentPage === 'pay' || currentPage === 'access')) {
+      console.log('Access granted, redirecting to home...');
+      setCurrentPage('home');
+    }
+  }, [accessResult?.access, currentPage]);
 
   // Simple router
   const renderPage = () => {

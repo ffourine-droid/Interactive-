@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Smartphone, Loader2, CheckCircle2 } from 'lucide-react';
 import { checkAccess } from '../utils/checkAccess';
+import { useToast } from './Toast';
 
 interface AccessPromptProps {
   lessonId?: string;
@@ -12,6 +13,7 @@ interface AccessPromptProps {
 export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess, onPayClick }) => {
   const [phone, setPhone] = useState(sessionStorage.getItem('azilearn_phone') || '');
   const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,10 +24,18 @@ export const AccessPrompt: React.FC<AccessPromptProps> = ({ lessonId, onSuccess,
     if (result.access) {
       sessionStorage.setItem('azilearn_phone', phone.trim());
       window.dispatchEvent(new Event('storage'));
+      showToast("Access granted! Enjoy your material.", "success");
       onSuccess(phone.trim());
     } else {
       // For any failure (not found, expired, rejected), lead directly to payment instructions
       // as requested to avoid confusing error messages for children.
+      if (result.reason === 'rejected') {
+        showToast(`Payment rejected: ${result.rejection_reason || 'Please check your details'}`, "error");
+      } else if (result.reason === 'expired') {
+        showToast("Your access has expired. Please renew your subscription.", "error");
+      } else {
+        showToast("No approved payment found for this number.", "error");
+      }
       onPayClick();
     }
     setLoading(false);
