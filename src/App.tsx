@@ -1087,6 +1087,27 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
                     </button>
                   </div>
                 )}
+                {viewMode !== 'notes' && viewMode !== 'slides' && (
+                  <button
+                    onClick={() => {
+                      const url = viewMode === 'pdf' ? selectedExperiment.pdf_url : selectedExperiment.ppt_url;
+                      if (!url) return;
+                      
+                      // Trigger download instead of opening in new tab
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `${selectedExperiment.title}.${viewMode}`;
+                      link.target = '_blank';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                    className="w-10 h-10 rounded-xl border border-brand-border flex items-center justify-center hover:bg-brand-surface transition-colors text-brand-muted mr-1 sm:mr-2"
+                    title="Download Material"
+                  >
+                    <Download size={18} />
+                  </button>
+                )}
                 <button
                   onClick={() => setSelectedExperiment(null)}
                   className="bg-brand-accent text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm"
@@ -1156,19 +1177,66 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
                   }}
                 >
                   {viewMode === 'pdf' && selectedExperiment.pdf_url && (
-                    <iframe
-                      src={`${selectedExperiment.pdf_url}#toolbar=1`}
-                      className="w-full h-full border-none bg-white"
-                      title="PDF Viewer"
-                    />
+                    <div className="w-full h-full flex flex-col">
+                      <iframe
+                        src={selectedExperiment.pdf_url.includes('drive.google.com') 
+                          ? selectedExperiment.pdf_url.replace('/view', '/preview').replace('/edit', '/preview')
+                          : `${selectedExperiment.pdf_url}#toolbar=1`
+                        }
+                        className="flex-1 w-full border-none bg-white"
+                        title="PDF Viewer"
+                      />
+                      <div className="p-4 bg-brand-surface border-t border-brand-border flex items-center justify-between">
+                        <p className="text-xs text-brand-muted">
+                          <span className="font-bold text-brand-accent mr-2">Trouble viewing?</span>
+                          If the document doesn't load, it might be blocked by your browser's security settings.
+                        </p>
+                        <button 
+                          onClick={() => {
+                            const link = document.createElement('a');
+                            link.href = selectedExperiment.pdf_url!;
+                            link.download = `${selectedExperiment.title}.pdf`;
+                            link.target = '_blank';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          className="text-xs font-bold text-brand-accent hover:underline flex items-center gap-1"
+                        >
+                          Download Material <Download size={12} />
+                        </button>
+                      </div>
+                    </div>
                   )}
 
                   {viewMode === 'ppt' && selectedExperiment.ppt_url && (
-                    <iframe
-                      src={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(selectedExperiment.ppt_url)}`}
-                      className="w-full h-full border-none bg-white"
-                      title="PPT Viewer"
-                    />
+                    <div className="w-full h-full flex flex-col">
+                      <iframe
+                        src={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(selectedExperiment.ppt_url)}`}
+                        className="flex-1 w-full border-none bg-white"
+                        title="PPT Viewer"
+                      />
+                      <div className="p-4 bg-brand-surface border-t border-brand-border flex items-center justify-between">
+                        <p className="text-xs text-brand-muted">
+                          <span className="font-bold text-brand-accent mr-2">Trouble viewing?</span>
+                          If the presentation doesn't load, it might be blocked by your browser's security settings.
+                        </p>
+                        <button 
+                          onClick={() => {
+                            const link = document.createElement('a');
+                            link.href = selectedExperiment.ppt_url!;
+                            link.download = `${selectedExperiment.title}.ppt`;
+                            link.target = '_blank';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          className="text-xs font-bold text-brand-accent hover:underline flex items-center gap-1"
+                        >
+                          Download Material <Download size={12} />
+                        </button>
+                      </div>
+                    </div>
                   )}
 
                   {viewMode === 'notes' && selectedExperiment.html_content && (
@@ -1219,26 +1287,38 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
             {(selectedExperiment.pdf_url || selectedExperiment.ppt_url) && (
               <div className="p-4 bg-brand-surface border-t border-brand-border flex gap-3">
                 {selectedExperiment.pdf_url && (
-                  <a 
-                    href={selectedExperiment.pdf_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
+                  <button 
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = selectedExperiment.pdf_url!;
+                      link.download = `${selectedExperiment.title}.pdf`;
+                      link.target = '_blank';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
                     className="flex-1 bg-brand-accent text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
                   >
                     <Download size={18} />
                     Download PDF
-                  </a>
+                  </button>
                 )}
                 {selectedExperiment.ppt_url && (
-                  <a 
-                    href={selectedExperiment.ppt_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
+                  <button 
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = selectedExperiment.ppt_url!;
+                      link.download = `${selectedExperiment.title}.ppt`;
+                      link.target = '_blank';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
                     className="flex-1 bg-indigo-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 active:scale-95 transition-all"
                   >
                     <Download size={18} />
                     Download PPT
-                  </a>
+                  </button>
                 )}
               </div>
             )}
