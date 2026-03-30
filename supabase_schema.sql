@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS experiments (
   category TEXT DEFAULT 'notes',
   slides TEXT[], -- Array of image URLs
   audio_url TEXT,
+  pdf_url TEXT,
+  ppt_url TEXT,
   is_free BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

@@ -6,8 +6,8 @@
 /**
  * AziLearn - Subscription-based study materials platform
  */
-import React, { useState, useEffect } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, ChevronRight, Settings, WifiOff, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X } from 'lucide-react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, ChevronRight, Settings, WifiOff, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X, Download, Shield, Trash2, Moon, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
 import { Auth } from './components/Auth';
@@ -17,6 +17,8 @@ import { SlidesViewer } from './components/SlidesViewer';
 import { ToastProvider, useToast } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+const AdminPayments = lazy(() => import('./pages/AdminPayments').then(module => ({ default: module.AdminPayments })));
+
 interface Experiment {
   id: string | number;
   title: string;
@@ -25,6 +27,8 @@ interface Experiment {
   subject?: string;
   slides?: string[];
   audio_url?: string;
+  pdf_url?: string;
+  ppt_url?: string;
   grade?: string;
 }
 
@@ -35,7 +39,7 @@ interface Profile {
   created_at: string;
 }
 
-type Page = 'home';
+type Page = 'home' | 'admin';
 
 export default function App() {
   return (
@@ -81,7 +85,7 @@ function AppContent() {
     const timeoutId = setTimeout(() => {
       console.warn('Initial check timed out, forcing loading to false');
       setIsAuthLoading(false);
-    }, 5000);
+    }, 3000); // Reduced from 5s to 3s
 
     try {
       const { data, error } = await supabase
@@ -154,6 +158,17 @@ function AppContent() {
     }
 
     switch (currentPage) {
+      case 'admin':
+        return (
+          <Suspense fallback={
+            <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center gap-4">
+              <Loader2 className="animate-spin text-brand-accent" size={48} />
+              <p className="text-brand-muted font-bold text-sm animate-pulse">Loading Admin Panel...</p>
+            </div>
+          }>
+            <AdminPayments onBack={() => setCurrentPage('home')} />
+          </Suspense>
+        );
       case 'home':
       default:
         return (
@@ -164,6 +179,9 @@ function AppContent() {
               sessionStorage.removeItem('azilearn_username');
               setProfile(null);
             }}
+            onAdminClick={() => setCurrentPage('admin')}
+            theme={theme}
+            setTheme={setTheme}
           />
         );
     }
@@ -195,9 +213,12 @@ function AppContent() {
   );
 }
 
-function Home({ profile, onLogout }: { 
+function Home({ profile, onLogout, onAdminClick, theme, setTheme }: { 
   profile: Profile | null,
-  onLogout: () => void
+  onLogout: () => void,
+  onAdminClick: () => void,
+  theme: 'light' | 'dark',
+  setTheme: (theme: 'light' | 'dark') => void
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -207,6 +228,17 @@ function Home({ profile, onLogout }: {
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [logoClicks, setLogoClicks] = useState(0);
+
+  const handleLogoClick = () => {
+    const nextClicks = logoClicks + 1;
+    if (nextClicks >= 5) {
+      onAdminClick();
+      setLogoClicks(0);
+    } else {
+      setLogoClicks(nextClicks);
+    }
+  };
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('azilearn_search_history');
@@ -222,7 +254,39 @@ function Home({ profile, onLogout }: {
     return {};
   });
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
+  const [viewMode, setViewMode] = useState<'slides' | 'pdf' | 'ppt' | 'notes'>('slides');
+  const [zoom, setZoom] = useState(100);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isOpening, setIsOpening] = useState(false);
+  const touchStartRef = useRef({ x: 0, y: 0 });
+  const panStartRef = useRef({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (zoom <= 100 || viewMode === 'slides') return;
+    if (e.touches.length === 1) {
+      isPanningRef.current = true;
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      panStartRef.current = { ...pan };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPanningRef.current || zoom <= 100) return;
+    const dx = e.touches[0].clientX - touchStartRef.current.x;
+    const dy = e.touches[0].clientY - touchStartRef.current.y;
+    
+    // Limit panning based on zoom level
+    const maxPan = (zoom - 100) / 2;
+    setPan({
+      x: Math.max(-maxPan, Math.min(maxPan, panStartRef.current.x + (dx / zoom) * 100)),
+      y: Math.max(-maxPan, Math.min(maxPan, panStartRef.current.y + (dy / zoom) * 100))
+    });
+  };
+
+  const handleTouchEnd = () => {
+    isPanningRef.current = false;
+  };
   const [activeTab, setActiveTab] = useState('home');
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -240,9 +304,23 @@ function Home({ profile, onLogout }: {
     handleSearch('', category, grade);
   };
 
-  // Save cache to localStorage
+  // Save cache to localStorage with debounce and size limit
   useEffect(() => {
-    localStorage.setItem('azilearn_search_cache', JSON.stringify(searchCache));
+    const timer = setTimeout(() => {
+      // Limit cache size to last 20 entries to prevent localStorage bloat
+      const keys = Object.keys(searchCache);
+      if (keys.length > 20) {
+        const limitedCache: Record<string, Experiment[]> = {};
+        keys.slice(-20).forEach(key => {
+          limitedCache[key] = searchCache[key];
+        });
+        localStorage.setItem('azilearn_search_cache', JSON.stringify(limitedCache));
+      } else {
+        localStorage.setItem('azilearn_search_cache', JSON.stringify(searchCache));
+      }
+    }, 2000); // Debounce save by 2 seconds
+    
+    return () => clearTimeout(timer);
   }, [searchCache]);
 
   useEffect(() => {
@@ -307,7 +385,7 @@ function Home({ profile, onLogout }: {
     try {
       let supabaseQuery = supabase
         .from('experiments')
-        .select('id, title, keywords, subject, grade, created_at, audio_url, slides');
+        .select('id, title, keywords, subject, grade, created_at, audio_url, slides, pdf_url, ppt_url');
       
       if (currentClass) {
         supabaseQuery = supabaseQuery.eq('grade', currentClass);
@@ -369,9 +447,20 @@ function Home({ profile, onLogout }: {
   }, [debouncedQuery, category, selectedClass]);
 
   const openExperiment = async (exp: Experiment) => {
+    // Helper to set initial view mode
+    const setInitialViewMode = (data: Experiment) => {
+      setZoom(100); // Reset zoom on open
+      setPan({ x: 0, y: 0 }); // Reset pan on open
+      if (data.slides && data.slides.length > 0) setViewMode('slides');
+      else if (data.pdf_url) setViewMode('pdf');
+      else if (data.ppt_url) setViewMode('ppt');
+      else if (data.html_content) setViewMode('notes');
+    };
+
     // If we already have the content, just open it
-    if (exp.html_content || (exp.slides && exp.slides.length > 0)) {
+    if (exp.html_content || (exp.slides && exp.slides.length > 0) || exp.pdf_url || exp.ppt_url) {
       setSelectedExperiment(exp);
+      setInitialViewMode(exp);
       return;
     }
 
@@ -380,13 +469,14 @@ function Home({ profile, onLogout }: {
     try {
       const { data, error } = await supabase
         .from('experiments')
-        .select('id, title, keywords, html_content, slides, audio_url, subject, grade, created_at')
+        .select('id, title, keywords, html_content, slides, audio_url, pdf_url, ppt_url, subject, grade, created_at')
         .eq('id', exp.id)
         .single();
       
       if (error) throw error;
       if (data) {
         setSelectedExperiment(data);
+        setInitialViewMode(data);
         // Update the results list with the full data so we don't fetch again
         setResults(prev => prev.map(item => item.id === data.id ? data : item));
       }
@@ -540,6 +630,27 @@ function Home({ profile, onLogout }: {
                 exit={{ opacity: 0, y: -10 }}
                 className="px-4 py-6 space-y-8"
               >
+                <div className="flex items-center justify-between">
+                  <div 
+                    className="flex items-center gap-2 cursor-pointer active:scale-95 transition-transform"
+                    onClick={handleLogoClick}
+                  >
+                    <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-accent/20">
+                      <FlaskConical size={24} />
+                    </div>
+                    <div>
+                      <h1 className="text-xl font-black text-brand-text tracking-tight leading-none">AziLearn</h1>
+                      <p className="text-[10px] text-brand-muted font-bold uppercase tracking-widest mt-1">Study Materials</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setActiveTab('settings')}
+                    className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-accent transition-colors"
+                  >
+                    <Settings size={20} />
+                  </button>
+                </div>
+
                 <div className="space-y-1">
                   <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
                     Welcome, {profile?.username || 'Explorer'}.
@@ -741,6 +852,54 @@ function Home({ profile, onLogout }: {
 
           <div className="space-y-3">
             <div className="bg-brand-surface border border-brand-border rounded-2xl p-4 shadow-sm space-y-4">
+              {/* Theme Toggle */}
+              <button 
+                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                className="w-full flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
+                    {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">
+                      {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+                    </p>
+                    <p className="text-[11px] text-brand-muted">Switch app appearance</p>
+                  </div>
+                </div>
+                <div className={`w-10 h-5 rounded-full relative transition-colors ${theme === 'dark' ? 'bg-brand-accent' : 'bg-brand-border'}`}>
+                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${theme === 'dark' ? 'left-6' : 'left-1'}`} />
+                </div>
+              </button>
+
+              <div className="h-px bg-brand-border/50" />
+
+              {/* Clear Cache */}
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('azilearn_search_cache');
+                  setSearchCache({});
+                  showToast('App cache cleared!', 'success');
+                }}
+                className="w-full flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
+                    <Trash2 size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Clear App Cache</p>
+                    <p className="text-[11px] text-brand-muted">Free up space and refresh data</p>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ChevronRight size={16} />
+                </div>
+              </button>
+
+              <div className="h-px bg-brand-border/50" />
+
               {/* WhatsApp Link */}
               <a 
                 href="https://wa.me/254799426863" 
@@ -908,59 +1067,181 @@ function Home({ profile, onLogout }: {
                   <p className="text-[10px] text-brand-accent font-bold uppercase tracking-wider">Study Material</p>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedExperiment(null)}
-                className="bg-brand-accent text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm"
-              >
-                Exit
-              </button>
+              <div className="flex items-center gap-2">
+                {viewMode !== 'slides' && (
+                  <div className="flex items-center gap-1 bg-brand-surface border border-brand-border rounded-xl p-1 mr-1 sm:mr-2">
+                    <button 
+                      onClick={() => setZoom(prev => Math.max(50, prev - 25))}
+                      className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center hover:bg-brand-bg rounded-lg transition-colors text-brand-muted"
+                      title="Zoom Out"
+                    >
+                      <span className="text-base sm:text-lg font-bold">-</span>
+                    </button>
+                    <span className="text-[9px] sm:text-[10px] font-black w-8 sm:w-12 text-center text-brand-muted">{zoom}%</span>
+                    <button 
+                      onClick={() => setZoom(prev => Math.min(300, prev + 25))}
+                      className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center hover:bg-brand-bg rounded-lg transition-colors text-brand-muted"
+                      title="Zoom In"
+                    >
+                      <span className="text-base sm:text-lg font-bold">+</span>
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={() => setSelectedExperiment(null)}
+                  className="bg-brand-accent text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm"
+                >
+                  Exit
+                </button>
+              </div>
             </div>
             
-            <div className="flex-1 bg-black">
-              {selectedExperiment.slides && selectedExperiment.slides.length > 0 ? (
+            <div className="flex bg-brand-surface border-b border-brand-border px-2 overflow-x-auto no-scrollbar">
+              {selectedExperiment.slides && selectedExperiment.slides.length > 0 && (
+                <button 
+                  onClick={() => { setViewMode('slides'); setZoom(100); setPan({ x: 0, y: 0 }); }}
+                  className={`px-4 py-3 text-xs font-bold whitespace-nowrap transition-all border-b-2 ${viewMode === 'slides' ? 'border-brand-accent text-brand-accent' : 'border-transparent text-brand-muted'}`}
+                >
+                  Slides
+                </button>
+              )}
+              {selectedExperiment.pdf_url && (
+                <button 
+                  onClick={() => { setViewMode('pdf'); setZoom(100); setPan({ x: 0, y: 0 }); }}
+                  className={`px-4 py-3 text-xs font-bold whitespace-nowrap transition-all border-b-2 ${viewMode === 'pdf' ? 'border-brand-accent text-brand-accent' : 'border-transparent text-brand-muted'}`}
+                >
+                  PDF Viewer
+                </button>
+              )}
+              {selectedExperiment.ppt_url && (
+                <button 
+                  onClick={() => { setViewMode('ppt'); setZoom(100); setPan({ x: 0, y: 0 }); }}
+                  className={`px-4 py-3 text-xs font-bold whitespace-nowrap transition-all border-b-2 ${viewMode === 'ppt' ? 'border-brand-accent text-brand-accent' : 'border-transparent text-brand-muted'}`}
+                >
+                  PPT Viewer
+                </button>
+              )}
+              {selectedExperiment.html_content && (
+                <button 
+                  onClick={() => { setViewMode('notes'); setZoom(100); setPan({ x: 0, y: 0 }); }}
+                  className={`px-4 py-3 text-xs font-bold whitespace-nowrap transition-all border-b-2 ${viewMode === 'notes' ? 'border-brand-accent text-brand-accent' : 'border-transparent text-brand-muted'}`}
+                >
+                  Notes
+                </button>
+              )}
+            </div>
+            
+            <div className="flex-1 bg-black overflow-hidden relative">
+              {viewMode === 'slides' && selectedExperiment.slides && selectedExperiment.slides.length > 0 && (
                 <SlidesViewer 
                   slides={selectedExperiment.slides} 
                   audioUrl={selectedExperiment.audio_url} 
                 />
-              ) : selectedExperiment.html_content ? (
-                <iframe
-                  title={selectedExperiment.title}
-                  srcDoc={`
-                    <!DOCTYPE html>
-                    <html>
-                      <head>
-                        <meta charset="utf-8">
-                        <meta name="viewport" content="width=device-width, initial-scale=1">
-                        <style>
-                          body { 
-                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                            line-height: 1.6;
-                            color: #1a1a1a;
-                            padding: 24px;
-                            margin: 0;
-                            background: #ffffff;
-                          }
-                          img { max-width: 100%; height: auto; border-radius: 12px; }
-                          h1, h2, h3 { color: #000; margin-top: 1.5em; }
-                          p { margin-bottom: 1em; }
-                        </style>
-                      </head>
-                      <body>
-                        ${selectedExperiment.html_content}
-                      </body>
-                    </html>
-                  `}
-                  className="w-full h-full border-none bg-white"
-                  sandbox="allow-scripts allow-modals"
-                  loading="lazy"
-                />
-              ) : (
+              )}
+              
+              <div 
+                className={`w-full h-full overflow-auto ${viewMode === 'slides' ? 'hidden' : 'block'}`}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                <div 
+                  className="w-full h-full transition-transform duration-300 origin-center"
+                  style={{ 
+                    transform: `scale(${zoom / 100}) translate(${pan.x}%, ${pan.y}%)`,
+                    height: '100%',
+                    width: '100%',
+                    minHeight: '100%',
+                    minWidth: '100%'
+                  }}
+                >
+                  {viewMode === 'pdf' && selectedExperiment.pdf_url && (
+                    <iframe
+                      src={`${selectedExperiment.pdf_url}#toolbar=1`}
+                      className="w-full h-full border-none bg-white"
+                      title="PDF Viewer"
+                    />
+                  )}
+
+                  {viewMode === 'ppt' && selectedExperiment.ppt_url && (
+                    <iframe
+                      src={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(selectedExperiment.ppt_url)}`}
+                      className="w-full h-full border-none bg-white"
+                      title="PPT Viewer"
+                    />
+                  )}
+
+                  {viewMode === 'notes' && selectedExperiment.html_content && (
+                    <iframe
+                      title={selectedExperiment.title}
+                      srcDoc={`
+                        <!DOCTYPE html>
+                        <html>
+                          <head>
+                            <meta charset="utf-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1">
+                            <style>
+                              body { 
+                                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                                line-height: 1.6;
+                                color: #1a1a1a;
+                                padding: 24px;
+                                margin: 0;
+                                background: #ffffff;
+                              }
+                              img { max-width: 100%; height: auto; border-radius: 12px; }
+                              h1, h2, h3 { color: #000; margin-top: 1.5em; }
+                              p { margin-bottom: 1em; }
+                            </style>
+                          </head>
+                          <body>
+                            ${selectedExperiment.html_content}
+                          </body>
+                        </html>
+                      `}
+                      className="w-full h-full border-none bg-white"
+                      sandbox="allow-scripts allow-modals"
+                      loading="lazy"
+                    />
+                  )}
+                </div>
+              </div>
+              
+              {!selectedExperiment.slides?.length && !selectedExperiment.pdf_url && !selectedExperiment.ppt_url && !selectedExperiment.html_content && (
                 <div className="flex flex-col items-center justify-center h-full text-brand-muted gap-4 bg-brand-bg">
                   <AlertCircle size={48} className="text-brand-accent/20" />
                   <p className="font-bold">No content available.</p>
                 </div>
               )}
             </div>
+
+            {/* DOWNLOAD SECTION */}
+            {(selectedExperiment.pdf_url || selectedExperiment.ppt_url) && (
+              <div className="p-4 bg-brand-surface border-t border-brand-border flex gap-3">
+                {selectedExperiment.pdf_url && (
+                  <a 
+                    href={selectedExperiment.pdf_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-brand-accent text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+                  >
+                    <Download size={18} />
+                    Download PDF
+                  </a>
+                )}
+                {selectedExperiment.ppt_url && (
+                  <a 
+                    href={selectedExperiment.ppt_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-indigo-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 active:scale-95 transition-all"
+                  >
+                    <Download size={18} />
+                    Download PPT
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         )}
       </AnimatePresence>
@@ -976,14 +1257,27 @@ function MaterialCard({ exp, onClick }: { exp: Experiment, onClick: (e: React.Mo
     >
       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
         exp.slides?.length ? 'bg-brand-accent/10 text-brand-accent' : 
-        exp.audio_url ? 'bg-indigo-500/10 text-indigo-500' : 'bg-emerald-500/10 text-emerald-500'
+        exp.audio_url ? 'bg-indigo-500/10 text-indigo-500' : 
+        exp.pdf_url ? 'bg-red-500/10 text-red-500' :
+        exp.ppt_url ? 'bg-orange-500/10 text-orange-500' :
+        'bg-emerald-500/10 text-emerald-500'
       }`}>
-        {exp.slides?.length ? <PlayCircle size={24} /> : exp.audio_url ? <Mic2 size={24} /> : <FileText size={24} />}
+        {exp.slides?.length ? <PlayCircle size={24} /> : 
+         exp.audio_url ? <Mic2 size={24} /> : 
+         exp.pdf_url ? <FileText size={24} /> :
+         exp.ppt_url ? <ExternalLink size={24} /> : 
+         <FileText size={24} />}
       </div>
       <div className={`flex-1 min-w-0`}>
         <div className="font-sans text-[15px] font-bold text-brand-text truncate">{exp.title}</div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">{exp.subject || 'Study Material'}</span>
+          {(exp.pdf_url || exp.ppt_url) && (
+            <span className="flex items-center gap-1 text-[9px] font-black bg-brand-accent/10 text-brand-accent px-1.5 py-0.5 rounded-md uppercase">
+              <Download size={10} />
+              Viewable
+            </span>
+          )}
         </div>
       </div>
       <div className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted/20 group-hover:text-brand-accent transition-colors">

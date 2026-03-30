@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Volume2, VolumeX, ChevronLeft, ChevronRight, Play, Pause, Maximize2, Minimize2 } from 'lucide-react';
+import { Volume2, VolumeX, ChevronLeft, ChevronRight, Play, Pause, Maximize2, Minimize2, ZoomIn, ZoomOut, Search } from 'lucide-react';
 
 interface SlidesViewerProps {
   slides: string[];
@@ -12,8 +12,18 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  // Touch state for pinch-to-zoom
+  const touchState = useRef({
+    initialDistance: 0,
+    initialZoom: 1,
+    isPinching: false
+  });
 
   // Preload adjacent slides
   useEffect(() => {
@@ -72,6 +82,8 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
   };
 
   const goTo = (index: number) => {
+    setZoom(1);
+    setPosition({ x: 0, y: 0 });
     setCurrentIndex(Math.max(0, Math.min(index, slides.length - 1)));
   };
 
@@ -96,10 +108,54 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
+  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.5, 4));
+  const handleZoomOut = () => {
+    setZoom(prev => {
+      const next = Math.max(prev - 0.5, 1);
+      if (next === 1) setPosition({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  // Touch events for pinch-to-zoom
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const distance = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      touchState.current = {
+        initialDistance: distance,
+        initialZoom: zoom,
+        isPinching: true
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchState.current.isPinching && e.touches.length === 2) {
+      const distance = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      const delta = distance / touchState.current.initialDistance;
+      const newZoom = Math.max(1, Math.min(touchState.current.initialZoom * delta, 4));
+      setZoom(newZoom);
+      if (newZoom === 1) setPosition({ x: 0, y: 0 });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchState.current.isPinching = false;
+  };
+
   return (
     <div 
       ref={containerRef}
       className={`relative w-full h-full bg-black flex flex-col items-center justify-center overflow-hidden select-none ${isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Carousel Wrapper */}
       <div className="relative w-full flex-1 flex items-center justify-center overflow-hidden">
@@ -112,13 +168,19 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
           {slides.map((url, index) => (
             <div 
               key={index} 
-              className="w-full h-full flex items-center justify-center p-4 md:p-8"
+              className="w-full h-full flex items-center justify-center p-4 md:p-8 overflow-hidden"
               style={{ flex: "0 0 100%" }}
             >
-              <img 
+              <motion.img 
+                ref={index === currentIndex ? imageRef : null}
                 src={url} 
                 alt={`Slide ${index + 1}`} 
-                className="max-w-full max-h-full object-contain rounded-xl shadow-2xl pointer-events-none"
+                animate={{ 
+                  scale: index === currentIndex ? zoom : 1,
+                  x: index === currentIndex ? position.x : 0,
+                  y: index === currentIndex ? position.y : 0
+                }}
+                className="max-w-full max-h-full object-contain rounded-xl shadow-2xl pointer-events-none origin-center"
                 referrerPolicy="no-referrer"
                 loading="lazy"
               />
@@ -126,22 +188,26 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
           ))}
         </motion.div>
 
-        {/* Navigation Arrows */}
-        {currentIndex > 0 && (
-          <button 
-            onClick={prev}
-            className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/20 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-black/40 transition-all z-10"
-          >
-            <ChevronLeft size={24} />
-          </button>
-        )}
-        {currentIndex < slides.length - 1 && (
-          <button 
-            onClick={next}
-            className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/20 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-black/40 transition-all z-10"
-          >
-            <ChevronRight size={24} />
-          </button>
+        {/* Navigation Arrows - Hidden when zoomed in */}
+        {zoom === 1 && (
+          <>
+            {currentIndex > 0 && (
+              <button 
+                onClick={prev}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/20 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-black/40 transition-all z-10"
+              >
+                <ChevronLeft size={24} />
+              </button>
+            )}
+            {currentIndex < slides.length - 1 && (
+              <button 
+                onClick={next}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/20 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-black/40 transition-all z-10"
+              >
+                <ChevronRight size={24} />
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -161,7 +227,7 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
         </div>
 
         {/* Action Bar */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6">
           {audioUrl && (
             <div className="flex items-center gap-2">
               <button 
@@ -182,6 +248,27 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
           )}
           
           <div className="h-4 w-px bg-white/20" />
+
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1">
+            <button 
+              onClick={handleZoomOut}
+              className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors text-white/60 hover:text-white"
+              title="Zoom Out"
+            >
+              <ZoomOut size={16} />
+            </button>
+            <span className="text-[10px] font-black w-10 text-center text-white/40">{Math.round(zoom * 100)}%</span>
+            <button 
+              onClick={handleZoomIn}
+              className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors text-white/60 hover:text-white"
+              title="Zoom In"
+            >
+              <ZoomIn size={16} />
+            </button>
+          </div>
+          
+          <div className="h-4 w-px bg-white/20" />
           
           <button 
             onClick={toggleFullscreen}
@@ -191,7 +278,7 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
             {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
 
-          <div className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+          <div className="hidden sm:block text-[10px] font-black text-white/40 uppercase tracking-widest">
             Slide {currentIndex + 1} of {slides.length}
           </div>
         </div>

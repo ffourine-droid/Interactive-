@@ -54,6 +54,8 @@ interface Experiment {
   is_free?: boolean;
   slides?: string[];
   audio_url?: string;
+  pdf_url?: string;
+  ppt_url?: string;
 }
 
 interface Profile {
@@ -130,7 +132,12 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const fetchExperiments = async () => {
     try {
-      const { data, error } = await supabase.from('experiments').select('*').order('title');
+      // Fetch only metadata for the list to improve performance
+      const { data, error } = await supabase
+        .from('experiments')
+        .select('id, title, keywords, subject, grade, category, is_free, slides, audio_url, pdf_url, ppt_url')
+        .order('title');
+      
       if (error) throw error;
       if (data) setExperiments(data);
     } catch (err: any) {
@@ -285,13 +292,15 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
   
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'slides' | 'audio') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'slides' | 'audio' | 'pdf' | 'ppt') => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
     try {
-      const bucket = type === 'slides' ? 'slides' : 'audio';
+      const bucket = type === 'slides' ? 'slides' : 
+                     type === 'audio' ? 'audio' : 
+                     'materials';
       const uploadedUrls: string[] = [];
 
       for (let i = 0; i < files.length; i++) {
@@ -311,6 +320,9 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
         if (uploadError) {
           console.error('Upload error details:', uploadError);
+          if (uploadError.message.includes('row-level security policy')) {
+            throw new Error(`Upload failed: RLS Policy Error. Please ensure the '${bucket}' bucket allows anonymous uploads in your Supabase dashboard.`);
+          }
           throw new Error(`Upload failed for ${file.name}: ${uploadError.message}`);
         }
 
@@ -331,7 +343,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             slides: [...(prev.slides || []), ...uploadedUrls]
           };
         });
-      } else {
+      } else if (type === 'audio') {
         setEditingExp(prev => {
           if (!prev) return prev;
           return {
@@ -339,10 +351,26 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             audio_url: uploadedUrls[0]
           };
         });
+      } else if (type === 'pdf') {
+        setEditingExp(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            pdf_url: uploadedUrls[0]
+          };
+        });
+      } else if (type === 'ppt') {
+        setEditingExp(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ppt_url: uploadedUrls[0]
+          };
+        });
       }
       
       console.log('Upload successful:', uploadedUrls);
-      showToast(`${type === 'slides' ? 'Slides' : 'Audio'} uploaded successfully!`, "success");
+      showToast(`${type.toUpperCase()} uploaded successfully!`, "success");
     } catch (err: any) {
       console.error('File upload error:', err);
       showToast('Upload failed: ' + err.message, "error");
@@ -901,9 +929,27 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </div>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
-                        onClick={() => {
-                          setEditingExp(exp);
-                          setIsExpModalOpen(true);
+                        onClick={async () => {
+                          // Fetch full content when editing
+                          setLoading(true);
+                          try {
+                            const { data, error } = await supabase
+                              .from('experiments')
+                              .select('*')
+                              .eq('id', exp.id)
+                              .single();
+                            
+                            if (error) throw error;
+                            if (data) {
+                              setEditingExp(data);
+                              setIsExpModalOpen(true);
+                            }
+                          } catch (err: any) {
+                            console.error('Error fetching full experiment:', err);
+                            showToast('Failed to load full experiment content.', 'error');
+                          } finally {
+                            setLoading(false);
+                          }
                         }}
                         className="p-2 bg-brand-surface/40 rounded-xl text-brand-text/60 hover:text-brand-accent transition-colors"
                       >
@@ -1281,6 +1327,72 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             accept="audio/*" 
                             className="hidden" 
                             onChange={e => handleFileUpload(e, 'audio')}
+                            disabled={isUploading}
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">PDF Document</label>
+                      {editingExp?.pdf_url ? (
+                        <div className="p-4 bg-brand-surface/20 rounded-2xl border border-brand-surface/40 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-brand-accent/10 rounded-xl">
+                              <FileText size={20} className="text-brand-accent" />
+                            </div>
+                            <span className="text-xs font-bold truncate max-w-[150px]">PDF Uploaded</span>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => setEditingExp(prev => ({ ...prev!, pdf_url: undefined }))}
+                            className="text-red-500 hover:text-red-600 p-2"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="w-full py-8 rounded-2xl border-2 border-dashed border-brand-surface/60 flex flex-col items-center justify-center cursor-pointer hover:border-brand-accent/50 transition-colors">
+                          <Plus size={24} className="text-brand-text/20" />
+                          <span className="text-[10px] font-bold text-brand-text/40 mt-1">Upload PDF</span>
+                          <input 
+                            type="file" 
+                            accept=".pdf" 
+                            className="hidden" 
+                            onChange={e => handleFileUpload(e, 'pdf')}
+                            disabled={isUploading}
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">PPT Document</label>
+                      {editingExp?.ppt_url ? (
+                        <div className="p-4 bg-brand-surface/20 rounded-2xl border border-brand-surface/40 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-brand-accent/10 rounded-xl">
+                              <Database size={20} className="text-brand-accent" />
+                            </div>
+                            <span className="text-xs font-bold truncate max-w-[150px]">PPT Uploaded</span>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => setEditingExp(prev => ({ ...prev!, ppt_url: undefined }))}
+                            className="text-red-500 hover:text-red-600 p-2"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="w-full py-8 rounded-2xl border-2 border-dashed border-brand-surface/60 flex flex-col items-center justify-center cursor-pointer hover:border-brand-accent/50 transition-colors">
+                          <Plus size={24} className="text-brand-text/20" />
+                          <span className="text-[10px] font-bold text-brand-text/40 mt-1">Upload PPT</span>
+                          <input 
+                            type="file" 
+                            accept=".ppt,.pptx" 
+                            className="hidden" 
+                            onChange={e => handleFileUpload(e, 'ppt')}
                             disabled={isUploading}
                           />
                         </label>
