@@ -10,8 +10,6 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, ChevronRight, Settings, WifiOff, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X, Download, Shield, Trash2, Moon, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
-import { Auth } from './components/Auth';
-import { Onboarding } from './components/Onboarding';
 import { CountdownTimer } from './components/CountdownTimer';
 import { SlidesViewer } from './components/SlidesViewer';
 import { ToastProvider, useToast } from './components/Toast';
@@ -32,13 +30,6 @@ interface Experiment {
   grade?: string;
 }
 
-interface Profile {
-  id: string;
-  username: string;
-  phone_number: string;
-  created_at: string;
-}
-
 type Page = 'home' | 'admin';
 
 export default function App() {
@@ -54,14 +45,6 @@ export default function App() {
 function AppContent() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [selectedLesson, setSelectedLesson] = useState<Experiment | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return !localStorage.getItem('azilearn_onboarding_complete');
-    }
-    return false;
-  });
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('azilearn_theme') as 'light' | 'dark') || 'light';
@@ -70,48 +53,6 @@ function AppContent() {
   });
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const { showToast } = useToast();
-
-  const checkProfile = React.useCallback(async () => {
-    const savedPhone = sessionStorage.getItem('azilearn_phone');
-
-    if (!savedPhone) {
-      setIsAuthLoading(false);
-      return;
-    }
-
-    console.log('Checking profile for:', savedPhone);
-    
-    // Safety timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      console.warn('Initial check timed out, forcing loading to false');
-      setIsAuthLoading(false);
-    }, 3000); // Reduced from 5s to 3s
-
-    try {
-      const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('phone_number', savedPhone)
-          .maybeSingle();
-      
-      if (error) throw error;
-      
-      if (data) {
-        console.log('Profile found:', data.username);
-        setProfile(data);
-      } else {
-        console.log('No profile found for this phone');
-        sessionStorage.removeItem('azilearn_phone');
-      }
-    } catch (err) {
-      console.error('Initial check failed:', err);
-      showToast('Failed to load profile.', 'error');
-    } finally {
-      clearTimeout(timeoutId);
-      setIsAuthLoading(false);
-      console.log('Auth loading finished');
-    }
-  }, [showToast]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -137,26 +78,8 @@ function AppContent() {
     localStorage.setItem('azilearn_theme', theme);
   }, [theme]);
 
-  useEffect(() => {
-    checkProfile();
-  }, []);
-
   // Simple router
   const renderPage = () => {
-    if (isAuthLoading) {
-      return (
-        <div className="min-h-screen bg-brand-bg flex items-center justify-center">
-          <Loader2 className="animate-spin text-brand-accent" size={48} />
-        </div>
-      );
-    }
-
-    if (!profile) {
-      return <Auth onSuccess={(p) => {
-        setProfile(p);
-      }} />;
-    }
-
     switch (currentPage) {
       case 'admin':
         return (
@@ -173,12 +96,6 @@ function AppContent() {
       default:
         return (
           <Home 
-            profile={profile}
-            onLogout={() => {
-              sessionStorage.removeItem('azilearn_phone');
-              sessionStorage.removeItem('azilearn_username');
-              setProfile(null);
-            }}
             onAdminClick={() => setCurrentPage('admin')}
             theme={theme}
             setTheme={setTheme}
@@ -201,21 +118,13 @@ function AppContent() {
             <span>OFFLINE MODE — LOADING FROM CACHE</span>
           </motion.div>
         )}
-        {showOnboarding && (
-          <Onboarding onComplete={() => {
-            localStorage.setItem('azilearn_onboarding_complete', 'true');
-            setShowOnboarding(false);
-          }} />
-        )}
       </AnimatePresence>
       {renderPage()}
     </div>
   );
 }
 
-function Home({ profile, onLogout, onAdminClick, theme, setTheme }: { 
-  profile: Profile | null,
-  onLogout: () => void,
+function Home({ onAdminClick, theme, setTheme }: { 
   onAdminClick: () => void,
   theme: 'light' | 'dark',
   setTheme: (theme: 'light' | 'dark') => void
@@ -573,7 +482,7 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
                 className="w-9 h-9 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform relative overflow-hidden shrink-0"
               >
                 <span className="font-sans font-bold text-sm uppercase">
-                  {profile?.username?.[0] || 'A'}
+                  A
                 </span>
               </button>
             </div>
@@ -653,7 +562,7 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
 
                 <div className="space-y-1">
                   <h1 className="font-sans text-2xl font-bold text-brand-text leading-tight">
-                    Welcome, {profile?.username || 'Explorer'}.
+                    Welcome to AziLearn.
                   </h1>
                   <p className="text-[13px] text-brand-muted font-sans">Select your class to start learning</p>
                 </div>
@@ -922,14 +831,6 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
               </a>
             </div>
 
-            {/* Logout Button */}
-            <button 
-              onClick={onLogout}
-              className="w-full py-4 bg-red-500/10 text-red-500 border border-red-500/20 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-500/20 transition-all active:scale-95 text-sm"
-            >
-              <User size={18} />
-              Sign Out
-            </button>
           </div>
         </motion.div>
       )}
@@ -1068,7 +969,7 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {viewMode !== 'slides' && (
+                {viewMode === 'notes' && (
                   <div className="flex items-center gap-1 bg-brand-surface border border-brand-border rounded-xl p-1 mr-1 sm:mr-2">
                     <button 
                       onClick={() => setZoom(prev => Math.max(50, prev - 25))}
@@ -1162,19 +1063,16 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
               
               <div 
                 className={`w-full h-full overflow-auto ${viewMode === 'slides' ? 'hidden' : 'block'}`}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
               >
                 <div 
-                  className="w-full h-full transition-transform duration-300 origin-center"
-                  style={{ 
+                  className={`w-full h-full ${viewMode === 'notes' ? 'transition-transform duration-300 origin-center' : ''}`}
+                  style={viewMode === 'notes' ? { 
                     transform: `scale(${zoom / 100}) translate(${pan.x}%, ${pan.y}%)`,
                     height: '100%',
                     width: '100%',
                     minHeight: '100%',
                     minWidth: '100%'
-                  }}
+                  } : { height: '100%', width: '100%' }}
                 >
                   {viewMode === 'pdf' && selectedExperiment.pdf_url && (
                     <div className="w-full h-full flex flex-col">
@@ -1186,25 +1084,41 @@ function Home({ profile, onLogout, onAdminClick, theme, setTheme }: {
                         className="flex-1 w-full border-none bg-white"
                         title="PDF Viewer"
                       />
-                      <div className="p-4 bg-brand-surface border-t border-brand-border flex items-center justify-between">
-                        <p className="text-xs text-brand-muted">
-                          <span className="font-bold text-brand-accent mr-2">Trouble viewing?</span>
-                          If the document doesn't load, it might be blocked by your browser's security settings.
-                        </p>
-                        <button 
-                          onClick={() => {
-                            const link = document.createElement('a');
-                            link.href = selectedExperiment.pdf_url!;
-                            link.download = `${selectedExperiment.title}.pdf`;
-                            link.target = '_blank';
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                          }}
-                          className="text-xs font-bold text-brand-accent hover:underline flex items-center gap-1"
-                        >
-                          Download Material <Download size={12} />
-                        </button>
+                      <div className="p-4 bg-brand-surface border-t border-brand-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex-1">
+                          <p className="text-xs text-brand-muted">
+                            <span className="font-bold text-brand-accent mr-2">Trouble viewing?</span>
+                            If the document doesn't load, it might be blocked by your browser's security settings.
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            <button 
+                              onClick={() => {
+                                const iframe = document.querySelector('iframe[title="PDF Viewer"]') as HTMLIFrameElement;
+                                if (iframe) {
+                                  iframe.src = `https://docs.google.com/viewer?url=${encodeURIComponent(selectedExperiment.pdf_url!)}&embedded=true`;
+                                }
+                              }}
+                              className="text-[10px] font-bold text-brand-accent hover:underline flex items-center gap-1"
+                            >
+                              Try Google Viewer
+                            </button>
+                            <span className="text-[10px] text-brand-border">|</span>
+                            <button 
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = selectedExperiment.pdf_url!;
+                                link.download = `${selectedExperiment.title}.pdf`;
+                                link.target = '_blank';
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                              className="text-[10px] font-bold text-brand-accent hover:underline flex items-center gap-1"
+                            >
+                              Download Material <Download size={10} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
