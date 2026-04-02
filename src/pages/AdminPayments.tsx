@@ -381,6 +381,47 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
+  const handleHtmlFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.html') && !file.name.endsWith('.htm')) {
+      showToast("Please upload a valid HTML file.", "error");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setEditingExp(prev => prev ? { ...prev, html_content: content } : null);
+      showToast("HTML file content loaded successfully!", "success");
+    };
+    reader.onerror = () => {
+      showToast("Failed to read HTML file.", "error");
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleHtmlDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.name.endsWith('.html') || file.name.endsWith('.htm'))) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setEditingExp(prev => prev ? { ...prev, html_content: content } : null);
+        showToast("HTML file dropped and loaded successfully!", "success");
+      };
+      reader.onerror = () => {
+        showToast("Failed to read dropped HTML file.", "error");
+      };
+      reader.readAsText(file);
+    } else if (file) {
+      showToast("Please drop a valid HTML file.", "error");
+    }
+  };
+
   const removeSlide = (index: number) => {
     setEditingExp(prev => ({
       ...prev!,
@@ -1260,12 +1301,27 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">HTML Content (Optional if using slides)</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black uppercase tracking-widest text-brand-text/40">HTML Content (Optional if using slides)</label>
+                      <label className="flex items-center gap-1.5 px-3 py-1 bg-brand-accent/10 text-brand-accent rounded-lg text-[10px] font-bold cursor-pointer hover:bg-brand-accent/20 transition-all border border-brand-accent/20">
+                        <Plus size={12} />
+                        Upload HTML File
+                        <input 
+                          type="file" 
+                          accept=".html,.htm" 
+                          className="hidden" 
+                          onChange={handleHtmlFileUpload}
+                        />
+                      </label>
+                    </div>
                     <textarea 
                       rows={8}
                       className="w-full bg-brand-surface/20 border border-brand-surface/40 rounded-2xl py-4 px-6 outline-none focus:border-brand-accent/50 transition-all font-mono text-sm"
+                      placeholder="Paste HTML here or drop an HTML file..."
                       value={editingExp?.html_content || ''}
                       onChange={e => setEditingExp({...editingExp!, html_content: e.target.value})}
+                      onDrop={handleHtmlDrop}
+                      onDragOver={(e) => e.preventDefault()}
                     />
                   </div>
 
