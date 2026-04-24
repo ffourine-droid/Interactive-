@@ -25,10 +25,12 @@ import {
   Image as ImageIcon,
   Music,
   User,
-  WifiOff
+  WifiOff,
+  Send
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { AdminAssignmentUploader } from './AdminAssignmentUploader';
 
 interface Payment {
   id: string;
@@ -71,7 +73,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [activeTab, setActiveTab] = useState<'payments' | 'content' | 'users'>('payments');
+  const [activeTab, setActiveTab] = useState<'payments' | 'content' | 'users' | 'assignments'>('payments');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -708,6 +710,17 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <User size={20} />
             Users
           </button>
+          <button
+            onClick={() => setActiveTab('assignments')}
+            className={`flex items-center gap-2 px-8 py-4 rounded-3xl font-bold transition-all ${
+              activeTab === 'assignments' 
+                ? 'bg-brand-accent text-white shadow-xl shadow-brand-accent/20' 
+                : 'bg-brand-surface/20 text-brand-text/40 hover:text-brand-text'
+            }`}
+          >
+            <Send size={20} />
+            Assignments
+          </button>
         </div>
 
         {activeTab === 'payments' ? (
@@ -917,7 +930,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               </table>
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'content' ? (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-4">
@@ -1024,6 +1037,10 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </div>
               ))}
             </div>
+          </div>
+        ) : (
+          <div className="max-w-5xl mx-auto">
+            <AdminAssignmentUploader onBack={() => setActiveTab('payments')} hideHeader={true} />
           </div>
         )}
 

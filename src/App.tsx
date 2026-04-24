@@ -7,7 +7,7 @@
  * AziLearn - Subscription-based study materials platform
  */
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, ChevronRight, Settings, WifiOff, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X, Download, Shield, Trash2, Moon, Sun } from 'lucide-react';
+import { Search, FlaskConical, ExternalLink, Loader2, AlertCircle, ChevronLeft, ChevronRight, Settings, WifiOff, Clock, FileText, PlayCircle, Mic2, User, Smartphone, X, Download, Shield, Trash2, Moon, Sun, Plus, BarChart3, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
 import { CountdownTimer } from './components/CountdownTimer';
@@ -15,7 +15,18 @@ import { SlidesViewer } from './components/SlidesViewer';
 import { ToastProvider, useToast } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+// Google Analytics Global Declaration
+declare global {
+  interface Window {
+    gtag: (command: string, action: string, params?: any) => void;
+  }
+}
+
 const AdminPayments = lazy(() => import('./pages/AdminPayments').then(module => ({ default: module.AdminPayments })));
+const AdminAssignmentUploader = lazy(() => import('./pages/AdminAssignmentUploader').then(module => ({ default: module.AdminAssignmentUploader })));
+const TeacherAssignmentCreator = lazy(() => import('./components/TeacherAssignmentCreator'));
+const StudentAssignmentView = lazy(() => import('./components/StudentAssignmentView'));
+const TeacherDashboard = lazy(() => import('./components/TeacherDashboard'));
 
 interface Experiment {
   id: string | number;
@@ -30,7 +41,7 @@ interface Experiment {
   grade?: string;
 }
 
-type Page = 'home' | 'admin';
+type Page = 'home' | 'admin' | 'teacher' | 'assignments' | 'teacher-dashboard';
 
 export default function App() {
   return (
@@ -78,9 +89,58 @@ function AppContent() {
     localStorage.setItem('azilearn_theme', theme);
   }, [theme]);
 
+  // Track page changes for Google Analytics
+  useEffect(() => {
+    if (typeof window.gtag === 'function') {
+      window.gtag('config', 'G-RMW0VBKKBD', {
+        page_path: `/${currentPage}`,
+        page_title: currentPage.charAt(0).toUpperCase() + currentPage.slice(1)
+      });
+    }
+  }, [currentPage]);
+
   // Simple router
   const renderPage = () => {
     switch (currentPage) {
+      case 'assignments':
+        return (
+          <Suspense fallback={
+            <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center gap-4">
+              <Loader2 className="animate-spin text-brand-accent" size={48} />
+              <p className="text-brand-muted font-bold text-sm animate-pulse">Entering Classroom...</p>
+            </div>
+          }>
+            <div className="max-w-[420px] mx-auto min-h-screen">
+              <StudentAssignmentView onBack={() => setCurrentPage('home')} />
+            </div>
+          </Suspense>
+        );
+      case 'teacher':
+        return (
+          <Suspense fallback={
+            <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center gap-4">
+              <Loader2 className="animate-spin text-brand-accent" size={48} />
+              <p className="text-brand-muted font-bold text-sm animate-pulse">Loading Teacher Workspace...</p>
+            </div>
+          }>
+            <div className="max-w-4xl mx-auto min-h-screen">
+              <TeacherAssignmentCreator onBack={() => setCurrentPage('home')} />
+            </div>
+          </Suspense>
+        );
+      case 'teacher-dashboard':
+        return (
+          <Suspense fallback={
+            <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center gap-4">
+              <Loader2 className="animate-spin text-brand-accent" size={48} />
+              <p className="text-brand-muted font-bold text-sm animate-pulse">Entering Dashboard...</p>
+            </div>
+          }>
+            <div className="min-h-screen">
+              <TeacherDashboard onBack={() => setCurrentPage('home')} />
+            </div>
+          </Suspense>
+        );
       case 'admin':
         return (
           <Suspense fallback={
@@ -97,6 +157,9 @@ function AppContent() {
         return (
           <Home 
             onAdminClick={() => setCurrentPage('admin')}
+            onTeacherClick={() => setCurrentPage('teacher')}
+            onTeacherDashboardClick={() => setCurrentPage('teacher-dashboard')}
+            onAssignmentsClick={() => setCurrentPage('assignments')}
             theme={theme}
             setTheme={setTheme}
           />
@@ -124,8 +187,11 @@ function AppContent() {
   );
 }
 
-function Home({ onAdminClick, theme, setTheme }: { 
+function Home({ onAdminClick, onTeacherClick, onTeacherDashboardClick, onAssignmentsClick, theme, setTheme }: { 
   onAdminClick: () => void,
+  onTeacherClick: () => void,
+  onTeacherDashboardClick: () => void,
+  onAssignmentsClick: () => void,
   theme: 'light' | 'dark',
   setTheme: (theme: 'light' | 'dark') => void
 }) {
@@ -211,6 +277,14 @@ function Home({ onAdminClick, theme, setTheme }: {
     setDebouncedQuery('');
     // Pre-load the class results
     handleSearch('', category, grade);
+
+    // Track class selection
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'select_class', {
+        event_category: 'engagement',
+        event_label: grade
+      });
+    }
   };
 
   // Save cache to localStorage with debounce and size limit
@@ -289,6 +363,13 @@ function Home({ onAdminClick, theme, setTheme }: {
     
     if (query) {
       addToHistory(query);
+
+      // Track search event
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', 'search', {
+          search_term: query
+        });
+      }
     }
     
     try {
@@ -356,6 +437,16 @@ function Home({ onAdminClick, theme, setTheme }: {
   }, [debouncedQuery, category, selectedClass]);
 
   const openExperiment = async (exp: Experiment) => {
+    // Track lesson view
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'view_lesson', {
+        lesson_id: exp.id,
+        lesson_title: exp.title,
+        subject: exp.subject,
+        grade: exp.grade
+      });
+    }
+
     // Helper to set initial view mode
     const setInitialViewMode = (data: Experiment) => {
       setZoom(100); // Reset zoom on open
@@ -829,6 +920,47 @@ function Home({ onAdminClick, theme, setTheme }: {
                   <ExternalLink size={16} />
                 </div>
               </a>
+
+              <div className="h-px bg-brand-border/50" />
+
+              {/* Teacher Assignment Creator */}
+              <button 
+                onClick={onTeacherDashboardClick}
+                className="w-full flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
+                    <BarChart3 size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Teacher Portal</p>
+                    <p className="text-[11px] text-brand-muted">Track assignments and grade work</p>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ChevronRight size={16} />
+                </div>
+              </button>
+
+              <div className="h-px bg-brand-border/50" />
+
+              <button 
+                onClick={onTeacherClick}
+                className="w-full flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500">
+                    <Plus size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Create Assignment</p>
+                    <p className="text-[11px] text-brand-muted">New quiz or homework</p>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <Plus size={16} />
+                </div>
+              </button>
             </div>
 
           </div>
@@ -841,6 +973,7 @@ function Home({ onAdminClick, theme, setTheme }: {
         <div className="flex justify-around px-2 pb-4">
           {[
             { id: 'home', label: 'Home', icon: FlaskConical, action: () => setActiveTab('home') },
+            { id: 'assignments', label: 'Class', icon: FileText, action: () => { setActiveTab('home'); onAssignmentsClick(); } },
             { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
           ].map((tab) => (
             <button

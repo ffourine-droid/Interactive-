@@ -72,6 +72,22 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ plan, lessonId, amount
 
       setSubmitted(true);
       showToast("Payment submitted successfully!", "success");
+
+      // Track purchase event
+      if (typeof (window as any).gtag === 'function') {
+        (window as any).gtag('event', 'purchase', {
+          transaction_id: trimmedCode,
+          value: amount,
+          currency: 'KES',
+          items: [{
+            item_id: lessonId || plan,
+            item_name: plan + ' subscription',
+            price: amount,
+            quantity: 1
+          }]
+        });
+      }
+
       onSuccess();
     } catch (err: any) {
       console.error('Submission error:', err);
