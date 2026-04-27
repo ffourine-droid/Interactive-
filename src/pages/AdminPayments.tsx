@@ -107,9 +107,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      fetchPayments();
-      fetchExperiments();
-      fetchProfiles();
+      fetchAllAdminData();
       
       const paymentsSub = supabase
         .channel('payments_changes')
@@ -131,6 +129,21 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       };
     }
   }, [isAuthenticated]);
+
+  const fetchAllAdminData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchPayments(),
+        fetchExperiments(),
+        fetchProfiles()
+      ]);
+    } catch (err) {
+      console.error('Error fetching admin data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchExperiments = async () => {
     try {
@@ -161,7 +174,6 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const fetchPayments = async (isManual = false) => {
     if (isManual) setRefreshing(true);
-    else setLoading(true);
 
     try {
       const { data, error } = await supabase
@@ -179,7 +191,6 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       console.error('Fetch payments error:', err);
       showToast('Failed to fetch payments: ' + err.message, 'error');
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   };
@@ -607,131 +618,104 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   return (
     <div className="min-h-screen bg-brand-bg">
       {/* Sidebar / Top Nav */}
-      <div className="max-w-7xl mx-auto p-6 lg:p-12">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-          <div className="flex items-center gap-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 md:py-10">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-4">
             <button 
               onClick={onBack}
-              className="p-3 bg-brand-surface border border-brand-border rounded-2xl text-brand-muted hover:text-brand-accent transition-all shadow-sm"
+              className="p-2 bg-brand-surface border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-all shadow-sm"
             >
-              <Home size={24} />
+              <Home size={20} />
             </button>
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-brand-accent/10 rounded-xl">
-                  <Shield className="text-brand-accent" size={20} />
-                </div>
-                <span className="font-bold uppercase tracking-widest text-[10px] text-brand-accent">Admin Dashboard</span>
+              <div className="flex items-center gap-2 mb-1">
+                <Shield className="text-brand-accent" size={14} />
+                <span className="font-bold uppercase tracking-widest text-[8px] text-brand-accent">Admin Dashboard</span>
               </div>
-              <h1 className="text-4xl font-bold tracking-tight">Management Console</h1>
+              <h1 className="text-2xl font-black tracking-tight leading-none">Management</h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex gap-4">
-              <div className="bg-brand-surface border border-brand-border rounded-3xl p-4 flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-brand-accent/10 rounded-2xl">
-                  <TrendingUp className="text-brand-accent" size={24} />
+          <div className="flex items-center gap-2">
+            <div className="hidden lg:flex gap-2">
+              <div className="bg-brand-surface border border-brand-border rounded-2xl p-2.5 flex items-center gap-3 shadow-sm min-w-[140px]">
+                <div className="p-2 bg-brand-accent/10 rounded-xl">
+                  <TrendingUp className="text-brand-accent" size={18} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">Revenue Today</p>
-                  <p className="text-xl font-bold tracking-tight">KES {stats.revenueToday}</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Revenue Today</p>
+                  <p className="text-sm font-black">KES {stats.revenueToday}</p>
                 </div>
               </div>
-              <div className="bg-brand-surface border border-brand-border rounded-3xl p-4 flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-indigo-500/10 rounded-2xl">
-                  <TrendingUp className="text-indigo-500" size={24} />
+              <div className="bg-brand-surface border border-brand-border rounded-2xl p-2.5 flex items-center gap-3 shadow-sm min-w-[140px]">
+                <div className="p-2 bg-indigo-500/10 rounded-xl">
+                  <TrendingUp className="text-indigo-500" size={18} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">Total Revenue</p>
-                  <p className="text-xl font-bold tracking-tight">KES {stats.totalRevenue}</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Total</p>
+                  <p className="text-sm font-black">KES {stats.totalRevenue}</p>
                 </div>
               </div>
-              <div className="bg-brand-surface border border-brand-border rounded-3xl p-4 flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-amber-500/10 rounded-2xl">
-                  <Clock className="text-amber-500" size={24} />
+              <div className="bg-brand-surface border border-brand-border rounded-2xl p-2.5 flex items-center gap-3 shadow-sm min-w-[100px]">
+                <div className="p-2 bg-amber-500/10 rounded-xl">
+                  <Clock className="text-amber-500" size={18} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">Pending</p>
-                  <p className="text-xl font-bold tracking-tight">{stats.pending}</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Pending</p>
+                  <p className="text-sm font-black">{stats.pending}</p>
                 </div>
               </div>
               <button 
                 onClick={() => fetchPayments(true)}
                 disabled={refreshing}
-                className="p-4 bg-brand-surface border border-brand-border rounded-3xl hover:bg-brand-bg transition-all disabled:opacity-50 shadow-sm"
+                className="p-2.5 bg-brand-surface border border-brand-border rounded-xl hover:bg-brand-bg transition-all disabled:opacity-50 shadow-sm"
                 title="Refresh Data"
               >
-                <Database className={`${refreshing ? 'animate-spin' : ''}`} size={24} />
+                <Database className={`${refreshing ? 'animate-spin' : ''}`} size={18} />
               </button>
             </div>
             <button 
               onClick={handleLogout}
-              className="p-4 bg-red-500/10 text-red-500 border border-red-500/20 rounded-3xl hover:bg-red-500/20 transition-all shadow-sm"
+              className="p-2.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl hover:bg-red-500/20 transition-all shadow-sm"
               title="Logout"
             >
-              <LogOut size={24} />
+              <LogOut size={18} />
             </button>
           </div>
         </header>
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-8">
-          <button
-            onClick={() => setActiveTab('payments')}
-            className={`flex items-center gap-2 px-8 py-4 rounded-3xl font-bold transition-all ${
-              activeTab === 'payments' 
-                ? 'bg-brand-accent text-white shadow-xl shadow-brand-accent/20' 
-                : 'bg-brand-surface/20 text-brand-text/40 hover:text-brand-text'
-            }`}
-          >
-            <LayoutDashboard size={20} />
-            Payments
-          </button>
-          <button
-            onClick={() => setActiveTab('content')}
-            className={`flex items-center gap-2 px-8 py-4 rounded-3xl font-bold transition-all ${
-              activeTab === 'content' 
-                ? 'bg-brand-accent text-white shadow-xl shadow-brand-accent/20' 
-                : 'bg-brand-surface/20 text-brand-text/40 hover:text-brand-text'
-            }`}
-          >
-            <Database size={20} />
-            Content
-          </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-2 px-8 py-4 rounded-3xl font-bold transition-all ${
-              activeTab === 'users' 
-                ? 'bg-brand-accent text-white shadow-xl shadow-brand-accent/20' 
-                : 'bg-brand-surface/20 text-brand-text/40 hover:text-brand-text'
-            }`}
-          >
-            <User size={20} />
-            Users
-          </button>
-          <button
-            onClick={() => setActiveTab('assignments')}
-            className={`flex items-center gap-2 px-8 py-4 rounded-3xl font-bold transition-all ${
-              activeTab === 'assignments' 
-                ? 'bg-brand-accent text-white shadow-xl shadow-brand-accent/20' 
-                : 'bg-brand-surface/20 text-brand-text/40 hover:text-brand-text'
-            }`}
-          >
-            <Send size={20} />
-            Assignments
-          </button>
+        <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar pb-2">
+          {[
+            { id: 'payments', icon: LayoutDashboard, label: 'Payments' },
+            { id: 'content', icon: Database, label: 'Content' },
+            { id: 'users', icon: User, label: 'Users' },
+            { id: 'assignments', icon: Send, label: 'Assignments' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex-shrink-0 ${
+                activeTab === tab.id 
+                  ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' 
+                  : 'bg-brand-surface/40 text-brand-text/40 hover:text-brand-text border border-brand-border/40'
+              }`}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {activeTab === 'payments' ? (
-          <div className="bg-brand-surface/20 border border-brand-surface/40 rounded-[2.5rem] overflow-hidden shadow-2xl">
-            <div className="p-8 border-b border-brand-surface/40 flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="flex bg-brand-bg p-1 rounded-2xl border border-brand-surface/60 overflow-x-auto">
+          <div className="bg-brand-surface/20 border border-brand-surface/40 rounded-3xl overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-brand-surface/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex bg-brand-bg p-0.5 rounded-lg border border-brand-surface/60 overflow-x-auto no-scrollbar">
                 {(['pending', 'approved', 'rejected', 'all'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setFilter(t)}
-                    className={`px-6 py-2 rounded-xl text-sm font-bold transition-all capitalize whitespace-nowrap ${
+                    className={`px-4 py-1.5 rounded-md text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
                       filter === t ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-text/40 hover:text-brand-text'
                     }`}
                   >
@@ -740,12 +724,12 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 ))}
               </div>
 
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-text/20" size={18} />
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-text/20" size={14} />
                 <input
                   type="text"
                   placeholder="Search phone number..."
-                  className="w-full bg-brand-bg border border-brand-surface/60 rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all text-sm"
+                  className="w-full bg-brand-bg border border-brand-surface/60 rounded-xl py-2 px-10 outline-none focus:border-brand-accent/50 transition-all text-xs font-bold"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -755,14 +739,14 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="text-[10px] font-black uppercase tracking-widest text-brand-text/40 border-b border-brand-surface/40">
-                    <th className="px-8 py-4">Phone Number</th>
-                    <th className="px-8 py-4">Transaction Code</th>
-                    <th className="px-8 py-4">Plan / Lesson</th>
-                    <th className="px-8 py-4">Amount</th>
-                    <th className="px-8 py-4">Submitted</th>
-                    <th className="px-8 py-4">Status</th>
-                    <th className="px-8 py-4 text-right">Actions</th>
+                  <tr className="text-[9px] font-black uppercase tracking-[0.2em] text-brand-text/40 border-b border-brand-surface/40">
+                    <th className="px-6 py-3">Phone</th>
+                    <th className="px-6 py-3">Code</th>
+                    <th className="px-6 py-3">Plan</th>
+                    <th className="px-6 py-3">Amount</th>
+                    <th className="px-6 py-3">Date</th>
+                    <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-surface/40">
@@ -775,82 +759,83 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         exit={{ opacity: 0 }}
                         className="group hover:bg-brand-surface/10 transition-colors"
                       >
-                        <td className="px-8 py-6">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-brand-accent">{p.phone_number}</span>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-xs text-brand-text">{p.phone_number}</span>
                             <button 
                               onClick={() => {
                                 navigator.clipboard.writeText(p.phone_number);
-                                showToast("Phone number copied!", "success");
+                                showToast("Copied!", "success");
                               }}
-                              className="p-1.5 text-brand-text/20 hover:text-brand-accent transition-colors"
+                              className="p-1 text-brand-text/10 hover:text-brand-accent transition-colors"
                             >
-                              <Copy size={14} />
+                              <Copy size={12} />
                             </button>
                           </div>
                         </td>
-                        <td className="px-8 py-6">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold tracking-widest uppercase">{p.transaction_code}</span>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono text-[10px] font-black tracking-widest uppercase opacity-60 group-hover:opacity-100 transition-opacity">{p.transaction_code}</span>
                             <button 
                               onClick={() => {
                                 navigator.clipboard.writeText(p.transaction_code);
-                                showToast("Code copied!", "success");
+                                showToast("Copied!", "success");
                               }}
-                              className="p-1.5 text-brand-text/20 hover:text-brand-accent transition-colors"
+                              className="p-1 text-brand-text/10 hover:text-brand-accent transition-colors"
                             >
-                              <Copy size={14} />
+                              <Copy size={12} />
                             </button>
                           </div>
                         </td>
-                        <td className="px-8 py-6">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
                             p.plan === 'monthly' ? 'bg-indigo-500/10 text-indigo-500' : 
                             p.plan === 'weekly' ? 'bg-blue-500/10 text-blue-500' :
                             'bg-emerald-500/10 text-emerald-500'
                           }`}>
                             {p.plan}
                           </span>
-                          {p.lesson_id && <p className="text-xs text-brand-text/40 mt-1">{p.lesson_id}</p>}
                         </td>
-                        <td className="px-8 py-6 font-bold">KES {p.amount}</td>
-                        <td className="px-8 py-6 text-xs text-brand-text/40">
-                          {new Date(p.created_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}
+                        <td className="px-6 py-4">
+                          <span className="font-black text-xs">KES {p.amount}</span>
                         </td>
-                        <td className="px-8 py-6">
-                          <span className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest ${
+                        <td className="px-6 py-4 text-[10px] font-bold text-brand-muted">
+                          {new Date(p.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-widest ${
                             p.status === 'approved' ? 'text-emerald-500' : 
                             p.status === 'rejected' ? 'text-red-500' : 'text-amber-500'
                           }`}>
-                            {p.status === 'approved' ? <CheckCircle2 size={12} /> : 
-                             p.status === 'rejected' ? <XCircle size={12} /> : <Clock size={12} />}
+                            {p.status === 'approved' ? <CheckCircle2 size={10} /> : 
+                             p.status === 'rejected' ? <XCircle size={10} /> : <Clock size={10} />}
                             {p.status}
                           </span>
                         </td>
-                        <td className="px-8 py-6 text-right">
-                          {p.status === 'pending' && (
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => approvePayment(p.id, p.plan)}
-                                className="p-2 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500/20 transition-colors"
-                                title="Approve"
-                              >
-                                <CheckCircle2 size={18} />
-                              </button>
-                              <button
-                                onClick={() => setRejectingId(p.id)}
-                                className="p-2 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20 transition-colors"
-                                title="Reject"
-                              >
-                                <XCircle size={18} />
-                              </button>
-                            </div>
-                          )}
-                          {p.status === 'rejected' && (
-                            <div className="flex items-center justify-end gap-2 text-red-500/40" title={p.rejection_reason}>
-                              <AlertCircle size={18} />
-                            </div>
-                          )}
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {p.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => approvePayment(p.id, p.plan)}
+                                  className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-all active:scale-90"
+                                  title="Approve"
+                                >
+                                  <CheckCircle2 size={16} />
+                                </button>
+                                <button
+                                  onClick={() => setRejectingId(p.id)}
+                                  className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 transition-all active:scale-90"
+                                  title="Reject"
+                                >
+                                  <XCircle size={16} />
+                                </button>
+                              </>
+                            )}
+                            <button className="p-2 text-brand-text/10 hover:text-brand-text transition-all rounded-lg active:scale-90">
+                              <MoreHorizontal size={16} />
+                            </button>
+                          </div>
                         </td>
                       </motion.tr>
                     ))}
@@ -858,8 +843,8 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </tbody>
               </table>
               {filteredPayments.length === 0 && (
-                <div className="p-20 text-center">
-                  <p className="text-brand-text/40">No payments found matching your criteria.</p>
+                <div className="p-10 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-text/20">No matching payments</p>
                 </div>
               )}
             </div>

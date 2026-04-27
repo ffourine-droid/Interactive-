@@ -107,6 +107,9 @@ export const AdminAssignmentUploader: React.FC<{ onBack: () => void; hideHeader?
 
     setLoading(true);
     try {
+      const teacherData = localStorage.getItem('azilearn_teacher');
+      const teacherId = teacherData ? JSON.parse(teacherData).id : 'admin';
+
       const studentArray = form.expected_students
         .split(',')
         .map(s => s.trim())
@@ -128,7 +131,7 @@ export const AdminAssignmentUploader: React.FC<{ onBack: () => void; hideHeader?
       const { data, error } = await supabase
         .from('assignments')
         .insert([{
-          teacher_id: 'admin',
+          teacher_id: teacherId,
           title: form.title,
           subject: form.subject,
           grade: `Grade ${form.grade}`,
