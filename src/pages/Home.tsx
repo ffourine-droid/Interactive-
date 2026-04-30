@@ -5,7 +5,7 @@ import {
   FileText, PlayCircle, Mic2, X, Download, 
   BarChart3, Plus, Moon, Sun, Trash2, Smartphone, 
   ExternalLink, CheckCircle2, XCircle, MoreHorizontal,
-  Home as HomeIcon, LogOut, Shield, GraduationCap
+  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -19,13 +19,14 @@ interface HomeProps {
   onTeacherClick: () => void;
   onTeacherDashboardClick: () => void;
   onAssignmentsClick: () => void;
+  onParentClick: () => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
 }
 
 export function Home({ 
   onAdminClick, onTeacherClick, onTeacherDashboardClick, 
-  onAssignmentsClick, theme, setTheme 
+  onAssignmentsClick, onParentClick, theme, setTheme 
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -700,6 +701,26 @@ export function Home({
                   <div className="text-left">
                     <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Teacher Portal</p>
                     <p className="text-[11px] text-brand-muted">Points & Grade work</p>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ChevronRight size={16} />
+                </div>
+              </button>
+
+              <div className="h-px bg-brand-border/50" />
+
+              <button 
+                onClick={onParentClick}
+                className="w-full flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Parent Portal</p>
+                    <p className="text-[11px] text-brand-muted">Check your child's progress</p>
                   </div>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">

@@ -20,7 +20,8 @@ import {
   Clock,
   Loader2,
   MessageCircle,
-  Download
+  Download,
+  ClipboardList
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -38,6 +39,7 @@ interface Question {
 interface Student {
   id: string;
   name: string;
+  parent_code?: string;
 }
 
 interface AssignmentForm {
@@ -65,7 +67,10 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
   const [success, setSuccess] = useState<string | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
+  const [bulkNames, setBulkNames] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
+  const [newStudentCode, setNewStudentCode] = useState('');
   const [form, setForm] = useState<AssignmentForm>({
     title: '',
     subject: '',
@@ -180,7 +185,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       setLoading(true);
       const { data, error } = await supabase
         .from('students')
-        .select('id, name')
+        .select('id, name, parent_code')
         .eq('class_id', classId)
         .order('name');
 
@@ -205,11 +210,75 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     if (!newStudentName.trim() || !form.class_id || form.class_id === 'new') return;
 
     try {
+      // 1. Get the current teacher's school name to uniquely identify students by school
+      const { data: teacherData } = await supabase
+        .from('teachers')
+        .select('school_name')
+        .eq('id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+
+      const schoolName = teacherData?.school_name || '';
+
+      // 2. Check if student already exists in this grade and school
+      const { data: existingStudent } = await supabase
+        .from('students')
+        .select(`
+          id, parent_code,
+          classes!inner (
+            teachers!inner (
+              school_name
+            )
+          )
+        `)
+        .ilike('name', newStudentName.trim())
+        .eq('grade', `Grade ${form.grade}`)
+        .eq('classes.teachers.school_name', schoolName)
+        .maybeSingle();
+
+      let parent_code = newStudentCode.trim();
+
+      if (existingStudent) {
+        setNewStudentName('');
+        setNewStudentCode('');
+        const confirmUseExisting = confirm(`Student ${newStudentName.trim()} already exists in another class at this school with Index #${existingStudent.parent_code}. Use this index?`);
+        if (!confirmUseExisting) return;
+        parent_code = existingStudent.parent_code;
+      } else if (!parent_code) {
+        const { data: schoolStudents, error: fetchError } = await supabase
+          .from('students')
+          .select(`
+            parent_code,
+            classes!inner (
+              teachers!inner (
+                school_name
+              )
+            )
+          `)
+          .eq('classes.teachers.school_name', schoolName)
+          .eq('grade', `Grade ${form.grade}`);
+
+        if (fetchError) throw fetchError;
+
+        let nextIndex = 1;
+        if (schoolStudents && schoolStudents.length > 0) {
+          const indices = schoolStudents
+            .map(s => parseInt(s.parent_code))
+            .filter(n => !isNaN(n));
+          if (indices.length > 0) {
+            nextIndex = Math.max(...indices) + 1;
+          }
+        }
+        
+        parent_code = nextIndex.toString().padStart(4, '0');
+      }
+
       const { data, error } = await supabase
         .from('students')
         .insert([{
           name: newStudentName.trim(),
-          class_id: form.class_id
+          class_id: form.class_id,
+          grade: `Grade ${form.grade}`,
+          parent_code: parent_code
         }])
         .select()
         .single();
@@ -219,32 +288,137 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       if (data) {
         setStudents(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
         setNewStudentName('');
+        setNewStudentCode('');
         showToast("Student added to class", "success");
       }
     } catch (err) {
-      showToast("Failed to add student", "error");
+      showToast("Failed to add student. Code might be taken.", "error");
+    }
+  };
+
+  const handleBulkAdd = async () => {
+    if (!bulkNames.trim() || !form.class_id || form.class_id === 'new' || !form.grade) return;
+
+    const lines = bulkNames
+      .split('\n')
+      .map(n => n.trim())
+      .filter(n => n.length > 0);
+
+    if (lines.length === 0) return;
+
+    try {
+      setLoading(true);
+      
+      // Get school name
+      const { data: teacherData } = await supabase
+        .from('teachers')
+        .select('school_name')
+        .eq('id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+      const schoolName = teacherData?.school_name || '';
+
+      // Get current school students for index
+      const { data: schoolStudents, error: fetchError } = await supabase
+        .from('students')
+        .select(`
+          name,
+          parent_code,
+          classes!inner (
+            teachers!inner (
+              school_name
+            )
+          )
+        `)
+        .eq('classes.teachers.school_name', schoolName)
+        .eq('grade', `Grade ${form.grade}`);
+
+      if (fetchError) throw fetchError;
+
+      const existingCodes = new Set(
+        (schoolStudents || [])
+          .map(s => parseInt(s.parent_code))
+          .filter(n => !isNaN(n))
+      );
+
+      let currentCode = 1;
+      const newStudents = [];
+
+      for (const line of lines) {
+        let name = line;
+        let parent_code = '';
+
+        if (line.includes(',')) {
+          const parts = line.split(',');
+          name = parts[0].trim();
+          parent_code = parts[1].trim().replace(/\D/g, '').padStart(4, '0');
+        }
+
+        // Check if student with this name already exists in this school/grade
+        const existingStudent = (schoolStudents || []).find(s => s.name.toLowerCase() === name.toLowerCase());
+        
+        if (existingStudent) {
+          parent_code = existingStudent.parent_code;
+        } else if (!parent_code || existingCodes.has(parseInt(parent_code))) {
+          while (existingCodes.has(currentCode)) {
+            currentCode++;
+          }
+          parent_code = currentCode.toString().padStart(4, '0');
+          existingCodes.add(parseInt(parent_code));
+        } else {
+          existingCodes.add(parseInt(parent_code));
+        }
+        
+        newStudents.push({
+          name,
+          class_id: form.class_id,
+          grade: `Grade ${form.grade}`,
+          parent_code: parent_code
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('students')
+        .insert(newStudents)
+        .select();
+
+      if (error) throw error;
+
+      if (data) {
+        setStudents(prev => [...prev, ...data].sort((a, b) => a.name.localeCompare(b.name)));
+        setBulkNames('');
+        setShowBulkAdd(false);
+        showToast(`Added ${newStudents.length} students`, "success");
+      }
+    } catch (err) {
+      showToast("Failed to bulk add students", "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [editingCode, setEditingCode] = useState('');
 
-  const updateStudentName = async (studentId: string) => {
-    if (!editingName.trim()) return;
+  const updateStudent = async (studentId: string) => {
+    if (!editingName.trim() || !editingCode.trim()) return;
 
     try {
       const { error } = await supabase
         .from('students')
-        .update({ name: editingName.trim() })
+        .update({ 
+          name: editingName.trim(),
+          parent_code: editingCode.trim().padStart(4, '0')
+        })
         .eq('id', studentId);
 
       if (error) throw error;
 
-      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, name: editingName.trim() } : s).sort((a, b) => a.name.localeCompare(b.name)));
+      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, name: editingName.trim(), parent_code: editingCode.trim().padStart(4, '0') } : s).sort((a, b) => a.name.localeCompare(b.name)));
       setEditingStudentId(null);
-      showToast("Student name updated", "success");
+      showToast("Student updated", "success");
     } catch (err) {
-      showToast("Failed to update student", "error");
+      showToast("Failed to update student. Code might be taken.", "error");
     }
   };
 
@@ -635,47 +809,61 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                             <div className="flex-1 flex gap-2">
                               <input 
                                 type="text"
+                                maxLength={4}
+                                className="w-12 bg-transparent border-b border-brand-accent outline-none font-black text-xs text-brand-accent text-center"
+                                value={editingCode}
+                                onChange={e => setEditingCode(e.target.value.replace(/\D/g, ''))}
+                              />
+                              <input 
+                                type="text"
                                 className="flex-1 bg-transparent border-none outline-none font-bold text-sm"
                                 value={editingName}
                                 autoFocus
                                 onChange={e => setEditingName(e.target.value)}
                                 onKeyDown={e => {
-                                  if (e.key === 'Enter') updateStudentName(student.id);
+                                  if (e.key === 'Enter') updateStudent(student.id);
                                   if (e.key === 'Escape') setEditingStudentId(null);
                                 }}
                               />
-                              <button onClick={() => updateStudentName(student.id)} className="text-emerald-500"><Check size={16} /></button>
+                              <button onClick={() => updateStudent(student.id)} className="text-emerald-500"><Check size={16} /></button>
                               <button onClick={() => setEditingStudentId(null)} className="text-brand-muted"><X size={16} /></button>
                             </div>
                           ) : (
-                            <>
+                            <div className="flex-1 flex items-center gap-3">
+                              <span className="text-[10px] font-black text-brand-accent bg-brand-accent/5 px-2 py-0.5 rounded border border-brand-accent/10 font-mono">
+                                {student.parent_code || '----'}
+                              </span>
                               <span 
                                 className="text-sm font-bold cursor-pointer hover:text-brand-accent transition-colors flex-1"
                                 onClick={() => {
                                   setEditingStudentId(student.id);
                                   setEditingName(student.name);
+                                  setEditingCode(student.parent_code || '');
                                 }}
                               >
                                 {student.name}
                               </span>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                <button 
-                                  onClick={() => {
-                                    setEditingStudentId(student.id);
-                                    setEditingName(student.name);
-                                  }}
-                                  className="p-1.5 text-brand-muted hover:text-brand-accent hover:bg-brand-accent/5 rounded-lg"
-                                >
-                                  <Type size={14} />
-                                </button>
-                                <button 
-                                  onClick={() => removeStudentFromClass(student.id)}
-                                  className="p-1.5 text-brand-muted hover:text-red-500 hover:bg-red-500/5 rounded-lg"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </>
+                            </div>
+                          )}
+                          {!editingStudentId && (
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              <button 
+                                onClick={() => {
+                                  setEditingStudentId(student.id);
+                                  setEditingName(student.name);
+                                  setEditingCode(student.parent_code || '');
+                                }}
+                                className="p-1.5 text-brand-muted hover:text-brand-accent hover:bg-brand-accent/5 rounded-lg"
+                              >
+                                <Type size={14} />
+                              </button>
+                              <button 
+                                onClick={() => removeStudentFromClass(student.id)}
+                                className="p-1.5 text-brand-muted hover:text-red-500 hover:bg-red-500/5 rounded-lg"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           )}
                         </div>
                       ))}
@@ -684,33 +872,75 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                       )}
                     </div>
 
-                    <div className="flex gap-2">
-                      <input 
-                        type="text"
-                        placeholder="Add new student..."
-                        className="flex-1 bg-brand-bg border border-brand-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-brand-accent/50"
-                        value={newStudentName}
-                        onChange={e => setNewStudentName(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && addStudentToClass()}
-                      />
+                    <div className="flex gap-2 mb-4">
                       <button 
-                        onClick={addStudentToClass}
-                        className="p-2.5 bg-brand-accent text-white rounded-xl shadow-lg shadow-brand-accent/20 active:scale-95 transition-transform"
+                        onClick={() => setShowBulkAdd(!showBulkAdd)}
+                        className={`flex-1 py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                          showBulkAdd ? 'bg-brand-accent text-white border-brand-accent' : 'bg-brand-surface text-brand-muted border-brand-border hover:border-brand-accent/50'
+                        }`}
                       >
-                        <Plus size={18} />
+                        <ClipboardList size={12} className="inline mr-2" />
+                        {showBulkAdd ? 'Single Add' : 'Bulk Add Mode'}
                       </button>
                     </div>
+
+                    {showBulkAdd ? (
+                      <div className="space-y-3">
+                        <textarea 
+                          placeholder="Name, Index (one per line)...&#10;John Doe, 0001&#10;Jane Smith, 0002"
+                          rows={4}
+                          className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 text-sm font-bold outline-none focus:border-brand-accent/50 resize-none"
+                          value={bulkNames}
+                          onChange={e => setBulkNames(e.target.value)}
+                        />
+                        <p className="text-[9px] text-brand-muted/70 italic px-1">Tip: Comma-separated name and index number works best.</p>
+                        <button 
+                          onClick={handleBulkAdd}
+                          disabled={loading || !bulkNames.trim()}
+                          className="w-full bg-brand-accent text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {loading ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
+                          Add {bulkNames.split('\n').filter(n => n.trim()).length || ''} Students
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          placeholder="Name..."
+                          className="flex-[2] bg-brand-bg border border-brand-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-brand-accent/50"
+                          value={newStudentName}
+                          onChange={e => setNewStudentName(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && addStudentToClass()}
+                        />
+                        <input 
+                          type="text"
+                          placeholder="Index"
+                          maxLength={4}
+                          className="flex-1 bg-brand-bg border border-brand-border rounded-xl px-3 py-2 text-xs font-black text-center outline-none focus:border-brand-accent/50"
+                          value={newStudentCode}
+                          onChange={e => setNewStudentCode(e.target.value.replace(/\D/g, ''))}
+                          onKeyDown={e => e.key === 'Enter' && addStudentToClass()}
+                        />
+                        <button 
+                          onClick={addStudentToClass}
+                          className="p-2.5 bg-brand-accent text-white rounded-xl shadow-lg shadow-brand-accent/20 active:scale-95 transition-transform"
+                        >
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="relative">
                     <textarea 
-                      placeholder="e.g. John Kamau, Sarah Wambui, Kevin Otieno"
+                      placeholder="e.g. John Kamau, 0001, Sarah Wambui, 0002"
                       rows={3}
                       className="w-full bg-brand-bg border border-brand-border rounded-2xl p-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-sm resize-none"
                       value={form.expected_students}
                       onChange={e => setForm({...form, expected_students: e.target.value})}
                     />
-                    <p className="text-[10px] text-brand-muted/60 mt-1 ml-1 italic">Enter student names separated by commas to track attendance.</p>
+                    <p className="text-[10px] text-brand-muted/60 mt-1 ml-1 italic">Enter Name, Index pairs (comma separated) to track results.</p>
                   </div>
                 )}
               </div>

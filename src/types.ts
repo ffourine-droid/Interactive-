@@ -12,4 +12,4 @@ export interface Experiment {
   created_at?: string;
 }
 
-export type Page = 'home' | 'admin' | 'teacher' | 'assignments' | 'teacher-dashboard' | 'teacher-signup' | 'teacher-login' | 'teacher-class';
+export type Page = 'landing' | 'home' | 'admin' | 'teacher' | 'assignments' | 'teacher-dashboard' | 'teacher-signup' | 'teacher-login' | 'teacher-class' | 'parent';

@@ -23,6 +23,8 @@ const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard').then(modu
 const TeacherSignup = lazy(() => import('./pages/TeacherSignup').then(module => ({ default: module.TeacherSignup })));
 const TeacherLogin = lazy(() => import('./pages/TeacherLogin').then(module => ({ default: module.TeacherLogin })));
 const TeacherClassView = lazy(() => import('./pages/TeacherClassView').then(module => ({ default: module.TeacherClassView })));
+const ParentPage = lazy(() => import('./pages/ParentPage').then(module => ({ default: module.ParentPage })));
+const LandingPage = lazy(() => import('./components/LandingPage').then(module => ({ default: module.LandingPage })));
 
 export default function App() {
   return (
@@ -35,7 +37,13 @@ export default function App() {
 }
 
 function AppContent() {
-  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [currentPage, setCurrentPage] = useState<Page>(() => {
+    if (typeof window !== 'undefined') {
+      const hasSeen = localStorage.getItem('azilearn_seen_landing');
+      return hasSeen ? 'home' : 'landing';
+    }
+    return 'landing';
+  });
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('azilearn_theme') as 'light' | 'dark') || 'light';
@@ -162,6 +170,21 @@ function AppContent() {
             <AdminPayments onBack={() => setCurrentPage('home')} />
           </Suspense>
         );
+      case 'parent':
+        return (
+          <Suspense fallback={<LoadingFallback text="Opening Parent Portal..." />}>
+            <ParentPage onBack={() => setCurrentPage('home')} />
+          </Suspense>
+        );
+      case 'landing':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading..." />}>
+            <LandingPage onGetStarted={() => {
+              localStorage.setItem('azilearn_seen_landing', 'true');
+              setCurrentPage('home');
+            }} />
+          </Suspense>
+        );
       case 'home':
       default:
         return (
@@ -179,6 +202,7 @@ function AppContent() {
                   }
                 }}
                 onAssignmentsClick={() => setCurrentPage('assignments')}
+                onParentClick={() => setCurrentPage('parent')}
                 theme={theme}
                 setTheme={setTheme}
               />

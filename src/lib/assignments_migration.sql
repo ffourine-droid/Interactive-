@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   answers JSONB NOT NULL DEFAULT '[]',
   submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   score INTEGER,
+  teacher_comment TEXT,
   status TEXT NOT NULL DEFAULT 'pending' -- 'pending', 'graded'
 );
 

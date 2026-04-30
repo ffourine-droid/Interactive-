@@ -54,7 +54,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [newClassName, setNewClassName] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
+
+  const grades = [
+    'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 
+    'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9'
+  ];
 
   useEffect(() => {
     const teacherData = localStorage.getItem('azilearn_teacher');
@@ -74,12 +80,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
       const [classesResponse, assignmentsResponse] = await Promise.all([
         supabase
           .from('classes')
-          .select('*')
+          .select('id, name, created_at')
           .eq('teacher_id', teacherId)
           .order('created_at', { ascending: false }),
         supabase
           .from('assignments')
-          .select('*')
+          .select('id, title, subject, grade, due_date, created_at, class_id')
           .eq('teacher_id', teacherId)
           .order('created_at', { ascending: false })
       ]);
@@ -90,7 +96,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
       setClasses(classesResponse.data || []);
       setAssignments(assignmentsResponse.data || []);
     } catch (err: any) {
-      showToast("Failed to load dashboard data", "error");
+      console.error("Dashboard Loading Error:", err);
+      showToast("Failed to load data: " + (err.message || "Unknown error"), "error");
     } finally {
       setLoading(false);
     }
@@ -98,7 +105,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
 
   const handleAddClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClassName.trim() || !teacher) return;
+    if (!newClassName.trim() || !selectedGrade || !teacher) return;
 
     try {
       setLoading(true);
@@ -116,14 +123,71 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
 
       // 2. Add Students if provided
       if (studentNames.trim()) {
-        const names = studentNames.split(',').map(n => n.trim()).filter(n => n);
-        if (names.length > 0) {
+        const lines = studentNames.split('\n').map(n => n.trim()).filter(n => n);
+        if (lines.length > 0) {
+          // Get current highest index for this school/grade to continue sequence
+          const { data: existingStudents, error: fetchError } = await supabase
+            .from('students')
+            .select(`
+              name,
+              parent_code,
+              classes!inner (
+                teachers!inner (
+                  school_name
+                )
+              )
+            `)
+            .eq('classes.teachers.school_name', teacher.school_name)
+            .eq('grade', selectedGrade);
+
+          if (fetchError) throw fetchError;
+
+          const existingCodes = new Set(
+            (existingStudents || [])
+              .map(s => parseInt(s.parent_code))
+              .filter(n => !isNaN(n))
+          );
+
+          let currentCode = 1;
+          const studentsToInsert = [];
+
+          for (const line of lines) {
+            let name = line;
+            let parent_code = '';
+
+            if (line.includes(',')) {
+              const parts = line.split(',');
+              name = parts[0].trim();
+              parent_code = parts[1].trim().replace(/\D/g, '').padStart(4, '0');
+            }
+
+            // Check if student with this name already exists in this school/grade
+            const existingStudent = (existingStudents || []).find(s => s.name.toLowerCase() === name.toLowerCase());
+            
+            if (existingStudent) {
+              // Reuse existing index number
+              parent_code = existingStudent.parent_code;
+            } else if (!parent_code || existingCodes.has(parseInt(parent_code))) {
+              while (existingCodes.has(currentCode)) {
+                currentCode++;
+              }
+              parent_code = currentCode.toString().padStart(4, '0');
+              existingCodes.add(parseInt(parent_code));
+            } else {
+              existingCodes.add(parseInt(parent_code));
+            }
+
+            studentsToInsert.push({
+              class_id: classData.id,
+              name,
+              grade: selectedGrade,
+              parent_code: parent_code
+            });
+          }
+
           const { error: studentError } = await supabase
             .from('students')
-            .insert(names.map(name => ({
-              class_id: classData.id,
-              name
-            })));
+            .insert(studentsToInsert);
           
           if (studentError) throw studentError;
         }
@@ -132,8 +196,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
       showToast("Class created successfully!", "success");
       setIsAddingClass(false);
       setNewClassName('');
+      setSelectedGrade('');
       setStudentNames('');
       fetchDashboardData(teacher.id);
+      
+      // Navigate to the new class view immediately
+      onViewClass(classData.id, classData.name);
     } catch (err: any) {
       showToast(err.message || "Failed to create class", "error");
     } finally {
@@ -237,24 +305,40 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
                 </button>
               </div>
               <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Class Name</label>
-                  <input 
-                    type="text"
-                    placeholder="e.g. Grade 9A"
-                    className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50"
-                    value={newClassName}
-                    onChange={(e) => setNewClassName(e.target.value)}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Class Name</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g. 9 North"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50"
+                      value={newClassName}
+                      onChange={(e) => setNewClassName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Grade Level</label>
+                    <select 
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 appearance-none"
+                      value={selectedGrade}
+                      onChange={(e) => setSelectedGrade(e.target.value)}
+                    >
+                      <option value="">Select Grade...</option>
+                      {grades.map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Student Names (comma separated)</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Students (One per line: Name, Index)</label>
                   <textarea 
-                    placeholder="John Doe, Jane Smith, Ali Omar..."
+                    placeholder="John Doe, 0001&#10;Jane Smith, 0002&#10;Ali Omar (auto-indexes)..."
                     className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 min-h-[100px]"
                     value={studentNames}
                     onChange={(e) => setStudentNames(e.target.value)}
                   />
+                  <p className="text-[9px] text-brand-muted/70 italic px-1">Tip: Comma-separated name and index number works best.</p>
                 </div>
                 <button 
                   type="submit"

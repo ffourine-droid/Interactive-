@@ -11,10 +11,15 @@ import {
   ChevronUp,
   Award,
   FileText,
-  Plus
+  Plus,
+  ShieldCheck,
+  Settings,
+  ListTodo
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { ParentCodeTable } from '../components/ParentCodeTable';
+import { StudentManager } from '../components/StudentManager';
 
 interface Assignment {
   id: string;
@@ -22,6 +27,7 @@ interface Assignment {
   subject: string;
   grade: string;
   due_date: string;
+  questions: any[];
   expected_students: string[];
 }
 
@@ -31,8 +37,9 @@ interface Submission {
   student_name: string;
   submitted_at: string;
   score: number | null;
+  status: 'pending' | 'graded';
   answers: Record<string, any>;
-  teacher_feedback?: string;
+  teacher_comment?: string;
 }
 
 interface TeacherClassViewProps {
@@ -45,6 +52,19 @@ interface TeacherClassViewProps {
 interface Student {
   id: string;
   name: string;
+  parent_code?: string;
+}
+
+interface Teacher {
+  id: string;
+  name: string;
+  school_name: string;
+}
+
+interface Acknowledgement {
+  assignment_id: string;
+  student_id: string;
+  acknowledged_at: string;
 }
 
 export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className, onBack, onAddAssignment }) => {
@@ -54,8 +74,12 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [teacher, setTeacher] = useState<Teacher | null>(null);
+  const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([]);
   const [expandedAssignment, setExpandedAssignment] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  const [showParentCodes, setShowParentCodes] = useState(false);
+  const [viewMode, setViewMode] = useState<'assignments' | 'students'>('assignments');
   const [gradeInput, setGradeInput] = useState<string>('');
   const [feedbackInput, setFeedbackInput] = useState<string>('');
 
@@ -98,8 +122,8 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
         .from('submissions')
         .update({ 
           score,
-          teacher_feedback: feedbackInput,
-          graded_at: new Date().toISOString()
+          teacher_comment: feedbackInput,
+          status: 'graded'
         })
         .eq('id', selectedSubmission.id);
 
@@ -117,50 +141,73 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
   const openSubmissionDetails = (submission: Submission) => {
     setSelectedSubmission(submission);
     setGradeInput(submission.score?.toString() || '');
-    setFeedbackInput(submission.teacher_feedback || '');
+    setFeedbackInput(submission.teacher_comment || '');
   };
 
   const fetchInitialData = async () => {
-    setLoading(true);
+    if (students.length === 0) {
+      setLoading(true);
+    }
     const teacherData = localStorage.getItem('azilearn_teacher');
     if (!teacherData) return;
-    const teacherId = JSON.parse(teacherData).id;
+    const tData = JSON.parse(teacherData);
+    const teacherId = tData.id;
 
     try {
-      // 1. Fetch assignments and students in parallel
-      const [assignmentsRes, studentsRes] = await Promise.all([
+      // 1. Fetch assignments, students, and teacher info in parallel
+      const [assignmentsRes, studentsRes, teacherRes] = await Promise.all([
         supabase
           .from('assignments')
-          .select('*')
+          .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at')
           .eq('teacher_id', teacherId)
           .eq('class_id', classId)
           .order('created_at', { ascending: false }),
         supabase
           .from('students')
-          .select('id, name')
-          .eq('class_id', classId)
+          .select('id, name, parent_code, grade')
+          .eq('class_id', classId),
+        supabase
+          .from('teachers')
+          .select('id, name, school_name')
+          .eq('id', teacherId)
+          .single()
       ]);
 
       if (assignmentsRes.error) throw assignmentsRes.error;
       if (studentsRes.error) throw studentsRes.error;
+      if (teacherRes.error) throw teacherRes.error;
 
       const assignmentsData = assignmentsRes.data || [];
+      const studentsData = studentsRes.data || [];
+      const studentIds = studentsData.map(s => s.id);
+      
       setAssignments(assignmentsData);
-      setStudents(studentsRes.data || []);
+      setStudents(studentsData);
+      setTeacher(teacherRes.data);
 
-      // 2. Fetch submissions for these assignments if any
-      const assignmentIds = assignmentsData.map(a => a.id);
-      if (assignmentIds.length > 0) {
-        const { data: submissionsData, error: submissionsError } = await supabase
-          .from('submissions')
-          .select('*')
-          .in('assignment_id', assignmentIds);
+      // 2. Fetch submissions and acknowledgements only for these students/assignments
+      if (assignmentsData.length > 0) {
+        const assignmentIds = assignmentsData.map(a => a.id);
+        const [submissionsRes, acksRes] = await Promise.all([
+          supabase
+            .from('submissions')
+            .select('id, assignment_id, student_id, student_name, answers, score, teacher_comment, status, submitted_at')
+            .in('assignment_id', assignmentIds),
+          supabase
+            .from('parent_acknowledgements')
+            .select('assignment_id, student_id, acknowledged_at')
+            .in('assignment_id', assignmentIds)
+        ]);
 
-        if (submissionsError) throw submissionsError;
-        setSubmissions(submissionsData || []);
+        if (submissionsRes.error) throw submissionsRes.error;
+        if (acksRes.error) throw acksRes.error;
+
+        setSubmissions(submissionsRes.data || []);
+        setAcknowledgements(acksRes.data || []);
       }
     } catch (err: any) {
-      showToast("Error loading class data", "error");
+      console.error("Error loading class data:", err);
+      showToast("Error loading data: " + (err.message || "Unknown error"), "error");
     } finally {
       setLoading(false);
     }
@@ -178,18 +225,42 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
   return (
     <div className="min-h-screen bg-brand-bg pb-20 p-4">
       <header className="max-w-4xl mx-auto py-8">
-        <button 
-          onClick={onBack}
-          className="mb-8 p-3 bg-brand-surface border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-colors"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-black tracking-tight">{className}</h1>
-            <p className="text-brand-muted text-sm font-bold uppercase tracking-widest mt-1">Class Overview & Assignments</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={onBack}
+              className="p-3 bg-brand-surface border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-colors"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h1 className="text-4xl font-black tracking-tight">{className}</h1>
+              <p className="text-brand-muted text-sm font-bold uppercase tracking-widest mt-1">
+                {viewMode === 'assignments' ? 'Class Overview & Assignments' : 'Manage Students & Index Nos'}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex bg-brand-surface border border-brand-border p-1 rounded-2xl">
+            <button 
+              onClick={() => setViewMode('assignments')}
+              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'assignments' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+            >
+              <ListTodo size={14} />
+              Assignments
+            </button>
+            <button 
+              onClick={() => setViewMode('students')}
+              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'students' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+            >
+              <Users size={14} />
+              Students
+            </button>
+          </div>
+        </div>
+
+        {viewMode === 'assignments' && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 mb-8">
             <button 
               onClick={onAddAssignment}
               className="px-6 py-3 bg-brand-accent text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all flex items-center gap-2"
@@ -202,31 +273,117 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
               <span className="font-black text-sm">{assignments.length} assignments</span>
             </div>
           </div>
-        </div>
+        )}
       </header>
 
       <main className="max-w-4xl mx-auto space-y-8">
-        {/* Class Members Section */}
-        <section className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 shadow-sm overflow-hidden">
+        {viewMode === 'students' ? (
+          <section className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight">Student Management</h2>
+                <p className="text-brand-muted text-[10px] font-black uppercase tracking-widest mt-1">Register new students or update names</p>
+              </div>
+              <button 
+                onClick={() => setShowParentCodes(!showParentCodes)}
+                className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl border transition-all ${showParentCodes ? 'bg-brand-accent text-white border-brand-accent' : 'bg-brand-bg text-brand-muted border-brand-border'}`}
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={12} />
+                  {showParentCodes ? 'Viewing Codes' : 'Show Parent Codes'}
+                </div>
+              </button>
+            </div>
+
+            <AnimatePresence mode="wait">
+              {showParentCodes ? (
+                <motion.div
+                  key="codes"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <ParentCodeTable 
+                    students={students} 
+                    className={className} 
+                    teacher={teacher}
+                    onUpdate={fetchInitialData}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="manager"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <StudentManager 
+                    classId={classId} 
+                    grade={assignments[0]?.grade || students[0]?.grade} 
+                    schoolName={teacher?.school_name}
+                    onUpdate={fetchInitialData}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </section>
+        ) : (
+          <>
+            {/* Class Members Summary Section */}
+            <section className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-4 px-2">
             <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
               <Users size={14} />
               Class Members ({students.length})
             </h2>
+            <button 
+              onClick={() => setShowParentCodes(!showParentCodes)}
+              className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl border transition-all ${showParentCodes ? 'bg-brand-accent text-white border-brand-accent' : 'bg-brand-bg text-brand-muted border-brand-border'}`}
+            >
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={12} />
+                {showParentCodes ? 'Hide Access Codes' : 'Show Parent Codes'}
+              </div>
+            </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-             {students.map(student => (
-               <div key={student.id} className="flex items-center gap-2 px-4 py-2 bg-brand-bg border border-brand-border rounded-xl">
-                 <div className="w-6 h-6 bg-brand-accent/10 rounded-lg flex items-center justify-center text-[10px] font-black text-brand-accent">
-                   {student.name.charAt(0)}
-                 </div>
-                 <span className="text-sm font-bold text-brand-muted">{student.name}</span>
-               </div>
-             ))}
-             {students.length === 0 && (
-               <p className="text-xs font-bold text-brand-muted/60 italic p-2 px-4">No students added to this class yet. Add some when creating an assignment!</p>
-             )}
-          </div>
+          
+          <AnimatePresence mode="wait">
+            {showParentCodes ? (
+              <motion.div
+                key="codes"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <ParentCodeTable 
+                  students={students} 
+                  className={className} 
+                  teacher={teacher}
+                  onUpdate={fetchInitialData}
+                />
+              </motion.div>
+            ) : (
+              <motion.div 
+                key="members"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-wrap gap-2"
+              >
+                {students.map(student => (
+                  <div key={student.id} className="flex items-center gap-2 px-4 py-2 bg-brand-bg border border-brand-border rounded-xl">
+                    <div className="w-8 h-8 bg-brand-surface border border-brand-border rounded-lg flex items-center justify-center text-[10px] font-black text-brand-accent font-mono">
+                      {student.parent_code}
+                    </div>
+                    <span className="text-sm font-bold text-brand-muted">{student.name}</span>
+                  </div>
+                ))}
+                {students.length === 0 && (
+                  <p className="text-xs font-bold text-brand-muted/60 italic p-2 px-4">No students added to this class yet. Add some when creating an assignment!</p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
 
         <div className="space-y-4">
@@ -251,6 +408,11 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
               ? Math.round((assignmentSubmissions.length / studentList.length) * 100) 
               : 0;
 
+            const assignmentAcks = acknowledgements.filter(a => a.assignment_id === assignment.id);
+            const ackPercentage = studentList.length > 0
+              ? Math.round((assignmentAcks.length / studentList.length) * 100)
+              : 0;
+
             return (
               <div 
                 key={assignment.id} 
@@ -260,22 +422,40 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
                   className="p-6 cursor-pointer"
                   onClick={() => setExpandedAssignment(isExpanded ? null : assignment.id)}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                     <div>
                       <h3 className="text-xl font-black tracking-tight">{assignment.title}</h3>
                       <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-1">{assignment.subject} • Due {new Date(assignment.due_date).toLocaleDateString()}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex flex-col items-end">
-                         <span className="text-[10px] font-black text-brand-muted uppercase tracking-widest mb-1">{assignmentSubmissions.length} / {studentList.length} Submitted</span>
-                         <div className="w-32 h-2 bg-brand-bg rounded-full overflow-hidden border border-brand-border">
-                            <div 
-                              className="h-full bg-emerald-500 transition-all duration-1000" 
-                              style={{ width: `${submissionPercentage}%` }}
-                            />
-                         </div>
-                      </div>
-                      <div className="ml-2 text-brand-muted">
+                    
+                    <div className="flex flex-wrap items-center gap-6 sm:gap-8">
+                       <div className="flex flex-col items-start sm:items-end">
+                          <span className="text-[9px] font-black text-brand-muted uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                            <FileText size={10} />
+                            Submissions: {assignmentSubmissions.length} / {studentList.length}
+                          </span>
+                          <div className="w-24 sm:w-32 h-2 bg-brand-bg rounded-full overflow-hidden border border-brand-border">
+                             <div 
+                               className="h-full bg-emerald-500 transition-all duration-1000" 
+                               style={{ width: `${submissionPercentage}%` }}
+                             />
+                          </div>
+                       </div>
+
+                       <div className="flex flex-col items-start sm:items-end">
+                          <span className="text-[9px] font-black text-brand-muted uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                            <ShieldCheck size={10} />
+                            Parents: {assignmentAcks.length} / {studentList.length}
+                          </span>
+                          <div className="w-24 sm:w-32 h-2 bg-brand-bg rounded-full overflow-hidden border border-brand-border">
+                             <div 
+                               className="h-full bg-brand-accent transition-all duration-1000" 
+                               style={{ width: `${ackPercentage}%` }}
+                             />
+                          </div>
+                       </div>
+
+                       <div className="text-brand-muted">
                         {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                       </div>
                     </div>
@@ -292,36 +472,64 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
                     >
                       <div className="p-6">
                         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted mb-4 px-1">Student Status</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {studentList.map((studentName) => {
-                            const submission = assignmentSubmissions.find(s => s.student_name.toLowerCase() === studentName.toLowerCase());
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {students.map((student) => {
+                            const submission = assignmentSubmissions.find(s => s.student_name.toLowerCase() === student.name.toLowerCase());
+                            const ack = assignmentAcks.find(a => a.student_id === student.id);
+
                             return (
-                              <button 
-                                key={studentName}
-                                disabled={!submission}
-                                onClick={() => submission && openSubmissionDetails(submission)}
-                                className={`flex items-center justify-between p-3 rounded-2xl border text-left transition-all ${submission ? 'bg-emerald-500/5 border-emerald-500/10 hover:border-emerald-500/30 cursor-pointer active:scale-95' : 'bg-red-500/5 border-red-500/10 opacity-80 cursor-default'}`}
+                              <div 
+                                key={student.id}
+                                className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${submission ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-red-500/5 border-red-500/10'}`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${submission ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
-                                    {submission ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${submission ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+                                    {submission ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
                                   </div>
                                   <div>
-                                    <p className={`font-bold text-sm ${submission ? 'text-emerald-900' : 'text-red-900'}`}>{studentName}</p>
-                                    {submission && (
-                                      <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">
-                                        {new Date(submission.submitted_at).toLocaleDateString()} at {new Date(submission.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                      </p>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-black text-brand-accent font-mono text-[10px] bg-brand-surface border border-brand-border px-1.5 py-0.5 rounded-md min-w-[36px] text-center">
+                                        {student.parent_code}
+                                      </span>
+                                      <p className={`font-bold text-sm ${submission ? 'text-emerald-900' : 'text-red-900'}`}>{student.name}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {ack ? (
+                                        <div className="flex items-center gap-1 group relative">
+                                          <ShieldCheck size={10} className="text-brand-accent" />
+                                          <span className="text-[8px] font-black text-brand-accent uppercase tracking-widest">Parent Confirmed</span>
+                                          {/* Tooltip */}
+                                          <div className="absolute bottom-full left-0 mb-2 invisible group-hover:visible bg-brand-text text-white text-[8px] py-1 px-2 rounded-lg whitespace-nowrap z-10">
+                                            {new Date(ack.acknowledged_at).toLocaleDateString()} at {new Date(ack.acknowledged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1">
+                                          <Clock size={10} className="text-brand-muted" />
+                                          <span className="text-[8px] font-black text-brand-muted uppercase tracking-widest">No Parent Ack</span>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                                {submission && submission.score !== null && (
-                                  <div className="bg-emerald-500 text-white px-2 py-1 rounded-lg flex items-center gap-1">
-                                    <Award size={10} />
-                                    <span className="text-[9px] font-black">{submission.score}%</span>
-                                  </div>
-                                )}
-                              </button>
+                                
+                                <div className="flex items-center gap-2">
+                                  {submission && (
+                                    <button 
+                                      onClick={() => openSubmissionDetails(submission)}
+                                      className="p-2 bg-white border border-brand-border rounded-lg text-brand-muted hover:text-brand-accent transition-all active:scale-95"
+                                    >
+                                      <FileText size={14} />
+                                    </button>
+                                  )}
+                                  {submission && submission.score !== null && (
+                                    <div className="bg-emerald-500 text-white px-2 py-1.5 rounded-lg flex items-center gap-1 min-w-[48px] justify-center">
+                                      <Award size={10} />
+                                      <span className="text-[9px] font-black">{submission.score}%</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
@@ -339,7 +547,9 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
           })
         )}
         </div>
-      </main>
+      </>
+    )}
+  </main>
 
       {/* Submission Details Overlay */}
       <AnimatePresence>
@@ -362,7 +572,14 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
                     {selectedSubmission.student_name.charAt(0)}
                   </div>
                   <div>
-                    <h2 className="text-2xl font-black tracking-tight">{selectedSubmission.student_name}</h2>
+                    <div className="flex items-center gap-2">
+                      {students.find(s => s.name === selectedSubmission.student_name)?.parent_code && (
+                        <span className="font-black text-brand-accent font-mono text-sm bg-brand-bg border border-brand-border px-2 py-1 rounded-lg">
+                          {students.find(s => s.name === selectedSubmission.student_name)?.parent_code}
+                        </span>
+                      )}
+                      <h2 className="text-2xl font-black tracking-tight">{selectedSubmission.student_name}</h2>
+                    </div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Grading Submission</p>
                   </div>
                 </div>

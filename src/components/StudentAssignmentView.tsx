@@ -32,6 +32,7 @@ interface Assignment {
   title: string;
   subject: string;
   grade: string;
+  class_id?: string;
   class_name: string;
   due_date: string;
   questions: Question[];
@@ -41,6 +42,7 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void }> = ({ onBack
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
   const [assignmentCode, setAssignmentCode] = useState('');
   const [studentName, setStudentName] = useState(sessionStorage.getItem('azilearn_student_name') || '');
+  const [studentId, setStudentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
@@ -70,6 +72,25 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void }> = ({ onBack
       }
 
       setAssignment(data as Assignment);
+      
+      // Look for the student in the class
+      if (data.class_id) {
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('id')
+          .eq('class_id', data.class_id)
+          .ilike('name', studentName.trim())
+          .maybeSingle();
+        
+        if (studentData) {
+          setStudentId(studentData.id);
+        } else {
+          setStudentId(studentName); // Fallback to name if not found
+        }
+      } else {
+        setStudentId(studentName);
+      }
+
       sessionStorage.setItem('azilearn_student_name', studentName);
       setStep('taking');
       showToast("Assignment joined! Good luck! 🎉", "success");
@@ -146,7 +167,7 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void }> = ({ onBack
         .from('submissions')
         .insert([{
           assignment_id: assignment.id,
-          student_id: studentName,
+          student_id: studentId || studentName,
           student_name: studentName,
           answers: finalAnswers,
           score: score,
