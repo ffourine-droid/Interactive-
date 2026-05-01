@@ -46,7 +46,7 @@ interface TeacherDashboardProps {
   onCreateAssignment: (importMode?: boolean) => void;
 }
 
-export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onViewClass, onLogout, onCreateAssignment }) => {
+const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onViewClass, onLogout, onCreateAssignment }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [teacher, setTeacher] = useState<Teacher | null>(null);
@@ -226,26 +226,37 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
 
   return (
     <div className="min-h-screen bg-brand-bg pb-20">
-      <header className="bg-brand-surface border-b border-brand-border sticky top-0 z-50 px-4 py-6">
+      <header className="bg-brand-surface border-b border-brand-border sticky top-0 z-50 px-4 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent">
-              <UserPersona initial={teacher?.name?.charAt(0) || 'T'} />
-            </div>
-            <div>
-              <h1 className="text-xl font-black tracking-tight">HELLO {teacher?.name?.toUpperCase()}</h1>
-              <div className="flex items-center gap-2 text-brand-muted text-[10px] font-bold uppercase tracking-widest">
-                <School size={10} />
-                {teacher?.school_name}
+            <button 
+              onClick={onBack}
+              className="w-10 h-10 rounded-xl bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-accent transition-colors"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent">
+                <UserPersona initial={teacher?.name?.charAt(0) || 'T'} />
+              </div>
+              <div className="hidden sm:block">
+                <h1 className="text-lg font-black tracking-tight leading-none uppercase">HEY {teacher?.name?.split(' ')[0]}</h1>
+                <div className="flex items-center gap-2 text-brand-muted text-[8px] font-bold uppercase tracking-[0.1em] mt-0.5">
+                  <School size={8} />
+                  {teacher?.school_name}
+                </div>
               </div>
             </div>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="p-3 bg-red-500/5 text-red-500 rounded-xl hover:bg-red-500/10 transition-colors"
-          >
-            <LogOut size={20} />
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-500/5 text-red-500 rounded-xl hover:bg-red-500/10 transition-colors text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+            >
+              <LogOut size={14} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -398,18 +409,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onVi
           )}
         </div>
       </main>
-
-      <div className="fixed bottom-0 left-0 right-0 p-4 pointer-events-none">
-        <div className="max-w-[420px] mx-auto flex justify-center">
-          <button 
-            onClick={onBack}
-            className="pointer-events-auto flex items-center gap-2 px-6 py-4 bg-brand-surface border border-brand-border rounded-2xl shadow-xl font-black uppercase tracking-widest text-[10px] hover:text-brand-accent transition-all active:scale-95"
-          >
-            <ArrowLeft size={14} />
-            Student View
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
@@ -419,6 +418,8 @@ const UserPersona = ({ initial }: { initial: string }) => (
     {initial}
   </div>
 );
+
+export default TeacherDashboard;
 
 const ArrowLeftIcon = ({ size }: { size: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>

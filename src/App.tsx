@@ -14,17 +14,17 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Page } from './types';
 
 // Lazy load all pages
-const Home = lazy(() => import('./pages/Home').then(module => ({ default: module.Home })));
-const AdminPayments = lazy(() => import('./pages/AdminPayments').then(module => ({ default: module.AdminPayments })));
-const AdminAssignmentUploader = lazy(() => import('./pages/AdminAssignmentUploader').then(module => ({ default: module.AdminAssignmentUploader })));
+const Home = lazy(() => import('./pages/Home'));
+const AdminPayments = lazy(() => import('./pages/AdminPayments'));
+const AdminAssignmentUploader = lazy(() => import('./pages/AdminAssignmentUploader'));
 const TeacherAssignmentCreator = lazy(() => import('./components/TeacherAssignmentCreator'));
 const StudentAssignmentView = lazy(() => import('./components/StudentAssignmentView'));
-const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard').then(module => ({ default: module.TeacherDashboard })));
-const TeacherSignup = lazy(() => import('./pages/TeacherSignup').then(module => ({ default: module.TeacherSignup })));
-const TeacherLogin = lazy(() => import('./pages/TeacherLogin').then(module => ({ default: module.TeacherLogin })));
-const TeacherClassView = lazy(() => import('./pages/TeacherClassView').then(module => ({ default: module.TeacherClassView })));
-const ParentPage = lazy(() => import('./pages/ParentPage').then(module => ({ default: module.ParentPage })));
-const LandingPage = lazy(() => import('./components/LandingPage').then(module => ({ default: module.LandingPage })));
+const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard'));
+const TeacherSignup = lazy(() => import('./pages/TeacherSignup'));
+const TeacherLogin = lazy(() => import('./pages/TeacherLogin'));
+const TeacherClassView = lazy(() => import('./pages/TeacherClassView'));
+const ParentPage = lazy(() => import('./pages/ParentPage'));
+const LandingPage = lazy(() => import('./components/LandingPage'));
 
 export default function App() {
   return (
@@ -76,6 +76,9 @@ function AppContent() {
   }, [showToast]);
 
   useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
     document.body.className = theme;
     localStorage.setItem('azilearn_theme', theme);
   }, [theme]);
@@ -95,29 +98,47 @@ function AppContent() {
       case 'assignments':
         return (
           <Suspense fallback={<LoadingFallback text="Entering Classroom..." />}>
-            <div className="max-w-[420px] mx-auto min-h-screen">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="assignments"
+              className="max-w-[420px] mx-auto min-h-screen"
+            >
               <StudentAssignmentView onBack={() => setCurrentPage('home')} />
-            </div>
+            </motion.div>
           </Suspense>
         );
       case 'teacher':
         return (
           <Suspense fallback={<LoadingFallback text="Loading Teacher Workspace..." />}>
-            <div className="max-w-4xl mx-auto min-h-screen">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="teacher"
+              className="max-w-4xl mx-auto min-h-screen"
+            >
               <TeacherAssignmentCreator 
                 onBack={() => setCurrentPage('teacher-dashboard')} 
                 preSelectedClassId={selectedClassId || undefined}
                 importCode={showImportOnCreator ? ' ' : undefined} // Passing a space triggers the expansion
               />
-            </div>
+            </motion.div>
           </Suspense>
         );
       case 'teacher-dashboard':
         return (
           <Suspense fallback={<LoadingFallback text="Entering Dashboard..." />}>
-            <div className="min-h-screen">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="teacher-dashboard"
+              className="min-h-screen"
+            >
               <TeacherDashboard 
-                onBack={() => setCurrentPage('home')} 
+                onBack={() => setCurrentPage('landing')} 
                 onViewClass={(classId, className) => {
                   setSelectedClassId(classId);
                   setSelectedClassName(className);
@@ -130,67 +151,123 @@ function AppContent() {
                   setCurrentPage('teacher');
                 }}
               />
-            </div>
+            </motion.div>
           </Suspense>
         );
       case 'teacher-class':
         return (
           <Suspense fallback={<LoadingFallback text="Loading Class..." />}>
-            <TeacherClassView 
-              classId={selectedClassId || ''}
-              className={selectedClassName || ''} 
-              onBack={() => setCurrentPage('teacher-dashboard')} 
-              onAddAssignment={() => setCurrentPage('teacher')}
-            />
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="teacher-class"
+            >
+              <TeacherClassView 
+                classId={selectedClassId || ''}
+                className={selectedClassName || ''} 
+                onBack={() => setCurrentPage('teacher-dashboard')} 
+                onAddAssignment={() => setCurrentPage('teacher')}
+              />
+            </motion.div>
           </Suspense>
         );
       case 'teacher-signup':
         return (
           <Suspense fallback={<LoadingFallback text="Creating Account..." />}>
-            <TeacherSignup 
-              onBack={() => setCurrentPage('home')}
-              onSuccess={() => setCurrentPage('teacher-dashboard')}
-              onNavigateToLogin={() => setCurrentPage('teacher-login')}
-            />
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              key="teacher-signup"
+            >
+              <TeacherSignup 
+                onBack={() => setCurrentPage('landing')}
+                onSuccess={() => setCurrentPage('teacher-dashboard')}
+                onNavigateToLogin={() => setCurrentPage('teacher-login')}
+              />
+            </motion.div>
           </Suspense>
         );
       case 'teacher-login':
         return (
           <Suspense fallback={<LoadingFallback text="Logging in..." />}>
-            <TeacherLogin 
-              onBack={() => setCurrentPage('home')}
-              onSuccess={() => setCurrentPage('teacher-dashboard')}
-              onNavigateToSignup={() => setCurrentPage('teacher-signup')}
-            />
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              key="teacher-login"
+            >
+              <TeacherLogin 
+                onBack={() => setCurrentPage('landing')}
+                onSuccess={() => setCurrentPage('teacher-dashboard')}
+                onNavigateToSignup={() => setCurrentPage('teacher-signup')}
+              />
+            </motion.div>
           </Suspense>
         );
       case 'admin':
         return (
           <Suspense fallback={<LoadingFallback text="Loading Admin Panel..." />}>
-            <AdminPayments onBack={() => setCurrentPage('home')} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              key="admin"
+            >
+              <AdminPayments onBack={() => setCurrentPage('home')} />
+            </motion.div>
           </Suspense>
         );
       case 'parent':
         return (
           <Suspense fallback={<LoadingFallback text="Opening Parent Portal..." />}>
-            <ParentPage onBack={() => setCurrentPage('home')} />
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="parent"
+            >
+              <ParentPage onBack={() => setCurrentPage('landing')} />
+            </motion.div>
           </Suspense>
         );
       case 'landing':
         return (
           <Suspense fallback={<LoadingFallback text="Loading..." />}>
-            <LandingPage onGetStarted={() => {
-              localStorage.setItem('azilearn_seen_landing', 'true');
-              setCurrentPage('home');
-            }} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              key="landing"
+            >
+              <LandingPage onNavigate={(portal) => {
+                localStorage.setItem('azilearn_seen_landing', 'true');
+                if (portal === 'teacher') {
+                  const teacherData = localStorage.getItem('azilearn_teacher');
+                  setCurrentPage(teacherData ? 'teacher-dashboard' : 'teacher-login');
+                } else if (portal === 'parent') {
+                  setCurrentPage('parent');
+                } else {
+                  setCurrentPage('home');
+                }
+              }} />
+            </motion.div>
           </Suspense>
         );
       case 'home':
       default:
         return (
           <Suspense fallback={<LoadingFallback text="" />}>
-            <div className="max-w-[360px] mx-auto min-h-screen">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              key="home"
+              className="max-w-[360px] mx-auto min-h-screen"
+            >
               <Home 
+                onBack={() => setCurrentPage('landing')}
                 onAdminClick={() => setCurrentPage('admin')}
                 onTeacherClick={() => setCurrentPage('teacher')}
                 onTeacherDashboardClick={() => {
@@ -206,7 +283,7 @@ function AppContent() {
                 theme={theme}
                 setTheme={setTheme}
               />
-            </div>
+            </motion.div>
           </Suspense>
         );
     }
@@ -227,7 +304,9 @@ function AppContent() {
           </motion.div>
         )}
       </AnimatePresence>
-      {renderPage()}
+      <AnimatePresence mode="wait">
+        {renderPage()}
+      </AnimatePresence>
     </div>
   );
 }

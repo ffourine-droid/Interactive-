@@ -19,7 +19,7 @@ interface ParentPageProps {
   onBack?: () => void;
 }
 
-export const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
+const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
   const { showToast } = useToast();
   const [formData, setFormData] = useState({
     studentName: '',
@@ -261,3 +261,5 @@ export const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
     </div>
   );
 };
+
+export default ParentPage;

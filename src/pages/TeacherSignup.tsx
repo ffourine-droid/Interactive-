@@ -10,7 +10,7 @@ interface TeacherSignupProps {
   onNavigateToLogin: () => void;
 }
 
-export const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavigateToLogin }) => {
+const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavigateToLogin }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -176,3 +176,5 @@ export const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess,
     </div>
   );
 };
+
+export default TeacherSignup;

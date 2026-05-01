@@ -67,7 +67,7 @@ interface Acknowledgement {
   acknowledged_at: string;
 }
 
-export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className, onBack, onAddAssignment }) => {
+const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className, onBack, onAddAssignment }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [gradingLoading, setGradingLoading] = useState(false);
@@ -517,7 +517,7 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
                                   {submission && (
                                     <button 
                                       onClick={() => openSubmissionDetails(submission)}
-                                      className="p-2 bg-white border border-brand-border rounded-lg text-brand-muted hover:text-brand-accent transition-all active:scale-95"
+                                      className="p-2 bg-brand-surface border border-brand-border rounded-lg text-brand-muted hover:text-brand-accent transition-all active:scale-95"
                                     >
                                       <FileText size={14} />
                                     </button>
@@ -677,3 +677,5 @@ export const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, cla
     </div>
   );
 };
+
+export default TeacherClassView;

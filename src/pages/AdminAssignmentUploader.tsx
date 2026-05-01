@@ -39,7 +39,7 @@ interface AssignmentForm {
   json_questions: string;
 }
 
-export const AdminAssignmentUploader: React.FC<{ onBack: () => void; hideHeader?: boolean }> = ({ onBack, hideHeader }) => {
+const AdminAssignmentUploader: React.FC<{ onBack: () => void; hideHeader?: boolean }> = ({ onBack, hideHeader }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);

@@ -5,7 +5,7 @@ import {
   FileText, PlayCircle, Mic2, X, Download, 
   BarChart3, Plus, Moon, Sun, Trash2, Smartphone, 
   ExternalLink, CheckCircle2, XCircle, MoreHorizontal,
-  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck
+  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -15,6 +15,7 @@ import { MaterialCard, SkeletonCard } from '../components/MaterialCard';
 import { SlidesViewer } from '../components/SlidesViewer';
 
 interface HomeProps {
+  onBack: () => void;
   onAdminClick: () => void;
   onTeacherClick: () => void;
   onTeacherDashboardClick: () => void;
@@ -24,8 +25,8 @@ interface HomeProps {
   setTheme: (theme: 'light' | 'dark') => void;
 }
 
-export function Home({ 
-  onAdminClick, onTeacherClick, onTeacherDashboardClick, 
+export default function Home({ 
+  onBack, onAdminClick, onTeacherClick, onTeacherDashboardClick, 
   onAssignmentsClick, onParentClick, theme, setTheme 
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -371,16 +372,24 @@ export function Home({
                 className="px-6 py-8 space-y-10"
               >
                 <header className="flex items-center justify-between">
-                  <div 
-                    className="flex items-center gap-3 cursor-pointer active:scale-95 transition-transform"
-                    onClick={handleLogoClick}
-                  >
-                    <div className="w-12 h-12 bg-[#FF6B2C] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#FF6B2C]/20 transform rotate-12">
-                      <FlaskConical size={28} />
-                    </div>
-                    <div>
-                      <h1 className="text-2xl font-black text-brand-text tracking-tighter leading-none">AziLearn</h1>
-                      <p className="text-[10px] text-brand-muted font-bold uppercase tracking-widest mt-1">Study Materials</p>
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={onBack}
+                      className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-accent transition-colors shadow-sm"
+                    >
+                      <ArrowLeft size={18} />
+                    </button>
+                    <div 
+                      className="flex items-center gap-3 cursor-pointer active:scale-95 transition-transform"
+                      onClick={handleLogoClick}
+                    >
+                      <div className="w-12 h-12 bg-[#FF6B2C] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#FF6B2C]/20 transform rotate-12">
+                        <FlaskConical size={28} />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-black text-brand-text tracking-tighter leading-none">AziLearn</h1>
+                        <p className="text-[10px] text-brand-muted font-bold uppercase tracking-widest mt-1">Study Materials</p>
+                      </div>
                     </div>
                   </div>
                   <div className="bg-brand-surface border border-brand-border px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
@@ -389,37 +398,10 @@ export function Home({
                   </div>
                 </header>
 
-                <div className="relative overflow-hidden bg-brand-surface border border-[#FFF5F0] rounded-[2.5rem] p-8 pb-10 shadow-sm">
-                  {/* Background Accents */}
-                  <div className="absolute top-4 left-6 w-8 h-1 bg-[#FF6B2C]/20 rounded-full transform rotate-45" />
-                  <div className="absolute top-10 left-4 w-6 h-1 bg-[#FF6B2C]/10 rounded-full transform -rotate-12" />
-                  
-                  <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
-                    <div className="flex-1 space-y-4">
-                      <h1 className="text-[42px] font-black text-brand-text leading-[1.1] tracking-tight">
-                        Welcome to <br />
-                        <span className="text-[#FF6B2C]">AziLearn.</span>
-                      </h1>
-                      <p className="text-[15px] text-brand-muted/80 font-medium leading-relaxed max-w-[200px]">
-                        Select your class to start learning
-                      </p>
-                      <div className="w-16 h-1.5 bg-[#FF6B2C] rounded-full" />
-                    </div>
-                    
-                    <div className="relative shrink-0 pt-4">
-                      <img 
-                        src="https://img.freepik.com/free-vector/study-concept-illustration_114360-1111.jpg" 
-                        alt="Study" 
-                        className="w-48 h-48 object-contain mix-blend-multiply opacity-90 transform hover:scale-105 transition-transform duration-700"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                  <div className="space-y-8">
+                <div className="space-y-8">
                     <div className="space-y-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-[#FFF5F0] rounded-xl flex items-center justify-center text-[#FF6B2C]">
+                        <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
                           <GraduationCap size={18} />
                         </div>
                         <h2 className="text-[12px] font-black uppercase tracking-[0.15em] text-brand-muted">Primary & Junior School</h2>
@@ -432,7 +414,7 @@ export function Home({
                               rippleEffect(e);
                               handleClassSelect(grade);
                             }}
-                            className="aspect-square bg-brand-surface border border-brand-border/40 rounded-3xl flex flex-col items-center justify-center gap-1 hover:border-[#FF6B2C] hover:bg-[#FFF5F0]/30 transition-all active:scale-95 group shadow-sm hover:shadow-lg hover:shadow-[#FF6B2C]/5"
+                            className="aspect-square bg-brand-surface border border-brand-border/40 rounded-3xl flex flex-col items-center justify-center gap-1 hover:border-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 group shadow-sm hover:shadow-lg hover:shadow-brand-accent/5"
                           >
                             <span className="text-2xl font-black text-brand-text group-hover:text-[#FF6B2C] transition-colors">{i + 1}</span>
                             <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted/60 opacity-80 group-hover:opacity-100 transition-opacity">Grade</span>
@@ -443,7 +425,7 @@ export function Home({
 
                     <div className="space-y-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-[#FFF5F0] rounded-xl flex items-center justify-center text-[#FF6B2C]">
+                        <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
                           <FileText size={18} />
                         </div>
                         <h2 className="text-[12px] font-black uppercase tracking-[0.15em] text-brand-muted">National Examinations</h2>
@@ -453,10 +435,10 @@ export function Home({
                           rippleEffect(e);
                           handleClassSelect('KCSE');
                         }}
-                        className="w-full bg-brand-surface border border-brand-border/40 rounded-[2rem] p-6 flex items-center justify-between hover:border-[#FF6B2C] hover:bg-[#FFF5F0]/30 transition-all active:scale-95 group shadow-sm"
+                        className="w-full bg-brand-surface border border-brand-border/40 rounded-[2rem] p-6 flex items-center justify-between hover:border-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 group shadow-sm"
                       >
                         <div className="flex items-center gap-6">
-                          <div className="w-16 h-16 bg-[#FFF5F0] rounded-2xl flex items-center justify-center text-[#FF6B2C] group-hover:scale-110 transition-transform">
+                          <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent group-hover:scale-110 transition-transform">
                             <CheckCircle2 size={32} />
                           </div>
                           <div className="text-left">
@@ -751,7 +733,7 @@ export function Home({
               }`}
             >
               <div className={`w-14 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                activeTab === tab.id ? 'bg-[#FFF5F0] shadow-sm' : 'bg-transparent'
+                activeTab === tab.id ? 'bg-brand-accent/10 shadow-sm' : 'bg-transparent'
               }`}>
                 <tab.icon size={26} className="transition-transform group-active:scale-90" />
               </div>
@@ -875,7 +857,7 @@ export function Home({
                         ? selectedExperiment.pdf_url.replace('/view', '/preview').replace('/edit', '/preview')
                         : `${selectedExperiment.pdf_url}#toolbar=1`
                       }
-                      className="w-full h-full border-none bg-white"
+                      className="w-full h-full border-none bg-brand-surface"
                       title="PDF Viewer"
                     />
                   )}
@@ -883,7 +865,7 @@ export function Home({
                   {viewMode === 'ppt' && selectedExperiment.ppt_url && (
                     <iframe
                       src={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(selectedExperiment.ppt_url)}`}
-                      className="w-full h-full border-none bg-white"
+                      className="w-full h-full border-none bg-brand-surface"
                       title="PPT Viewer"
                     />
                   )}
@@ -901,13 +883,13 @@ export function Home({
                               body { 
                                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
                                 line-height: 1.6;
-                                color: #1a1a1a;
+                                color: ${theme === 'dark' ? '#f5f5f5' : '#1a1a1a'};
                                 padding: 24px;
                                 margin: 0;
-                                background: #ffffff;
+                                background: ${theme === 'dark' ? '#1a1a1a' : '#ffffff'};
                               }
                               img { max-width: 100%; height: auto; border-radius: 12px; }
-                              h1, h2, h3 { color: #000; margin-top: 1.5em; }
+                              h1, h2, h3 { color: ${theme === 'dark' ? '#ffffff' : '#000000'}; margin-top: 1.5em; }
                               p { margin-bottom: 1em; }
                             </style>
                           </head>
@@ -916,7 +898,7 @@ export function Home({
                           </body>
                         </html>
                       `}
-                      className="w-full h-full border-none bg-white"
+                      className="w-full h-full border-none bg-brand-surface"
                       sandbox="allow-scripts allow-modals"
                       loading="lazy"
                     />

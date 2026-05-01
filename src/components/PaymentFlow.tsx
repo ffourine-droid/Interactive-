@@ -162,14 +162,14 @@ const PaymentFlow = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 overflow-x-hidden">
+    <div className="min-h-screen bg-brand-bg font-sans text-brand-text overflow-x-hidden">
       {/* --- TOP NAVIGATION --- */}
-      <nav className="bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-40">
+      <nav className="bg-brand-surface border-b border-brand-border px-6 py-4 flex justify-between items-center sticky top-0 z-40">
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200">
             <span className="font-bold text-xl">A</span>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-800">AziLearn</h1>
+          <h1 className="text-2xl font-black tracking-tight text-brand-text">AziLearn</h1>
         </div>
         <div className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 uppercase tracking-wider ${isUnlocked ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
           {isUnlocked ? <Unlock size={14} /> : <Lock size={14} />}
@@ -179,38 +179,38 @@ const PaymentFlow = () => {
 
       <main className="max-w-4xl mx-auto p-4 md:p-8">
         {/* --- CONTENT AREA --- */}
-        <div className="relative bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
+        <div className="relative bg-brand-surface rounded-[2.5rem] shadow-xl shadow-brand-accent/5 overflow-hidden border border-brand-border">
           {/* Content Placeholder (Blurred if locked) */}
           <div className={`p-8 md:p-12 transition-all duration-1000 ${!isUnlocked ? 'blur-xl grayscale opacity-50 pointer-events-none select-none' : ''}`}>
             <div className="space-y-8">
               <div className="space-y-2">
-                <span className="text-emerald-600 font-bold text-sm uppercase tracking-widest">Grade 4 • Mathematics</span>
-                <h2 className="text-4xl font-black text-slate-800 leading-tight">Understanding Fractions & Decimals</h2>
+                <span className="text-brand-accent font-bold text-sm uppercase tracking-widest">Grade 4 • Mathematics</span>
+                <h2 className="text-4xl font-black text-brand-text leading-tight">Understanding Fractions & Decimals</h2>
               </div>
               
-              <div className="aspect-video bg-slate-100 rounded-[2rem] flex items-center justify-center overflow-hidden relative group">
+              <div className="aspect-video bg-brand-bg rounded-[2rem] flex items-center justify-center overflow-hidden relative group">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-xl transform group-hover:scale-110 transition-transform">
+                <div className="w-20 h-20 bg-brand-accent rounded-full flex items-center justify-center text-white shadow-xl transform group-hover:scale-110 transition-transform">
                   <ChevronRight size={40} fill="currentColor" />
                 </div>
                 <p className="absolute bottom-6 left-6 text-white font-bold text-lg">Watch Lesson Video</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-6 bg-slate-50 rounded-3xl space-y-4">
-                  <h4 className="font-bold text-xl text-slate-800">Study Notes</h4>
+                <div className="p-6 bg-brand-bg/50 rounded-3xl space-y-4 text-brand-text">
+                  <h4 className="font-bold text-xl">Study Notes</h4>
                   <div className="space-y-2">
-                    <div className="h-3 bg-slate-200 rounded-full w-full" />
-                    <div className="h-3 bg-slate-200 rounded-full w-5/6" />
-                    <div className="h-3 bg-slate-200 rounded-full w-4/6" />
+                    <div className="h-3 bg-brand-border rounded-full w-full" />
+                    <div className="h-3 bg-brand-border rounded-full w-5/6" />
+                    <div className="h-3 bg-brand-border rounded-full w-4/6" />
                   </div>
                 </div>
-                <div className="p-6 bg-slate-50 rounded-3xl space-y-4">
-                  <h4 className="font-bold text-xl text-slate-800">Practice Quiz</h4>
+                <div className="p-6 bg-brand-bg/50 rounded-3xl space-y-4 text-brand-text">
+                  <h4 className="font-bold text-xl">Practice Quiz</h4>
                   <div className="space-y-2">
-                    <div className="h-3 bg-slate-200 rounded-full w-full" />
-                    <div className="h-3 bg-slate-200 rounded-full w-full" />
-                    <div className="h-3 bg-slate-200 rounded-full w-3/4" />
+                    <div className="h-3 bg-brand-border rounded-full w-full" />
+                    <div className="h-3 bg-brand-border rounded-full w-full" />
+                    <div className="h-3 bg-brand-border rounded-full w-3/4" />
                   </div>
                 </div>
               </div>
@@ -219,17 +219,17 @@ const PaymentFlow = () => {
 
           {/* --- LOCK OVERLAY --- */}
           {!isUnlocked && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-white/10 backdrop-blur-[2px]">
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-brand-bg/10 backdrop-blur-[2px]">
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 text-center max-w-sm w-full"
+                className="bg-brand-surface p-10 rounded-[3rem] shadow-2xl border border-brand-border text-center max-w-sm w-full"
               >
                 <div className="w-24 h-24 bg-amber-100 rounded-[2rem] flex items-center justify-center text-amber-600 mx-auto mb-8 rotate-3">
                   <Lock size={48} />
                 </div>
-                <h3 className="text-3xl font-black text-slate-800 mb-4">Unlock Access</h3>
-                <p className="text-slate-500 mb-10 leading-relaxed font-medium">
+                <h3 className="text-3xl font-black text-brand-text mb-4">Unlock Access</h3>
+                <p className="text-brand-muted mb-10 leading-relaxed font-medium">
                   Get full access to all CBC lessons, videos, and quizzes for Grade 1-8.
                 </p>
                 <button
@@ -261,17 +261,17 @@ const PaymentFlow = () => {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="relative bg-white w-full max-w-lg rounded-t-[3rem] sm:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
+              className="relative bg-brand-surface w-full max-w-lg rounded-t-[3rem] sm:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border border-brand-border"
             >
               {/* Modal Header */}
-              <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
+              <div className="p-8 border-b border-brand-border flex justify-between items-center bg-brand-bg/30">
                 <div>
-                  <h2 className="text-2xl font-black text-slate-800">Unlock AziLearn</h2>
-                  <p className="text-slate-500 font-medium">Choose how you want to pay</p>
+                  <h2 className="text-2xl font-black text-brand-text">Unlock AziLearn</h2>
+                  <p className="text-brand-muted font-medium">Choose how you want to pay</p>
                 </div>
                 <button 
                   onClick={() => setIsModalOpen(false)}
-                  className="w-12 h-12 flex items-center justify-center bg-slate-100 hover:bg-slate-200 rounded-2xl transition-colors"
+                  className="w-12 h-12 flex items-center justify-center bg-brand-bg hover:bg-brand-border/40 rounded-2xl transition-colors text-brand-text"
                 >
                   <X size={24} />
                 </button>
@@ -280,7 +280,7 @@ const PaymentFlow = () => {
               <div className="overflow-y-auto p-8 space-y-10">
                 {/* Plan Selection */}
                 <div className="space-y-4">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">1. Select Your Plan</label>
+                  <label className="text-xs font-black text-brand-muted uppercase tracking-[0.2em]">1. Select Your Plan</label>
                   <div className="grid grid-cols-3 gap-3">
                     {PLANS.map((plan) => (
                       <button
@@ -288,8 +288,8 @@ const PaymentFlow = () => {
                         onClick={() => setSelectedPlan(plan)}
                         className={`p-5 rounded-[2rem] border-4 transition-all text-center flex flex-col items-center gap-1 ${
                           selectedPlan.id === plan.id 
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-lg shadow-emerald-100' 
-                            : 'border-slate-50 hover:border-slate-100 text-slate-500'
+                            ? 'border-brand-accent bg-brand-accent/10 text-brand-accent shadow-lg shadow-brand-accent/5' 
+                            : 'border-brand-bg hover:border-brand-border/50 text-brand-muted'
                         }`}
                       >
                         <span className="text-[10px] font-black uppercase tracking-tighter">{plan.id}</span>
@@ -300,11 +300,11 @@ const PaymentFlow = () => {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex bg-slate-100 p-2 rounded-[2rem]">
+                <div className="flex bg-brand-bg p-2 rounded-[2rem] border border-brand-border">
                   <button
                     onClick={() => setActiveTab('direct')}
                     className={`flex-1 py-4 rounded-[1.5rem] font-black text-sm transition-all flex items-center justify-center gap-2 ${
-                      activeTab === 'direct' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-500'
+                      activeTab === 'direct' ? 'bg-brand-surface text-brand-accent shadow-md border border-brand-border' : 'text-brand-muted'
                     }`}
                   >
                     <CreditCard size={20} /> Pay Directly
@@ -312,7 +312,7 @@ const PaymentFlow = () => {
                   <button
                     onClick={() => setActiveTab('prompt')}
                     className={`flex-1 py-4 rounded-[1.5rem] font-black text-sm transition-all flex items-center justify-center gap-2 ${
-                      activeTab === 'prompt' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-500'
+                      activeTab === 'prompt' ? 'bg-brand-surface text-brand-accent shadow-md border border-brand-border' : 'text-brand-muted'
                     }`}
                   >
                     <Phone size={20} /> Request Prompt
@@ -327,41 +327,41 @@ const PaymentFlow = () => {
                       animate={{ opacity: 1, x: 0 }}
                       className="space-y-8"
                     >
-                      <div className="bg-emerald-50 p-8 rounded-[2.5rem] border-2 border-emerald-100 space-y-6">
+                      <div className="bg-brand-accent/5 p-8 rounded-[2.5rem] border-2 border-brand-accent/10 space-y-6">
                         <div className="flex justify-between items-center">
-                          <span className="text-emerald-700 font-bold uppercase tracking-widest text-xs">M-Pesa Till Number</span>
-                          <span className="text-3xl font-black text-emerald-800">{TILL_NUMBER}</span>
+                          <span className="text-brand-accent font-bold uppercase tracking-widest text-xs">M-Pesa Till Number</span>
+                          <span className="text-3xl font-black text-brand-accent">{TILL_NUMBER}</span>
                         </div>
-                        <div className="h-0.5 bg-emerald-200/30" />
-                        <ol className="text-sm text-emerald-800 space-y-3 font-bold">
-                          <li className="flex gap-3"><span className="w-5 h-5 bg-emerald-200 rounded-full flex items-center justify-center text-[10px]">1</span> Go to M-Pesa &gt; Lipa na M-Pesa</li>
-                          <li className="flex gap-3"><span className="w-5 h-5 bg-emerald-200 rounded-full flex items-center justify-center text-[10px]">2</span> Select Buy Goods & Services</li>
-                          <li className="flex gap-3"><span className="w-5 h-5 bg-emerald-200 rounded-full flex items-center justify-center text-[10px]">3</span> Enter Till: {TILL_NUMBER}</li>
-                          <li className="flex gap-3"><span className="w-5 h-5 bg-emerald-200 rounded-full flex items-center justify-center text-[10px]">4</span> Enter Amount: KES {selectedPlan.amount}</li>
-                          <li className="flex gap-3"><span className="w-5 h-5 bg-emerald-200 rounded-full flex items-center justify-center text-[10px]">5</span> Enter PIN and confirm</li>
+                        <div className="h-0.5 bg-brand-accent/10" />
+                        <ol className="text-sm text-brand-text space-y-3 font-bold">
+                          <li className="flex gap-3"><span className="w-5 h-5 bg-brand-accent/20 rounded-full flex items-center justify-center text-[10px]">1</span> Go to M-Pesa &gt; Lipa na M-Pesa</li>
+                          <li className="flex gap-3"><span className="w-5 h-5 bg-brand-accent/20 rounded-full flex items-center justify-center text-[10px]">2</span> Select Buy Goods & Services</li>
+                          <li className="flex gap-3"><span className="w-5 h-5 bg-brand-accent/20 rounded-full flex items-center justify-center text-[10px]">3</span> Enter Till: {TILL_NUMBER}</li>
+                          <li className="flex gap-3"><span className="w-5 h-5 bg-brand-accent/20 rounded-full flex items-center justify-center text-[10px]">4</span> Enter Amount: KES {selectedPlan.amount}</li>
+                          <li className="flex gap-3"><span className="w-5 h-5 bg-brand-accent/20 rounded-full flex items-center justify-center text-[10px]">5</span> Enter PIN and confirm</li>
                         </ol>
                       </div>
 
                       <form onSubmit={handleDirectPayment} className="space-y-6">
                         <div className="space-y-3">
-                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-4">Your Phone Number</label>
+                          <label className="text-xs font-black text-brand-muted uppercase tracking-widest ml-4">Your Phone Number</label>
                           <input
                             type="tel"
                             placeholder="e.g. 0712345678"
                             value={phoneNumber}
                             onChange={(e) => setPhoneNumber(e.target.value)}
-                            className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] focus:border-emerald-500 outline-none transition-all font-bold text-lg placeholder:text-slate-300"
+                            className="w-full p-6 bg-brand-bg border-2 border-brand-border rounded-[2rem] focus:border-brand-accent outline-none transition-all font-bold text-lg placeholder:text-brand-muted/30 text-brand-text"
                             required
                           />
                         </div>
                         <div className="space-y-3">
-                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-4">M-Pesa Transaction Code</label>
+                          <label className="text-xs font-black text-brand-muted uppercase tracking-widest ml-4">M-Pesa Transaction Code</label>
                           <input
                             type="text"
                             placeholder="e.g. SBC123XYZ"
                             value={mpesaCode}
                             onChange={(e) => setMpesaCode(e.target.value)}
-                            className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] focus:border-emerald-500 outline-none transition-all font-bold text-lg uppercase placeholder:text-slate-300"
+                            className="w-full p-6 bg-brand-bg border-2 border-brand-border rounded-[2rem] focus:border-brand-accent outline-none transition-all font-bold text-lg uppercase placeholder:text-brand-muted/30 text-brand-text"
                             required
                           />
                         </div>
@@ -384,13 +384,13 @@ const PaymentFlow = () => {
                       animate={{ opacity: 1, x: 0 }}
                       className="space-y-8"
                     >
-                      <div className="bg-blue-50 p-8 rounded-[2.5rem] border-2 border-blue-100 flex gap-6 items-start">
-                        <div className="p-4 bg-blue-500 text-white rounded-[1.5rem] shadow-lg shadow-blue-200">
+                      <div className="bg-brand-accent/5 p-8 rounded-[2.5rem] border-2 border-brand-accent/10 flex gap-6 items-start">
+                        <div className="p-4 bg-brand-accent text-white rounded-[1.5rem] shadow-lg shadow-brand-accent/20">
                           <MessageCircle size={32} />
                         </div>
                         <div>
-                          <h4 className="font-black text-xl text-blue-900 mb-1">Easy Prompt</h4>
-                          <p className="text-sm text-blue-800 leading-relaxed font-medium">
+                          <h4 className="font-black text-xl text-brand-text mb-1">Easy Prompt</h4>
+                          <p className="text-sm text-brand-muted leading-relaxed font-medium">
                             Enter your number below. We'll send a payment prompt directly to your phone. Just enter your PIN!
                           </p>
                         </div>
@@ -398,13 +398,13 @@ const PaymentFlow = () => {
 
                       <form onSubmit={handleRequestPrompt} className="space-y-6">
                         <div className="space-y-3">
-                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-4">M-Pesa Phone Number</label>
+                          <label className="text-xs font-black text-brand-muted uppercase tracking-widest ml-4">M-Pesa Phone Number</label>
                           <input
                             type="tel"
                             placeholder="e.g. 0712345678"
                             value={phoneNumber}
                             onChange={(e) => setPhoneNumber(e.target.value)}
-                            className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] focus:border-emerald-500 outline-none transition-all font-bold text-lg placeholder:text-slate-300"
+                            className="w-full p-6 bg-brand-bg border-2 border-brand-border rounded-[2rem] focus:border-brand-accent outline-none transition-all font-bold text-lg placeholder:text-brand-muted/30 text-brand-text"
                             required
                           />
                         </div>
@@ -463,7 +463,7 @@ const PaymentFlow = () => {
       </AnimatePresence>
 
       {/* --- FOOTER --- */}
-      <footer className="max-w-4xl mx-auto mt-12 mb-20 text-center text-slate-400 font-bold text-sm uppercase tracking-widest">
+      <footer className="max-w-4xl mx-auto mt-12 mb-20 text-center text-brand-muted font-bold text-sm uppercase tracking-widest">
         <p>© 2026 AziLearn EdTech • Secure M-Pesa Payments</p>
       </footer>
     </div>

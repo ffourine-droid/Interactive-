@@ -26,11 +26,12 @@ import {
   Music,
   User,
   WifiOff,
-  Send
+  Send,
+  ArrowLeft
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
-import { AdminAssignmentUploader } from './AdminAssignmentUploader';
+import AdminAssignmentUploader from './AdminAssignmentUploader';
 
 interface Payment {
   id: string;
@@ -67,7 +68,7 @@ interface Profile {
   created_at: string;
 }
 
-export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -560,7 +561,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             onClick={onBack}
             className="flex items-center gap-2 text-brand-text/40 hover:text-brand-accent transition-colors mb-8 mx-auto font-bold"
           >
-            <Home size={18} />
+            <ArrowLeft size={18} />
             Back to Home
           </button>
           <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 text-center shadow-2xl">
@@ -625,7 +626,7 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               onClick={onBack}
               className="p-2 bg-brand-surface border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-all shadow-sm"
             >
-              <Home size={20} />
+              <ArrowLeft size={20} />
             </button>
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -1488,3 +1489,5 @@ export const AdminPayments: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     </div>
   );
 };
+
+export default AdminPayments;
