@@ -540,7 +540,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           due_date: new Date(form.due_date).toISOString(),
           questions: questions,
           expected_students: studentList,
-          short_code: shortCode
+          short_code: null // Codes are only for admin imports now
         }])
         .select()
         .single();
@@ -548,7 +548,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       if (error) throw error;
 
       if (data) {
-        setSuccess(data.short_code || shortCode);
+        setSuccess('PUBLISHED');
         showToast("Assignment published successfully!", "success");
       }
     } catch (err: any) {
@@ -577,19 +577,8 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           <CheckCircle2 className="text-emerald-500" size={40} />
         </div>
         <h2 className="text-3xl font-black tracking-tight mb-2">Published!</h2>
-        <p className="text-brand-muted font-bold mb-8 uppercase tracking-widest text-[10px]">Share this code with your students</p>
+        <p className="text-brand-muted font-bold mb-8 uppercase tracking-widest text-[10px]">Students can now find this assignment by searching your name</p>
         
-        <div className="bg-brand-bg/50 border border-brand-border rounded-2xl p-6 mb-8 flex items-center justify-between group overflow-hidden relative">
-          <div className="absolute inset-0 bg-brand-accent/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-          <span className="text-4xl font-black tracking-[0.2em] text-brand-accent">{success}</span>
-          <button 
-            onClick={copyToClipboard}
-            className="p-3 bg-brand-accent text-white rounded-xl active:scale-90 transition-transform shadow-lg shadow-brand-accent/20"
-          >
-            <Copy size={20} />
-          </button>
-        </div>
-
         <button 
           onClick={onBack}
           className="w-full bg-brand-bg border border-brand-border text-brand-text py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-brand-surface transition-all"
@@ -656,7 +645,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
             <div className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-8 flex flex-col md:flex-row items-center gap-6">
               <div className="md:flex-1">
                 <h3 className="text-lg font-black tracking-tight text-brand-accent mb-2">Import with Code</h3>
-                <p className="text-sm font-bold text-brand-muted/80">Enter the 6-character code sent to you by the admin to quickly load assignment questions.</p>
+                <p className="text-sm font-bold text-brand-muted/80">Enter the code created by the admin to quickly load curated assignment questions.</p>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
                 <input 

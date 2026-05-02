@@ -26,6 +26,13 @@ const TeacherClassView = lazy(() => import('./pages/TeacherClassView'));
 const ParentPage = lazy(() => import('./pages/ParentPage'));
 const LandingPage = lazy(() => import('./components/LandingPage'));
 
+const StudentExamsPage = lazy(() => import('./pages/StudentExamsPage'));
+const TakeExamPage = lazy(() => import('./pages/TakeExamPage'));
+const CreateExamPage = lazy(() => import('./pages/CreateExamPage'));
+const ExamResultsPage = lazy(() => import('./pages/ExamResultsPage'));
+
+import { examService } from './services/examService';
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -54,7 +61,13 @@ function AppContent() {
   const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [showImportOnCreator, setShowImportOnCreator] = useState(false);
+  const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   const { showToast } = useToast();
+
+  useEffect(() => {
+    // Seed prebuilt exams on startup
+    examService.seedPrebuiltExams();
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -105,7 +118,87 @@ function AppContent() {
               key="assignments"
               className="max-w-[420px] mx-auto min-h-screen"
             >
-              <StudentAssignmentView onBack={() => setCurrentPage('home')} />
+              <StudentAssignmentView 
+                onBack={() => setCurrentPage('home')} 
+                onExamsClick={() => setCurrentPage('student-exams')}
+              />
+            </motion.div>
+          </Suspense>
+        );
+      case 'student-exams':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading Exams..." />}>
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="student-exams"
+              className="min-h-screen"
+            >
+              <StudentExamsPage 
+                onBack={() => setCurrentPage('home')}
+                onStartExam={(id) => {
+                  setSelectedExamId(id);
+                  setCurrentPage('take-exam');
+                }}
+              />
+            </motion.div>
+          </Suspense>
+        );
+      case 'take-exam':
+        return (
+          <Suspense fallback={<LoadingFallback text="Starting Exam..." />}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              key="take-exam"
+              className="min-h-screen"
+            >
+              {selectedExamId && (
+                <TakeExamPage 
+                  examId={selectedExamId}
+                  onBack={() => setCurrentPage('student-exams')}
+                  onSubmitted={(attempt) => {
+                    // Logic for showing results handled within TakeExamPage or via separate state
+                    // For now, let's keep it simple
+                    setCurrentPage('student-exams');
+                  }}
+                />
+              )}
+            </motion.div>
+          </Suspense>
+        );
+      case 'create-exam':
+        return (
+          <Suspense fallback={<LoadingFallback text="Opening Creator..." />}>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              key="create-exam"
+              className="min-h-screen"
+            >
+              <CreateExamPage onBack={() => setCurrentPage('teacher-dashboard')} />
+            </motion.div>
+          </Suspense>
+        );
+      case 'exam-results':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading Results..." />}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              key="exam-results"
+              className="min-h-screen"
+            >
+              {selectedExamId && (
+                <ExamResultsPage 
+                  examId={selectedExamId}
+                  onBack={() => setCurrentPage('teacher-dashboard')}
+                />
+              )}
             </motion.div>
           </Suspense>
         );
@@ -145,6 +238,11 @@ function AppContent() {
                   setCurrentPage('teacher-class');
                 }}
                 onLogout={() => setCurrentPage('teacher-login')}
+                onExamsClick={() => setCurrentPage('create-exam')}
+                onViewExamResults={(id) => {
+                  setSelectedExamId(id);
+                  setCurrentPage('exam-results');
+                }}
                 onCreateAssignment={(importMode) => {
                   setSelectedClassId(null);
                   setShowImportOnCreator(!!importMode);
@@ -168,6 +266,7 @@ function AppContent() {
                 className={selectedClassName || ''} 
                 onBack={() => setCurrentPage('teacher-dashboard')} 
                 onAddAssignment={() => setCurrentPage('teacher')}
+                onAddExam={() => setCurrentPage('create-exam')}
               />
             </motion.div>
           </Suspense>
@@ -279,6 +378,7 @@ function AppContent() {
                   }
                 }}
                 onAssignmentsClick={() => setCurrentPage('assignments')}
+                onExamsClick={() => setCurrentPage('student-exams')}
                 onParentClick={() => setCurrentPage('parent')}
                 theme={theme}
                 setTheme={setTheme}

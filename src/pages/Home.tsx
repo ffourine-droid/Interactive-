@@ -20,6 +20,7 @@ interface HomeProps {
   onTeacherClick: () => void;
   onTeacherDashboardClick: () => void;
   onAssignmentsClick: () => void;
+  onExamsClick: () => void;
   onParentClick: () => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
@@ -27,7 +28,7 @@ interface HomeProps {
 
 export default function Home({ 
   onBack, onAdminClick, onTeacherClick, onTeacherDashboardClick, 
-  onAssignmentsClick, onParentClick, theme, setTheme 
+  onAssignmentsClick, onExamsClick, onParentClick, theme, setTheme 
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -720,6 +721,7 @@ export default function Home({
           {[
             { id: 'home', label: 'Home', icon: HomeIcon, action: () => setActiveTab('home') },
             { id: 'assignments', label: 'Class', icon: FileText, action: () => { setActiveTab('home'); onAssignmentsClick(); } },
+            { id: 'exams', label: 'Exams', icon: Clock, action: () => { setActiveTab('home'); onExamsClick(); } },
             { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
           ].map((tab) => (
             <button

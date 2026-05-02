@@ -40,6 +40,7 @@ interface Submission {
   status: 'pending' | 'graded';
   answers: Record<string, any>;
   teacher_comment?: string;
+  parent_feedback?: string;
 }
 
 interface TeacherClassViewProps {
@@ -47,6 +48,7 @@ interface TeacherClassViewProps {
   className: string;
   onBack: () => void;
   onAddAssignment: () => void;
+  onAddExam: () => void;
 }
 
 interface Student {
@@ -67,7 +69,7 @@ interface Acknowledgement {
   acknowledged_at: string;
 }
 
-const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className, onBack, onAddAssignment }) => {
+const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className, onBack, onAddAssignment, onAddExam }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [gradingLoading, setGradingLoading] = useState(false);
@@ -267,6 +269,13 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             >
               <Plus className="w-4 h-4" />
               Add Assignment
+            </button>
+            <button 
+              onClick={onAddExam}
+              className="px-6 py-3 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-2xl text-xs font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New Exam
             </button>
             <div className="bg-brand-accent/10 text-brand-accent px-4 py-2 rounded-2xl border border-brand-accent/10 flex items-center gap-2 h-max">
               <Users size={16} />
@@ -631,6 +640,18 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                 </div>
 
                 <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-8 space-y-6">
+                  {(selectedSubmission as any).parent_feedback && (
+                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl mb-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users size={16} className="text-emerald-600" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Parent Feedback</span>
+                      </div>
+                      <p className="text-sm font-bold text-brand-text italic leading-relaxed">
+                        "{(selectedSubmission as any).parent_feedback}"
+                      </p>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-3">
                     <Award className="text-brand-accent" size={24} />
                     <h3 className="text-lg font-black tracking-tight">Grade & Feedback</h3>

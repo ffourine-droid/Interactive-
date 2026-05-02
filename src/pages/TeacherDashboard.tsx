@@ -12,7 +12,8 @@ import {
   GraduationCap,
   ArrowLeft,
   MessageCircle,
-  Download
+  Download,
+  Clock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -44,18 +45,24 @@ interface TeacherDashboardProps {
   onViewClass: (classId: string, className: string) => void;
   onLogout: () => void;
   onCreateAssignment: (importMode?: boolean) => void;
+  onExamsClick: () => void;
+  onViewExamResults: (examId: string) => void;
 }
 
-const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onViewClass, onLogout, onCreateAssignment }) => {
+const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ 
+  onBack, onViewClass, onLogout, onCreateAssignment, onExamsClick, onViewExamResults 
+}) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
+  const [activeView, setActiveView] = useState<'classes' | 'exams'>('classes');
 
   const grades = [
     'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 
@@ -77,7 +84,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onViewClass
     try {
       setLoading(true);
       // Fetch Classes and Assignments in parallel
-      const [classesResponse, assignmentsResponse] = await Promise.all([
+      const [classesResponse, assignmentsResponse, examsResponse] = await Promise.all([
         supabase
           .from('classes')
           .select('id, name, created_at')
@@ -87,14 +94,21 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onViewClass
           .from('assignments')
           .select('id, title, subject, grade, due_date, created_at, class_id')
           .eq('teacher_id', teacherId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('exams')
+          .select('id, title, subject, grade, is_published, created_at')
+          .eq('created_by', teacherId)
           .order('created_at', { ascending: false })
       ]);
 
       if (classesResponse.error) throw classesResponse.error;
       if (assignmentsResponse.error) throw assignmentsResponse.error;
+      if (examsResponse.error) throw examsResponse.error;
 
       setClasses(classesResponse.data || []);
       setAssignments(assignmentsResponse.data || []);
+      setExams(examsResponse.data || []);
     } catch (err: any) {
       console.error("Dashboard Loading Error:", err);
       showToast("Failed to load data: " + (err.message || "Unknown error"), "error");
@@ -262,152 +276,218 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onBack, onViewClass
 
       <main className="max-w-4xl mx-auto p-4 py-8 space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
-          <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
-            <BookOpen size={14} />
-            My Classes
-          </h2>
+           <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setActiveView('classes')}
+                className={`text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-colors ${activeView === 'classes' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <BookOpen size={14} />
+                My Classes
+              </button>
+              <button 
+                onClick={() => setActiveView('exams')}
+                className={`text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-colors ${activeView === 'exams' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <Clock size={14} />
+                Timed Exams
+              </button>
+           </div>
           <div className="flex flex-wrap gap-2">
-            <button 
-              onClick={() => window.open('https://wa.me/254799426863?text=Hello%20Azilearn%2C%20I%20would%20like%20to%20request%20an%20assignment%20upload%20for%20my%20class.', '_blank')}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
-            >
-              <MessageCircle size={14} />
-              Request Upload
-            </button>
-            <button 
-              onClick={() => setIsAddingClass(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-accent/10 text-brand-accent border border-brand-accent/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
-            >
-              <Plus size={14} />
-              Add New Class
-            </button>
-            <button 
-              onClick={() => onCreateAssignment(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-bg border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-            >
-              <Download size={14} />
-              Import with Code
-            </button>
-            <button 
-              onClick={() => onCreateAssignment()}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
-            >
-              <Plus size={14} />
-              New Assignment
-            </button>
+            {activeView === 'classes' ? (
+              <>
+                <button 
+                  onClick={() => setIsAddingClass(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-accent/10 text-brand-accent border border-brand-accent/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                >
+                  <Plus size={14} />
+                  Add New Class
+                </button>
+                <button 
+                  onClick={() => onCreateAssignment()}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+                >
+                  <Plus size={14} />
+                  New Assignment
+                </button>
+                <button 
+                  onClick={onExamsClick}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
+                >
+                  <Plus size={14} />
+                  New Exam
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={onExamsClick}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+              >
+                <Plus size={14} />
+                Create Exam
+              </button>
+            )}
           </div>
         </div>
 
-        {isAddingClass && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-brand-surface border border-brand-accent/30 rounded-[2rem] p-6 shadow-xl"
-          >
-            <form onSubmit={handleAddClass} className="space-y-4">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-black tracking-tight">Create New Class</h3>
-                <button 
-                  type="button" 
-                  onClick={() => setIsAddingClass(false)}
-                  className="text-brand-muted hover:text-brand-accent"
-                >
-                  Cancel
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Class Name</label>
-                    <input 
-                      type="text"
-                      placeholder="e.g. 9 North"
-                      className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50"
-                      value={newClassName}
-                      onChange={(e) => setNewClassName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Grade Level</label>
-                    <select 
-                      className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 appearance-none"
-                      value={selectedGrade}
-                      onChange={(e) => setSelectedGrade(e.target.value)}
+        {activeView === 'classes' ? (
+          <>
+            {isAddingClass && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-brand-surface border border-brand-accent/30 rounded-[2rem] p-6 shadow-xl"
+              >
+                <form onSubmit={handleAddClass} className="space-y-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-black tracking-tight">Create New Class</h3>
+                    <button 
+                      type="button" 
+                      onClick={() => setIsAddingClass(false)}
+                      className="text-brand-muted hover:text-brand-accent"
                     >
-                      <option value="">Select Grade...</option>
-                      {grades.map(g => (
-                        <option key={g} value={g}>{g}</option>
-                      ))}
-                    </select>
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Class Name</label>
+                        <input 
+                          type="text"
+                          placeholder="e.g. 9 North"
+                          className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50"
+                          value={newClassName}
+                          onChange={(e) => setNewClassName(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Grade Level</label>
+                        <select 
+                          className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 appearance-none"
+                          value={selectedGrade}
+                          onChange={(e) => setSelectedGrade(e.target.value)}
+                        >
+                          <option value="">Select Grade...</option>
+                          {grades.map(g => (
+                            <option key={g} value={g}>{g}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Students (One per line: Name, Index)</label>
+                      <textarea 
+                        placeholder="John Doe, 0001&#10;Jane Smith, 0002&#10;Ali Omar (auto-indexes)..."
+                        className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 min-h-[100px]"
+                        value={studentNames}
+                        onChange={(e) => setStudentNames(e.target.value)}
+                      />
+                      <p className="text-[9px] text-brand-muted/70 italic px-1">Tip: Comma-separated name and index number works best.</p>
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={loading}
+                      className="w-full py-4 bg-brand-accent text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-accent/20 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {loading ? "Creating..." : "Save Class & Students"}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {classes.length === 0 ? (
+                <div className="col-span-full py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
+                  <div className="w-16 h-16 bg-brand-accent/5 rounded-full flex items-center justify-center mx-auto text-brand-accent/30">
+                    <GraduationCap size={32} />
+                  </div>
+                  <div>
+                    <p className="text-brand-muted font-bold">No classes yet.</p>
+                    <p className="text-xs text-brand-muted/60 mt-1">Add your first class to manage students and assignments.</p>
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Students (One per line: Name, Index)</label>
-                  <textarea 
-                    placeholder="John Doe, 0001&#10;Jane Smith, 0002&#10;Ali Omar (auto-indexes)..."
-                    className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 min-h-[100px]"
-                    value={studentNames}
-                    onChange={(e) => setStudentNames(e.target.value)}
-                  />
-                  <p className="text-[9px] text-brand-muted/70 italic px-1">Tip: Comma-separated name and index number works best.</p>
-                </div>
-                <button 
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-4 bg-brand-accent text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-accent/20 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {loading ? "Creating..." : "Save Class & Students"}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {classes.length === 0 ? (
-            <div className="col-span-full py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
-              <div className="w-16 h-16 bg-brand-accent/5 rounded-full flex items-center justify-center mx-auto text-brand-accent/30">
-                <GraduationCap size={32} />
-              </div>
-              <div>
-                <p className="text-brand-muted font-bold">No classes yet.</p>
-                <p className="text-xs text-brand-muted/60 mt-1">Add your first class to manage students and assignments.</p>
-              </div>
+              ) : (
+                classes.map((cls, index) => {
+                  const classAssignments = assignments.filter(a => a.class_id === cls.id);
+                  return (
+                    <motion.div 
+                      key={cls.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.05 }}
+                      className={`p-6 rounded-[2rem] border border-brand-border bg-brand-surface shadow-sm hover:border-brand-accent group cursor-pointer transition-all active:scale-[0.98]`}
+                      onClick={() => onViewClass(cls.id, cls.name)}
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className={`p-3 rounded-2xl ${index % 3 === 0 ? 'bg-blue-500/10 text-blue-500' : index % 3 === 1 ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'} group-hover:scale-110 transition-transform`}>
+                          <Users size={24} />
+                        </div>
+                        <div className="bg-brand-bg border border-brand-border px-3 py-1.5 rounded-xl">
+                          <span className="text-[10px] font-black tracking-widest text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                      <h3 className="text-2xl font-black tracking-tight mb-6">{cls.name}</h3>
+                      <div className="flex items-center justify-between text-brand-muted">
+                        <div className="flex items-center gap-2 text-[10px] font-black tracking-widest uppercase">
+                          View Class
+                        </div>
+                        <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center group-hover:bg-brand-accent group-hover:text-white transition-colors">
+                          <ChevronRight size={16} />
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })
+              )}
             </div>
-          ) : (
-            classes.map((cls, index) => {
-              const classAssignments = assignments.filter(a => a.class_id === cls.id);
-              return (
+          </>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {exams.length === 0 ? (
+              <div className="col-span-full py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
+                <div className="w-16 h-16 bg-brand-accent/5 rounded-full flex items-center justify-center mx-auto text-brand-accent/30">
+                  <Clock size={32} />
+                </div>
+                <div>
+                  <p className="text-brand-muted font-bold">No exams created yet.</p>
+                  <p className="text-xs text-brand-muted/60 mt-1">Create your first timed exam to test your students.</p>
+                </div>
+              </div>
+            ) : (
+              exams.map((exam, index) => (
                 <motion.div 
-                  key={cls.id}
+                  key={exam.id}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.05 }}
-                  className={`p-6 rounded-[2rem] border border-brand-border bg-brand-surface shadow-sm hover:border-brand-accent group cursor-pointer transition-all active:scale-[0.98]`}
-                  onClick={() => onViewClass(cls.id, cls.name)}
+                  className="p-6 rounded-[2rem] border border-brand-border bg-brand-surface shadow-sm hover:border-brand-accent group cursor-pointer transition-all active:scale-[0.98]"
+                  onClick={() => onViewExamResults(exam.id)}
                 >
                   <div className="flex justify-between items-start mb-4">
-                    <div className={`p-3 rounded-2xl ${index % 3 === 0 ? 'bg-blue-500/10 text-blue-500' : index % 3 === 1 ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'} group-hover:scale-110 transition-transform`}>
-                      <Users size={24} />
+                    <div className="p-3 rounded-2xl bg-brand-accent/10 text-brand-accent group-hover:scale-110 transition-transform">
+                      <Clock size={24} />
                     </div>
-                    <div className="bg-brand-bg border border-brand-border px-3 py-1.5 rounded-xl">
-                      <span className="text-[10px] font-black tracking-widest text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
+                    <div className={`px-3 py-1.5 rounded-xl border border-brand-accent/5 ${exam.is_published ? 'bg-green-500/10 text-green-500' : 'bg-brand-bg text-brand-muted'}`}>
+                      <span className="text-[10px] font-black tracking-widest uppercase">{exam.is_published ? 'Published' : 'Draft'}</span>
                     </div>
                   </div>
-                  <h3 className="text-2xl font-black tracking-tight mb-6">{cls.name}</h3>
+                  <h3 className="text-xl font-black tracking-tight mb-2 truncate">{exam.title}</h3>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-6">{exam.subject} • {exam.grade}</p>
+                  
                   <div className="flex items-center justify-between text-brand-muted">
                     <div className="flex items-center gap-2 text-[10px] font-black tracking-widest uppercase">
-                      View Class
+                      View Results
                     </div>
                     <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center group-hover:bg-brand-accent group-hover:text-white transition-colors">
                       <ChevronRight size={16} />
                     </div>
                   </div>
                 </motion.div>
-              );
-            })
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

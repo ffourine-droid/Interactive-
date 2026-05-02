@@ -14,10 +14,12 @@ import {
   AlertCircle,
   HelpCircle,
   Trophy,
-  Calendar
+  Calendar,
+  Filter
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
+import { assignmentService } from '../services/assignmentService';
 
 interface Question {
   id: string;
@@ -38,9 +40,10 @@ interface Assignment {
   questions: Question[];
 }
 
-export const StudentAssignmentView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?: () => void }> = ({ onBack, onExamsClick }) => {
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
-  const [assignmentCode, setAssignmentCode] = useState('');
+  const [search, setSearch] = useState('');
+  const [assignments, setAssignments] = useState<any[]>([]);
   const [studentName, setStudentName] = useState(sessionStorage.getItem('azilearn_student_name') || '');
   const [studentId, setStudentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,52 +51,59 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void }> = ({ onBack
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [files, setFiles] = useState<Record<string, File>>({});
+  const [submission, setSubmission] = useState<any | null>(null);
   const { showToast } = useToast();
 
-  const handleFetchAssignment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!studentName.trim() || !assignmentCode.trim()) {
-      showToast("Please enter your name and the assignment code.", "error");
+  useEffect(() => {
+    if (step === 'entry') {
+      const fetchList = async () => {
+        setLoading(true);
+        try {
+          const studentStr = localStorage.getItem('azilearn_student');
+          const student = studentStr ? JSON.parse(studentStr) : null;
+          const grade = student?.grade || 'Grade 7';
+          const data = await assignmentService.searchAssignments(grade, search);
+          setAssignments(data);
+        } catch (err: any) {
+          showToast(err.message, "error");
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      const timer = setTimeout(fetchList, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [step, search, showToast]);
+
+  const handleJoinAssignment = async (id: string) => {
+    if (!studentName.trim()) {
+      showToast("Please enter your name first.", "error");
       return;
     }
 
     setLoading(true);
     try {
-      // In a real app, we'd have a specific column for the short code.
-      // For this prototype, we query by checking if the start of the UUID matches the 6-char code.
-      const { data, error } = await supabase
-        .from('assignments')
-        .select('*')
-        .eq('short_code', assignmentCode.toUpperCase().trim())
-        .single();
-
-      if (error || !data) {
-        throw new Error("Assignment not found. Please check the code.");
-      }
-
+      const { assignment: data, studentId: sid } = await assignmentService.joinAssignment(id, studentName);
       setAssignment(data as Assignment);
-      
-      // Look for the student in the class
-      if (data.class_id) {
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('id')
-          .eq('class_id', data.class_id)
-          .ilike('name', studentName.trim())
-          .maybeSingle();
-        
-        if (studentData) {
-          setStudentId(studentData.id);
-        } else {
-          setStudentId(studentName); // Fallback to name if not found
-        }
-      } else {
-        setStudentId(studentName);
-      }
-
+      setStudentId(sid);
       sessionStorage.setItem('azilearn_student_name', studentName);
-      setStep('taking');
-      showToast("Assignment joined! Good luck! 🎉", "success");
+
+      // Check if already submitted
+      const { data: subData } = await supabase
+        .from('assignment_submissions')
+        .select('*')
+        .eq('assignment_id', id)
+        .eq('student_id', sid)
+        .maybeSingle();
+      
+      if (subData) {
+        setSubmission(subData);
+        setStep('success'); // Show the success/result screen
+      } else {
+        setStep('taking');
+        showToast("Classwork joined! Good luck! 🎉", "success");
+      }
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
@@ -218,9 +228,23 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void }> = ({ onBack
               <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Assignment</p>
               <p className="font-bold text-sm">{assignment?.title}</p>
             </div>
+            {submission?.score !== undefined && submission?.score !== null && (
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-brand-accent mb-1">Grade</p>
+                <p className="text-2xl font-black text-brand-accent">{submission.score}%</p>
+              </div>
+            )}
+            {submission?.teacher_comment && (
+              <div className="bg-brand-accent/5 p-4 rounded-xl border border-brand-accent/20">
+                <p className="text-[10px] font-black uppercase tracking-widest text-brand-accent mb-1">Teacher Feedback</p>
+                <p className="text-sm font-bold text-brand-text italic">"{submission.teacher_comment}"</p>
+              </div>
+            )}
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Submitted At</p>
-              <p className="font-bold text-sm">{new Date().toLocaleString()}</p>
+              <p className="font-bold text-sm">
+                {submission?.created_at ? new Date(submission.created_at).toLocaleString() : new Date().toLocaleString()}
+              </p>
             </div>
           </div>
 
@@ -230,6 +254,15 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void }> = ({ onBack
           >
             Back to Lessons
           </button>
+
+          {onExamsClick && (
+            <button 
+              onClick={onExamsClick}
+              className="w-full mt-4 bg-brand-bg border-2 border-brand-accent text-brand-accent py-5 rounded-2xl font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
+            >
+              Take a Timed Exam
+            </button>
+          )}
         </motion.div>
       </div>
     );
@@ -387,78 +420,101 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void }> = ({ onBack
   }
 
   return (
-    <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 bg-brand-bg">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-2xl space-y-8"
-      >
-        <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <FileText className="text-brand-accent" size={32} />
+    <div className="min-h-screen bg-brand-bg flex flex-col">
+      {/* Header */}
+      <div className="bg-white/80 dark:bg-brand-card/80 backdrop-blur-xl border-b border-brand-accent/10 sticky top-0 z-50 p-4">
+        <div className="max-w-[420px] mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={onBack}
+              className="w-10 h-10 flex items-center justify-center hover:bg-brand-accent/10 rounded-full transition-colors"
+            >
+              <ChevronLeft size={20} className="text-brand-accent" />
+            </button>
+            <h1 className="font-sans font-bold text-xl text-brand-text">Classwork</h1>
           </div>
-          <h1 className="text-3xl font-black tracking-tighter">Assignments</h1>
-          <p className="text-brand-muted font-medium text-sm">Enter the code from your teacher.</p>
-        </div>
-
-        <form onSubmit={handleFetchAssignment} className="space-y-6">
-          <div className="space-y-4">
-            <div className="group">
-              <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2 group-focus-within:text-brand-accent transition-colors">Your Full Name</label>
-              <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
-                <input 
-                  type="text"
-                  required
-                  placeholder="e.g. John Kamau"
-                  className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-6 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold"
-                  value={studentName}
-                  onChange={e => setStudentName(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="group">
-              <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2 group-focus-within:text-brand-accent transition-colors">Assignment Code</label>
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
-                <input 
-                  type="text"
-                  required
-                  maxLength={6}
-                  placeholder="6-character code"
-                  className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-6 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold uppercase tracking-widest"
-                  value={assignmentCode}
-                  onChange={e => setAssignmentCode(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          <button 
-            type="submit"
-            disabled={loading}
-            className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-          >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : <ArrowRight size={20} />}
-            Enter Classroom
-          </button>
-        </form>
-        
-        <button 
-          onClick={onBack}
-          className="w-full py-4 text-brand-muted font-bold text-xs uppercase tracking-widest hover:text-brand-accent transition-colors"
-        >
-          Cancel
-        </button>
-      </motion.div>
-
-      <div className="mt-8 flex flex-col items-center gap-2">
-        <div className="flex items-center gap-2 text-brand-muted/40">
-          <HelpCircle size={14} />
-          <span className="text-[10px] font-bold uppercase tracking-widest leading-none">Need help? Ask your teacher</span>
         </div>
       </div>
+
+      <main className="flex-1 overflow-y-auto w-full max-w-[420px] mx-auto p-4 space-y-6">
+        <div className="space-y-4">
+          <div className="group">
+            <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">My Full Name</label>
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
+              <input 
+                type="text"
+                placeholder="e.g. John Kamau"
+                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
+                value={studentName}
+                onChange={e => setStudentName(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
+            <input 
+              type="text"
+              placeholder="Search teacher, school or class..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 grayscale opacity-50">
+            <Loader2 className="animate-spin text-brand-accent mb-4" size={32} />
+            <p className="text-xs font-bold text-brand-muted uppercase tracking-widest">Checking assignments...</p>
+          </div>
+        ) : assignments.length > 0 ? (
+          <div className="space-y-4">
+            {assignments.map((asgn, idx) => (
+              <motion.div
+                key={asgn.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                className="bg-white dark:bg-brand-card rounded-3xl p-5 border border-brand-accent/5 shadow-xl shadow-brand-accent/5 overflow-hidden group cursor-pointer active:scale-[0.98] transition-all"
+                onClick={() => handleJoinAssignment(asgn.id)}
+              >
+                <div className="flex flex-col gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{asgn.subject}</span>
+                      <span className="text-[10px] font-bold text-amber-600 bg-amber-500/5 px-2 py-0.5 rounded-lg">{getDueStatus(asgn.due_date)}</span>
+                    </div>
+                    <h3 className="font-sans font-bold text-lg text-brand-text truncate">{asgn.title}</h3>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold text-brand-muted uppercase tracking-wider">
+                      <span className="font-black text-brand-accent">{asgn.teacher?.name}</span>
+                      <span className="w-1 h-1 rounded-full bg-brand-muted/30" />
+                      <span className="italic">{asgn.teacher?.school_name}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-accent">
+                      Start Assignment <ArrowRight size={14} />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+             <div className="w-16 h-16 rounded-full bg-brand-accent/5 flex items-center justify-center text-brand-accent/30">
+                <AlertCircle size={32} />
+             </div>
+             <div className="space-y-1">
+                <p className="font-bold text-brand-text">No Assignments Found</p>
+                <p className="text-xs text-brand-muted max-w-[200px]">Try searching for your teacher's name or school.</p>
+             </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 };

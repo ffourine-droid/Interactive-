@@ -8,7 +8,8 @@ import {
   Award, 
   ChevronRight,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Trophy
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -34,14 +35,32 @@ interface Assignment {
   questions?: any[];
 }
 
+interface Exam {
+  id: string;
+  title: string;
+  subject: string;
+}
+
 interface Submission {
   id: string;
   assignment_id: string;
   score: number | null;
   teacher_comment?: string;
+  parent_feedback?: string;
   status: 'pending' | 'graded';
   submitted_at: string;
   answers: Record<string, any>;
+}
+
+interface ExamAttempt {
+  id: string;
+  exam_id: string;
+  score: number | null;
+  total_marks: number;
+  teacher_feedback?: string;
+  parent_feedback?: string;
+  submitted_at: string;
+  exam?: Exam;
 }
 
 interface Acknowledgement {
@@ -58,9 +77,13 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [examAttempts, setExamAttempts] = useState<ExamAttempt[]>([]);
   const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([]);
   const [ackLoading, setAckLoading] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<{assignment: Assignment, submission: Submission} | null>(null);
+  const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [savingFeedback, setSavingFeedback] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -72,8 +95,8 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       const studentIds = student.all_student_ids || [student.id];
       const classIds = student.all_class_ids || [student.class_id];
 
-      // Fetch assignments for all the student's classes
-      const [assignmentsRes, submissionsRes, acksRes] = await Promise.all([
+      // Fetch assignments, submissions, exam attempts, and acks
+      const [assignmentsRes, submissionsRes, examsRes, acksRes] = await Promise.all([
         supabase
           .from('assignments')
           .select('id, title, subject, grade, due_date, class_id, questions, created_at')
@@ -81,8 +104,17 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           .order('created_at', { ascending: false }),
         supabase
           .from('submissions')
-          .select('id, assignment_id, score, teacher_comment, status, submitted_at, answers')
+          .select('id, assignment_id, score, teacher_comment, parent_feedback, status, submitted_at, answers')
           .or(`student_id.in.(${studentIds.map(id => `"${id}"`).join(',')}),student_name.ilike."${student.name.trim()}"`),
+        supabase
+          .from('exam_attempts')
+          .select(`
+            id, exam_id, score, total_marks, teacher_feedback, parent_feedback, submitted_at,
+            exam:exam_id (id, title, subject)
+          `)
+          .in('student_id', studentIds)
+          .eq('is_submitted', true)
+          .order('submitted_at', { ascending: false }),
         supabase
           .from('parent_acknowledgements')
           .select('assignment_id, acknowledged_at')
@@ -91,15 +123,38 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
 
       if (assignmentsRes.error) throw assignmentsRes.error;
       if (submissionsRes.error) throw submissionsRes.error;
+      if (examsRes.error) throw examsRes.error;
       if (acksRes.error) throw acksRes.error;
 
       setAssignments(assignmentsRes.data || []);
       setSubmissions(submissionsRes.data || []);
+      setExamAttempts(examsRes.data || []);
       setAcknowledgements(acksRes.data || []);
     } catch (err: any) {
       showToast("Error loading dashboard data", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveParentFeedback = async (id: string, type: 'assignment' | 'exam') => {
+    setSavingFeedback(true);
+    try {
+      const { error } = await supabase
+        .from(type === 'assignment' ? 'submissions' : 'exam_attempts')
+        .update({ parent_feedback: feedbackText })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      showToast("Feedback sent to teacher!", "success");
+      setActiveFeedbackId(null);
+      setFeedbackText('');
+      fetchData(); // Refresh
+    } catch (err: any) {
+      showToast("Error saving feedback", "error");
+    } finally {
+      setSavingFeedback(false);
     }
   };
 
@@ -164,6 +219,114 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       <div className="space-y-4">
         <div className="flex items-center justify-between px-2">
           <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
+            <Award size={14} />
+            Exam Results
+          </h2>
+          <span className="text-[10px] font-black text-brand-muted shrink-0">{examAttempts.length} completed</span>
+        </div>
+
+        {examAttempts.length === 0 ? (
+          <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-8 text-center text-brand-muted">
+            <p className="text-xs font-bold uppercase tracking-widest opacity-50">No exam scores yet</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {examAttempts.map((attempt) => (
+              <div key={attempt.id} className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{attempt.exam?.subject || 'Exam'}</span>
+                      <div className="w-1 h-1 bg-brand-border rounded-full" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">
+                        Completed {new Date(attempt.submitted_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <h3 className="text-xl font-black text-brand-text mb-4 leading-tight">{attempt.exam?.title}</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                      {attempt.teacher_feedback && (
+                        <div className="p-4 bg-brand-accent/5 border border-brand-accent/10 rounded-2xl">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Award size={14} className="text-brand-accent" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</span>
+                          </div>
+                          <p className="text-xs font-bold text-brand-text italic leading-relaxed">
+                            "{attempt.teacher_feedback}"
+                          </p>
+                        </div>
+                      )}
+
+                      {attempt.parent_feedback ? (
+                        <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                          <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle2 size={14} className="text-emerald-600" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">My Response to Teacher</span>
+                          </div>
+                          <p className="text-xs font-bold text-brand-text italic leading-relaxed">
+                            "{attempt.parent_feedback}"
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-brand-bg border-2 border-dashed border-brand-border rounded-2xl">
+                          {activeFeedbackId === attempt.id ? (
+                            <div className="space-y-3">
+                              <textarea 
+                                value={feedbackText}
+                                onChange={(e) => setFeedbackText(e.target.value)}
+                                placeholder="Response to examine results..."
+                                className="w-full bg-brand-surface border border-brand-accent/20 rounded-xl p-3 text-xs font-bold outline-none focus:border-brand-accent"
+                                rows={2}
+                              />
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => handleSaveParentFeedback(attempt.id, 'exam')}
+                                  disabled={savingFeedback}
+                                  className="flex-1 bg-brand-accent text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest"
+                                >
+                                  Send Response
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setActiveFeedbackId(null);
+                                    setFeedbackText('');
+                                  }}
+                                  className="px-3 bg-brand-bg border border-brand-border rounded-lg text-[10px] font-black uppercase"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => setActiveFeedbackId(attempt.id)}
+                              className="w-full py-4 text-brand-muted hover:text-brand-accent transition-colors text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                            >
+                              Respond to Results +
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center p-6 bg-brand-bg rounded-2xl border border-brand-border min-w-[100px]">
+                    <Trophy className="text-brand-accent mb-1" size={24} />
+                    <span className="text-2xl font-black text-brand-text">
+                      {Math.round(((attempt.score || 0) / (attempt.total_marks || 1)) * 100)}%
+                    </span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Final Grade</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
             <FileText size={14} />
             Assignments & Progress
           </h2>
@@ -220,17 +383,70 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                               </button>
                             </div>
 
-                            {submission.teacher_comment && (
-                              <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Award size={14} className="text-emerald-600" />
-                                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Teacher's Remark</span>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {submission.teacher_comment && (
+                                <div className="p-4 bg-brand-accent/5 border border-brand-accent/10 rounded-2xl">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Award size={14} className="text-brand-accent" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Teacher's Remark</span>
+                                  </div>
+                                  <p className="text-xs font-bold text-brand-text italic leading-relaxed">
+                                    "{submission.teacher_comment}"
+                                  </p>
                                 </div>
-                                <p className="text-sm font-bold text-brand-text italic leading-relaxed">
-                                  "{submission.teacher_comment}"
-                                </p>
-                              </div>
-                            )}
+                              )}
+
+                              {submission.parent_feedback ? (
+                                <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <CheckCircle2 size={14} className="text-emerald-600" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">My Feedback to Teacher</span>
+                                  </div>
+                                  <p className="text-xs font-bold text-brand-text italic leading-relaxed">
+                                    "{submission.parent_feedback}"
+                                  </p>
+                                </div>
+                              ) : submission.score !== null && (
+                                <div className="p-4 bg-brand-bg border-2 border-dashed border-brand-border rounded-2xl">
+                                  {activeFeedbackId === submission.id ? (
+                                    <div className="space-y-3">
+                                      <textarea 
+                                        value={feedbackText}
+                                        onChange={(e) => setFeedbackText(e.target.value)}
+                                        placeholder="Write feedback to the teacher..."
+                                        className="w-full bg-brand-surface border border-brand-accent/20 rounded-xl p-3 text-xs font-bold outline-none focus:border-brand-accent"
+                                        rows={2}
+                                      />
+                                      <div className="flex gap-2">
+                                        <button 
+                                          onClick={() => handleSaveParentFeedback(submission.id, 'assignment')}
+                                          disabled={savingFeedback}
+                                          className="flex-1 bg-brand-accent text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest"
+                                        >
+                                          Send Feedback
+                                        </button>
+                                        <button 
+                                          onClick={() => {
+                                            setActiveFeedbackId(null);
+                                            setFeedbackText('');
+                                          }}
+                                          className="px-3 bg-brand-bg border border-brand-border rounded-lg text-[10px] font-black uppercase"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button 
+                                      onClick={() => setActiveFeedbackId(submission.id)}
+                                      className="w-full py-4 text-brand-muted hover:text-brand-accent transition-colors text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                                    >
+                                      Add Feedback for Teacher +
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${isOverdue ? 'bg-red-500/5 border-red-500/10 text-red-600' : 'bg-brand-muted/5 border-brand-border text-brand-muted'}`}>
