@@ -96,7 +96,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
     // Subscribe to submissions for this class
     const submissionChannel = supabase
-      .channel(`class-${classId}-submissions`)
+      .channel(`class-${classId}-realtime`)
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -104,9 +104,21 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setSubmissions(prev => [payload.new as Submission, ...prev]);
-          showToast("New submission received!", "info");
+          showToast("New assignment submission received!", "info");
         } else if (payload.eventType === 'UPDATE') {
           setSubmissions(prev => prev.map(s => s.id === payload.new.id ? payload.new as Submission : s));
+        }
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'exam_attempts'
+      }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setExamAttempts(prev => [payload.new, ...prev]);
+          showToast("New exam attempt received!", "info");
+        } else if (payload.eventType === 'UPDATE') {
+          setExamAttempts(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
         }
       })
       .subscribe();
@@ -180,7 +192,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           .from('teachers')
           .select('id, name, school_name')
           .eq('id', teacherId)
-          .single(),
+          .maybeSingle(),
         supabase
           .from('exams')
           .select('*')
@@ -603,15 +615,16 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                           {students.map((student) => {
                             const submission = assignmentSubmissions.find(s => s.student_name.toLowerCase() === student.name.toLowerCase());
                             const ack = assignmentAcks.find(a => a.student_id === student.id);
+                            const isMissing = !submission;
 
                             return (
                               <div 
                                 key={student.id}
-                                className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${submission ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-red-500/5 border-red-500/10'}`}
+                                className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${submission ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-red-500/5 border-red-500/10 shadow-lg shadow-red-500/5 border-2 border-dashed'}`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${submission ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
-                                    {submission ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${submission ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600 animate-pulse'}`}>
+                                    {submission ? <CheckCircle2 size={18} /> : <Clock size={18} />}
                                   </div>
                                   <div>
                                     <div className="flex items-center gap-2">
@@ -619,6 +632,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                                         {student.parent_code}
                                       </span>
                                       <p className={`font-bold text-sm ${submission ? 'text-emerald-900' : 'text-red-900'}`}>{student.name}</p>
+                                      {isMissing && <span className="bg-red-500 text-white text-[7px] font-black uppercase px-2 py-0.5 rounded-full tracking-widest">Missing</span>}
                                     </div>
                                     <div className="flex items-center gap-2 mt-1">
                                       {ack ? (

@@ -58,6 +58,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [classes, setClasses] = useState<Class[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [exams, setExams] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
@@ -78,6 +79,33 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     const t = JSON.parse(teacherData);
     setTeacher(t);
     fetchDashboardData(t.id);
+
+    // Global real-time listener for teacher's classes
+    const activityChannel = supabase
+      .channel(`teacher-${t.id}-activity`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'assignment_submissions'
+      }, (payload) => {
+        setRecentActivity(prev => [payload.new, ...prev].slice(0, 5));
+        fetchDashboardData(t.id);
+        showToast(`New assignment from ${payload.new.student_name}!`, "info");
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'exam_attempts'
+      }, (payload) => {
+        setRecentActivity(prev => [payload.new, ...prev].slice(0, 5));
+        fetchDashboardData(t.id);
+        showToast("New exam attempt started!", "info");
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(activityChannel);
+    };
   }, []);
 
   const fetchDashboardData = async (teacherId: string) => {
@@ -345,6 +373,38 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             )}
           </div>
         </div>
+
+        {recentActivity.length > 0 && (
+          <div className="bg-brand-surface border border-brand-accent/20 p-6 rounded-[2rem] shadow-lg shadow-brand-accent/5">
+             <h3 className="text-[10px] font-black text-brand-accent uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+               <Clock size={12} />
+               Live Activity Feed
+             </h3>
+             <div className="space-y-3">
+               {recentActivity.map((act, i) => (
+                 <motion.div 
+                   key={act.id || i}
+                   initial={{ x: -20, opacity: 0 }}
+                   animate={{ x: 0, opacity: 1 }}
+                   className="flex items-center gap-3 bg-brand-bg/50 p-3 rounded-2xl border border-brand-border"
+                 >
+                   <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+                     {act.student_name ? <Check size={14} /> : <Clock size={14} />}
+                   </div>
+                   <div className="flex-1">
+                      <p className="text-xs font-bold text-brand-text">
+                        <span className="text-brand-accent">{act.student_name || 'A student'}</span> 
+                        {act.student_name ? ' submitted an assignment' : ' started an exam attempt'}
+                      </p>
+                      <p className="text-[8px] font-black text-brand-muted uppercase tracking-widest">
+                        {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                   </div>
+                 </motion.div>
+               ))}
+             </div>
+          </div>
+        )}
 
         {activeView === 'classes' ? (
           <>

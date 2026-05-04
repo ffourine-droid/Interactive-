@@ -72,11 +72,11 @@ export const TeacherDashboard: React.FC<{ onBack: () => void }> = ({ onBack }) =
     // Subscribe to new submissions
     const submissionSubscription = supabase
       .channel('teacher-dashboard-submissions')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'submissions' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assignment_submissions' }, (payload) => {
         setSubmissions(prev => [payload.new as Submission, ...prev]);
         showToast("New submission received!", "info");
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'submissions' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'assignment_submissions' }, (payload) => {
         setSubmissions(prev => prev.map(s => s.id === payload.new.id ? payload.new as Submission : s));
       })
       .subscribe();
@@ -108,7 +108,7 @@ export const TeacherDashboard: React.FC<{ onBack: () => void }> = ({ onBack }) =
       const assignmentIds = assignmentsData?.map(a => a.id) || [];
       
       let submissionsQuery = supabase
-        .from('submissions')
+        .from('assignment_submissions')
         .select('*')
         .order('submitted_at', { ascending: false });
 
@@ -141,7 +141,7 @@ export const TeacherDashboard: React.FC<{ onBack: () => void }> = ({ onBack }) =
 
     try {
       const { error } = await supabase
-        .from('submissions')
+        .from('assignment_submissions')
         .update({
           status: 'graded',
           score: parseInt(gradeInput.score) || gradingSubmission.score,

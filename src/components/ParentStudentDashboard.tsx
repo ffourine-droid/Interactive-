@@ -110,7 +110,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         .from('exams')
         .select('*')
         .eq('id', examId)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       setExamData(data);
     } catch (err: any) {

@@ -19,6 +19,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
   const [loading, setLoading] = useState(true);
   const [assignment, setAssignment] = useState<any | null>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
+  const [classStudents, setClassStudents] = useState<any[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
   const [feedback, setFeedback] = useState('');
   const [parentFeedback, setParentFeedback] = useState('');
@@ -28,6 +29,23 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
 
   useEffect(() => {
     fetchData();
+
+    const channel = supabase
+      .channel(`assignment-${assignmentId}-results`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'assignment_submissions',
+        filter: `assignment_id=eq.${assignmentId}`
+      }, () => {
+        fetchData();
+        showToast("Updates received!", "info");
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [assignmentId]);
 
   useEffect(() => {
@@ -58,6 +76,15 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
 
       if (subError) throw subError;
       setSubmissions(subData || []);
+
+      // Fetch students in this class to see who hasn't submitted
+      if (asgnData?.class_id) {
+        const { data: studentsData, error: studentsError } = await supabase
+          .from('students')
+          .select('id, name')
+          .eq('class_id', asgnData.class_id);
+        if (!studentsError) setClassStudents(studentsData || []);
+      }
     } catch (err: any) {
       showToast(err.message, 'error');
     } finally {
@@ -110,6 +137,10 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
     }
   };
 
+  const submittedCount = submissions.length;
+  const pendingStudents = classStudents.filter(s => !submissions.some(sub => sub.student_name.toLowerCase() === s.name.toLowerCase()));
+  const gradedCount = submissions.filter(s => s.status === 'graded').length;
+
   if (loading || !assignment) {
     return (
       <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center">
@@ -150,44 +181,72 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-brand-accent/5">
-                    {submissions.length === 0 ? (
+                    {submissions.length === 0 && pendingStudents.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-20 text-center text-brand-muted font-bold uppercase text-xs tracking-widest">No submissions yet</td>
+                        <td colSpan={5} className="px-6 py-20 text-center text-brand-muted font-bold uppercase text-xs tracking-widest">No candidates found</td>
                       </tr>
                     ) : (
-                      submissions.map((sub) => (
-                        <tr key={sub.id} className="hover:bg-brand-bg/30 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-brand-accent/10 flex items-center justify-center text-brand-accent font-bold text-xs uppercase">
-                                {sub.student_name?.charAt(0)}
+                      <>
+                        {submissions.map((sub) => (
+                          <tr key={sub.id} className="hover:bg-brand-bg/30 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-brand-accent/10 flex items-center justify-center text-brand-accent font-bold text-xs uppercase">
+                                  {sub.student_name?.charAt(0)}
+                                </div>
+                                <span className="font-bold text-sm text-brand-text">{sub.student_name}</span>
                               </div>
-                              <span className="font-bold text-sm text-brand-text">{sub.student_name}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-xs text-brand-muted font-bold">{new Date(sub.created_at).toLocaleDateString()}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="font-black text-brand-accent">{sub.score !== null ? `${sub.score}%` : '—'}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${
-                              sub.status === 'graded' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
-                            }`}>
-                              {sub.status || 'pending'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <button 
-                              onClick={() => setSelectedSubmission(sub)}
-                              className="p-2 hover:bg-brand-accent/10 text-brand-accent rounded-xl transition-all"
-                            >
-                              <ExternalLink size={18} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-xs text-brand-muted font-bold">{new Date(sub.created_at).toLocaleDateString()}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="font-black text-brand-accent">{sub.score !== null ? `${sub.score}%` : '—'}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${
+                                sub.status === 'graded' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
+                              }`}>
+                                {sub.status || 'pending'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <button 
+                                onClick={() => setSelectedSubmission(sub)}
+                                className="p-2 hover:bg-brand-accent/10 text-brand-accent rounded-xl transition-all"
+                              >
+                                <ExternalLink size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {pendingStudents.map((student) => (
+                           <tr key={student.id} className="bg-red-500/5 hover:bg-red-500/10 transition-colors opacity-75">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                   <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold text-xs">
+                                      {student.name.charAt(0)}
+                                   </div>
+                                   <div className="flex flex-col">
+                                      <span className="font-bold text-sm text-red-900">{student.name}</span>
+                                      <span className="text-[10px] text-red-600 uppercase font-black tracking-widest">Awaiting Work</span>
+                                   </div>
+                                </div>
+                              </td>
+                              <td colSpan={2} className="px-6 py-4">
+                                <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] animate-pulse flex items-center gap-2">
+                                  <AlertCircle size={12}/> NO SUBMISSION
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[9px] font-black uppercase tracking-widest rounded-lg">
+                                  Missing
+                                </span>
+                              </td>
+                              <td className="px-6 py-4"></td>
+                           </tr>
+                        ))}
+                      </>
                     )}
                   </tbody>
                 </table>
@@ -201,11 +260,19 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
               <div className="space-y-4">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-brand-muted font-bold">Total Students</span>
-                  <span className="font-black text-brand-text">{submissions.length}</span>
+                  <span className="font-black text-brand-text">{classStudents.length}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-brand-muted font-bold">Submissions</span>
+                  <span className="font-black text-brand-text">{submittedCount}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-brand-muted font-bold">Pending</span>
+                  <span className="font-black text-orange-500">{pendingStudents.length}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-brand-muted font-bold">Graded</span>
-                  <span className="font-black text-green-600">{submissions.filter(s => s.status === 'graded').length}</span>
+                  <span className="font-black text-green-600">{gradedCount}</span>
                 </div>
               </div>
             </div>

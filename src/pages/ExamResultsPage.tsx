@@ -19,6 +19,7 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
   const [loading, setLoading] = useState(true);
   const [exam, setExam] = useState<Exam | null>(null);
   const [attempts, setAttempts] = useState<any[]>([]);
+  const [classStudents, setClassStudents] = useState<any[]>([]);
   const [selectedAttempt, setSelectedAttempt] = useState<any | null>(null);
   const [gradingMarks, setGradingMarks] = useState<Record<number, number>>({});
   const [feedback, setFeedback] = useState('');
@@ -28,6 +29,23 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
 
   useEffect(() => {
     fetchResults();
+
+    const channel = supabase
+      .channel(`exam-${examId}-results`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'exam_attempts',
+        filter: `exam_id=eq.${examId}`
+      }, () => {
+        fetchResults();
+        showToast("Updates received!", "info");
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [examId]);
 
   useEffect(() => {
@@ -64,6 +82,15 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
 
       if (attemptError) throw attemptError;
       setAttempts(attemptData || []);
+
+      // Fetch students in this class to see who hasn't submitted
+      if (examData.class_id) {
+        const { data: studentsData, error: studentsError } = await supabase
+          .from('students')
+          .select('id, name')
+          .eq('class_id', examData.class_id);
+        if (!studentsError) setClassStudents(studentsData || []);
+      }
     } catch (err: any) {
       showToast(err.message || 'Failed to fetch results', 'error');
     } finally {
@@ -143,6 +170,7 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
 
   // Summary stats
   const submittedCount = attempts.filter(a => a.is_submitted).length;
+  const pendingStudents = classStudents.filter(s => !attempts.some(a => a.student_id === s.id));
   const overtimeCount = attempts.filter(a => a.has_overtime).length;
   const avgScore = attempts.length > 0 ? (attempts.reduce((acc, a) => acc + (a.score || 0), 0) / attempts.length).toFixed(1) : 0;
   const topScore = attempts.length > 0 ? Math.max(...attempts.map(a => a.score || 0)) : 0;
@@ -169,9 +197,10 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
            {[
              { label: 'Submissions', value: submittedCount, icon: CheckCircle2, color: 'text-green-500' },
+             { label: 'Pending', value: pendingStudents.length, icon: Clock, color: 'text-amber-500' },
              { label: 'Avg. Score', value: avgScore, icon: BarChart3, color: 'text-brand-accent' },
              { label: 'Highest Score', value: topScore, icon: Star, color: 'text-orange-500' },
              { label: 'Overtime', value: overtimeCount, icon: Clock, color: 'text-red-400' }
@@ -216,71 +245,102 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
                     </tr>
                  </thead>
                  <tbody className="divide-y divide-brand-accent/5">
-                    {attempts.length === 0 ? (
+                    {attempts.length === 0 && pendingStudents.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-20 text-center text-brand-muted font-bold text-xs uppercase tracking-widest">No submission attempts yet</td>
+                        <td colSpan={6} className="px-6 py-20 text-center text-brand-muted font-bold text-xs uppercase tracking-widest">No candidates found</td>
                       </tr>
                     ) : (
-                      attempts.map((attempt) => (
-                        <tr key={attempt.id} className="hover:bg-brand-bg/30 transition-colors">
-                           <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                 <div className="w-8 h-8 rounded-full bg-brand-accent/10 flex items-center justify-center text-brand-accent font-bold text-xs">
-                                    {attempt.students?.name?.charAt(0) || 'S'}
-                                 </div>
-                                 <div className="flex flex-col">
-                                    <span className="font-bold text-sm text-brand-text">{attempt.students?.name || 'Unknown Student'}</span>
-                                    <span className="text-[10px] text-brand-muted uppercase tracking-wider">{attempt.students?.grade}</span>
-                                 </div>
-                              </div>
-                           </td>
-                           <td className="px-6 py-4">
-                              <div className="flex items-center gap-1.5 text-xs text-brand-muted font-bold">
-                                 <Calendar size={12}/> {new Date(attempt.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                           </td>
-                           <td className="px-6 py-4">
-                              {attempt.is_submitted ? (
-                                <div className="flex flex-col gap-0.5">
-                                   <span className="text-xs text-brand-text font-bold">
-                                     {new Date(attempt.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                   </span>
-                                   <span className="text-[9px] text-brand-muted uppercase font-black tracking-widest">
-                                     {new Date(attempt.submitted_at).toLocaleDateString()}
-                                   </span>
+                      <>
+                        {attempts.map((attempt) => (
+                          <tr key={attempt.id} className="hover:bg-brand-bg/30 transition-colors">
+                             <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                   <div className="w-8 h-8 rounded-full bg-brand-accent/10 flex items-center justify-center text-brand-accent font-bold text-xs">
+                                      {attempt.students?.name?.charAt(0) || 'S'}
+                                   </div>
+                                   <div className="flex flex-col">
+                                      <span className="font-bold text-sm text-brand-text">{attempt.students?.name || 'Unknown Student'}</span>
+                                      <span className="text-[10px] text-brand-muted uppercase tracking-wider">{attempt.students?.grade}</span>
+                                   </div>
                                 </div>
-                              ) : (
-                                <span className="text-[10px] text-orange-500 font-black uppercase tracking-widest italic animate-pulse">In Progress</span>
-                              )}
-                           </td>
-                           <td className="px-6 py-4">
-                              <div className="flex flex-col">
-                                 <span className="font-black text-brand-accent text-base">{attempt.score || 0} / {attempt.total_marks || 0}</span>
-                              </div>
-                           </td>
-                           <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                 {attempt.has_overtime ? (
-                                   <span className="px-2 py-0.5 bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[9px] font-black uppercase tracking-widest rounded-lg flex items-center gap-1">
-                                      <Clock size={10}/> Overtime
-                                   </span>
-                                 ) : (
-                                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-[9px] font-black uppercase tracking-widest rounded-lg flex items-center gap-1">
-                                      <CheckCircle2 size={10}/> In Time
-                                   </span>
-                                 )}
-                              </div>
-                           </td>
-                           <td className="px-6 py-4">
-                              <button 
-                                onClick={() => setSelectedAttempt(attempt)}
-                                className="p-2 hover:bg-brand-accent/10 text-brand-accent rounded-xl transition-all"
-                              >
-                                 <ExternalLink size={18} />
-                              </button>
-                           </td>
-                        </tr>
-                      ))
+                             </td>
+                             <td className="px-6 py-4">
+                                <div className="flex items-center gap-1.5 text-xs text-brand-muted font-bold">
+                                   <Calendar size={12}/> {new Date(attempt.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                             </td>
+                             <td className="px-6 py-4">
+                                {attempt.is_submitted ? (
+                                  <div className="flex flex-col gap-0.5">
+                                     <span className="text-xs text-brand-text font-bold">
+                                       {new Date(attempt.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                     </span>
+                                     <span className="text-[9px] text-brand-muted uppercase font-black tracking-widest">
+                                       {new Date(attempt.submitted_at).toLocaleDateString()}
+                                     </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] text-orange-500 font-black uppercase tracking-widest italic animate-pulse">In Progress</span>
+                                )}
+                             </td>
+                             <td className="px-6 py-4">
+                                <div className="flex flex-col">
+                                   <span className="font-black text-brand-accent text-base">{attempt.score || 0} / {attempt.total_marks || 0}</span>
+                                </div>
+                             </td>
+                             <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                   {attempt.has_overtime ? (
+                                     <span className="px-2 py-0.5 bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[9px] font-black uppercase tracking-widest rounded-lg flex items-center gap-1">
+                                        <Clock size={10}/> Overtime
+                                     </span>
+                                   ) : (
+                                      <span className="px-2 py-0.5 bg-green-100 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-[9px] font-black uppercase tracking-widest rounded-lg flex items-center gap-1">
+                                        <CheckCircle2 size={10}/> In Time
+                                     </span>
+                                   )}
+                                </div>
+                             </td>
+                             <td className="px-6 py-4">
+                                <button 
+                                  onClick={() => setSelectedAttempt(attempt)}
+                                  className="p-2 hover:bg-brand-accent/10 text-brand-accent rounded-xl transition-all"
+                                >
+                                   <ExternalLink size={18} />
+                                </button>
+                             </td>
+                          </tr>
+                        ))}
+                        {pendingStudents.map((student) => (
+                           <tr key={student.id} className="bg-red-500/5 hover:bg-red-500/10 transition-colors opacity-75">
+                             <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                   <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold text-xs">
+                                      {student.name.charAt(0)}
+                                   </div>
+                                   <div className="flex flex-col">
+                                      <span className="font-bold text-sm text-red-900">{student.name}</span>
+                                      <span className="text-[10px] text-red-600 uppercase font-black tracking-widest">Awaiting Attempt</span>
+                                   </div>
+                                </div>
+                             </td>
+                             <td colSpan={2} className="px-6 py-4">
+                                <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] animate-pulse flex items-center gap-2">
+                                  <AlertCircle size={12}/> EXAM NOT STARTED
+                                </span>
+                             </td>
+                             <td className="px-6 py-4">
+                                <span className="text-sm font-black text-red-300">0 / {exam.questions.reduce((acc, q) => acc + q.marks, 0)}</span>
+                             </td>
+                             <td className="px-6 py-4">
+                                <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[9px] font-black uppercase tracking-widest rounded-lg">
+                                  Pending
+                                </span>
+                             </td>
+                             <td className="px-6 py-4"></td>
+                           </tr>
+                        ))}
+                      </>
                     )}
                  </tbody>
               </table>
