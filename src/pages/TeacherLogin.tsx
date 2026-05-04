@@ -35,7 +35,7 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
         .eq('name', formData.name.trim())
         .eq('school_name', formData.schoolName.trim())
         .eq('pin', formData.pin)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         showToast("Incorrect details, please try again", "error");

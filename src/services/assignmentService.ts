@@ -48,9 +48,10 @@ export const assignmentService = {
       .from('assignments')
       .select('*')
       .eq('id', assignmentId)
-      .single();
+      .maybeSingle();
 
-    if (error || !data) throw new Error("Assignment not found.");
+    if (error) throw error;
+    if (!data) throw new Error("Assignment not found.");
 
     // Look for student in class
     let studentId = studentName;

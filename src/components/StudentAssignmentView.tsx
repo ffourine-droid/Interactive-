@@ -181,7 +181,7 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?
 
       // 3. Insert submission
       const { error: submitError } = await supabase
-        .from('submissions')
+        .from('assignment_submissions')
         .insert([{
           assignment_id: assignment.id,
           student_id: studentId || studentName,

@@ -89,7 +89,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         .from('teachers')
         .select('id')
         .eq('id', teacherId)
-        .single();
+        .maybeSingle();
 
       if (teacherError || !teacherCheck) {
         console.error("Teacher record not found in database.");
@@ -146,9 +146,11 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           teacher_id: teacher.id
         }])
         .select()
-        .single();
+        .maybeSingle();
 
-      if (classError) throw classError;
+      if (classError || !classData) {
+        throw classError || new Error("Failed to create class record");
+      }
 
       // 2. Add Students if provided
       if (studentNames.trim()) {

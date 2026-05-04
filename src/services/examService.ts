@@ -122,9 +122,10 @@ export const examService = {
       .from('exams')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
     
     if (error) throw error;
+    if (!data) throw new Error("Exam not found.");
     return data as Exam;
   },
 
@@ -133,14 +134,20 @@ export const examService = {
     let query = supabase.from('students').select('*').ilike('name', name.trim());
     
     const { data: students, error: fetchError } = await query;
-    if (fetchError) throw fetchError;
+    if (fetchError) {
+      if (fetchError.message.includes('column "index_number" does not exist')) {
+        throw new Error("Missing 'index_number' column. Please run the provided SQL in Supabase.");
+      }
+      throw fetchError;
+    }
 
     // If multiple with same name, and we have index, filter
     let existing = null;
     if (students && students.length > 0) {
       if (index) {
         existing = students.find((s: any) => s.index_number === index.trim());
-      } else {
+      }
+      if (!existing) {
         existing = students[0];
       }
     }
@@ -155,11 +162,20 @@ export const examService = {
         index_number: index?.trim() || null,
         grade: grade || 'Grade 7'
       })
-      .select()
-      .single();
+      .select();
 
-    if (createError) throw createError;
-    return created;
+    if (createError) {
+      if (createError.message.includes('column "index_number" does not exist')) {
+        throw new Error("Database schema update required. Please run the provided SQL to add 'index_number' column to students table.");
+      }
+      throw createError;
+    }
+
+    if (!created || created.length === 0) {
+      throw new Error("Student created but could not be retrieved. Please ensure 'students' table Row Level Security (RLS) policies are set to 'Allow all'.");
+    }
+
+    return created[0];
   },
 
   async startExamAttempt(examId: string, studentId: string) {
@@ -184,11 +200,13 @@ export const examService = {
         has_overtime: false,
         answers: {}
       })
-      .select()
-      .single();
+      .select();
 
     if (error) throw error;
-    return data as ExamAttempt;
+    if (!data || data.length === 0) {
+      throw new Error("Attempt created but could not be retrieved. Please check permissions.");
+    }
+    return data[0] as ExamAttempt;
   },
 
   async getAttempt(examId: string, studentId: string) {
@@ -222,7 +240,7 @@ export const examService = {
       .from('exam_attempts')
       .select('answers')
       .eq('id', attemptId)
-      .single();
+      .maybeSingle();
 
     const newAnswers = { ...(attempt?.answers || {}), [questionIndex]: answer };
 
@@ -272,11 +290,13 @@ export const examService = {
         grading: {} // Initialize for short answers
       })
       .eq('id', attemptId)
-      .select()
-      .single();
+      .select();
 
     if (error) throw error;
-    return data as ExamAttempt;
+    if (!data || data.length === 0) {
+      throw new Error("Submission recorded but confirmation failed.");
+    }
+    return data[0] as ExamAttempt;
   },
 
   async updateGrading(attemptId: string, grading: Record<number, number>, score: number, feedback: string) {

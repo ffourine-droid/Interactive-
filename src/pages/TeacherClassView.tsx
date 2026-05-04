@@ -100,7 +100,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
-        table: 'submissions' 
+        table: 'assignment_submissions' 
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setSubmissions(prev => [payload.new as Submission, ...prev]);
@@ -127,7 +127,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     setGradingLoading(true);
     try {
       const { error } = await supabase
-        .from('submissions')
+        .from('assignment_submissions')
         .update({ 
           score,
           teacher_comment: feedbackInput,
@@ -207,7 +207,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       
       const fetchSubmissionsAndAcks = assignmentsData.length > 0 ? [
         supabase
-          .from('submissions')
+          .from('assignment_submissions')
           .select('id, assignment_id, student_id, student_name, answers, score, teacher_comment, parent_feedback, status, submitted_at')
           .in('assignment_id', assignmentsData.map(a => a.id)),
         supabase

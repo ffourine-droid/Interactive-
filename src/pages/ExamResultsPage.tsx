@@ -22,7 +22,9 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
   const [selectedAttempt, setSelectedAttempt] = useState<any | null>(null);
   const [gradingMarks, setGradingMarks] = useState<Record<number, number>>({});
   const [feedback, setFeedback] = useState('');
+  const [parentFeedback, setParentFeedback] = useState('');
   const [savingGrading, setSavingGrading] = useState(false);
+  const [savingParentFeedback, setSavingParentFeedback] = useState(false);
 
   useEffect(() => {
     fetchResults();
@@ -32,6 +34,7 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
     if (selectedAttempt) {
       setGradingMarks(selectedAttempt.grading || {});
       setFeedback(selectedAttempt.teacher_feedback || '');
+      setParentFeedback(selectedAttempt.parent_feedback || '');
     }
   }, [selectedAttempt]);
 
@@ -41,9 +44,10 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
         .from('exams')
         .select('*')
         .eq('id', examId)
-        .single();
+        .maybeSingle();
 
       if (examError) throw examError;
+      if (!examData) throw new Error('Exam not found');
       setExam(examData);
 
       const { data: attemptData, error: attemptError } = await supabase
@@ -69,6 +73,27 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
 
   const handleGradeChange = (qIdx: number, marks: number) => {
     setGradingMarks(prev => ({ ...prev, [qIdx]: marks }));
+  };
+
+  const saveParentFeedback = async () => {
+    if (!selectedAttempt) return;
+    setSavingParentFeedback(true);
+    try {
+      const { error } = await supabase
+        .from('exam_attempts')
+        .update({ 
+          parent_feedback: parentFeedback
+        })
+        .eq('id', selectedAttempt.id);
+
+      if (error) throw error;
+      showToast('Parent remarks saved!', 'success');
+      fetchResults();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setSavingParentFeedback(false);
+    }
   };
 
   const saveGrading = async () => {
@@ -300,19 +325,56 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-brand-bg">
-                   {selectedAttempt.parent_feedback && (
-                     <div className="bg-emerald-500/5 border-2 border-emerald-500/20 rounded-[2rem] p-6 mb-8">
-                        <div className="flex items-center gap-3 mb-3">
+                   {/* Remarks Section */}
+                   <div className="grid grid-cols-1 gap-6">
+                      {/* Teacher Remarks */}
+                      <div className="bg-white dark:bg-brand-card p-6 rounded-[2rem] border-2 border-brand-accent/10 shadow-lg space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-xl bg-brand-accent/10 text-brand-accent">
+                            <MessageCircle size={18} />
+                          </div>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher Remarks</h3>
+                        </div>
+                        <textarea 
+                          placeholder="Teacher's comments..."
+                          value={feedback}
+                          onChange={(e) => setFeedback(e.target.value)}
+                          className="w-full bg-brand-bg border-none rounded-2xl p-4 font-bold text-sm outline-none focus:ring-2 focus:ring-brand-accent/20 min-h-[100px] resize-none transition-all"
+                        />
+                        <button 
+                          onClick={saveGrading}
+                          disabled={savingGrading}
+                          className="w-full py-3 bg-brand-accent text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-accent/20"
+                        >
+                          {savingGrading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Update Teacher Remarks'}
+                        </button>
+                      </div>
+
+                      {/* Parent Remarks */}
+                      <div className="bg-white dark:bg-brand-card p-6 rounded-[2rem] border-2 border-emerald-500/10 shadow-lg space-y-4">
+                        <div className="flex items-center gap-3">
                           <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
                             <User size={18} />
                           </div>
-                          <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600">Parent Feedback</h3>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600">Parent Remarks</h3>
                         </div>
-                        <p className="text-base font-bold text-brand-text italic">
-                          "{selectedAttempt.parent_feedback}"
-                        </p>
-                     </div>
-                   )}
+                        <textarea 
+                          placeholder="Parent's comments..."
+                          value={parentFeedback}
+                          onChange={(e) => setParentFeedback(e.target.value)}
+                          className="w-full bg-brand-bg border-none rounded-2xl p-4 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 min-h-[100px] resize-none transition-all"
+                        />
+                        <button 
+                          onClick={saveParentFeedback}
+                          disabled={savingParentFeedback}
+                          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20"
+                        >
+                          {savingParentFeedback ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Update Parent Remarks'}
+                        </button>
+                      </div>
+                   </div>
+
+                   <div className="h-px bg-brand-accent/10 w-full" />
 
                    {exam.questions.map((q, idx) => {
                      const studentAnswer = selectedAttempt.answers[idx];
@@ -382,32 +444,6 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
                    })}
                 </div>
 
-                {/* Feedback Section */}
-                <div className="mt-12 space-y-4 border-t-2 border-brand-accent/10 pt-8 pb-12">
-                   <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2.5 rounded-xl bg-brand-accent/10 text-brand-accent">
-                         <MessageCircle size={20} />
-                      </div>
-                      <div>
-                         <h3 className="font-black text-lg tracking-tight">Teacher's Feedback</h3>
-                         <p className="text-[10px] font-bold text-brand-muted uppercase tracking-widest leading-none">Share your thoughts on the overall performance</p>
-                      </div>
-                   </div>
-                   <textarea 
-                     placeholder="Great work! Focus more on the descriptive parts next time..."
-                     value={feedback}
-                     onChange={(e) => setFeedback(e.target.value)}
-                     className="w-full bg-brand-bg border-4 border-brand-accent/5 rounded-3xl p-6 font-bold text-sm outline-none focus:border-brand-accent/20 min-h-[140px] resize-none transition-all"
-                   />
-                   <button 
-                     onClick={saveGrading}
-                     disabled={savingGrading}
-                     className="w-full py-6 bg-brand-accent text-white rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-brand-accent/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-                   >
-                     {savingGrading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                     Save Results & Feedback
-                   </button>
-                </div>
              </motion.div>
           </div>
         )}

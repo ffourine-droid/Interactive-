@@ -9,7 +9,8 @@ import {
   ChevronRight,
   Loader2,
   AlertTriangle,
-  Trophy
+  Trophy,
+  Star
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -83,13 +84,41 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([]);
   const [ackLoading, setAckLoading] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<{assignment: Assignment, submission: Submission} | null>(null);
+  const [selectedExam, setSelectedExam] = useState<ExamAttempt | null>(null);
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [savingFeedback, setSavingFeedback] = useState(false);
+  const [examData, setExamData] = useState<any | null>(null);
+  const [loadingExamDetails, setLoadingExamDetails] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, [student.id, student.all_student_ids?.join(',')]);
+
+  useEffect(() => {
+    if (selectedExam) {
+      fetchExamDetails(selectedExam.exam_id);
+    } else {
+      setExamData(null);
+    }
+  }, [selectedExam]);
+
+  const fetchExamDetails = async (examId: string) => {
+    setLoadingExamDetails(true);
+    try {
+      const { data, error } = await supabase
+        .from('exams')
+        .select('*')
+        .eq('id', examId)
+        .single();
+      if (error) throw error;
+      setExamData(data);
+    } catch (err: any) {
+      showToast("Error loading exam details", "error");
+    } finally {
+      setLoadingExamDetails(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -105,7 +134,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           .in('class_id', classIds)
           .order('created_at', { ascending: false }),
         supabase
-          .from('submissions')
+          .from('assignment_submissions')
           .select('id, assignment_id, score, teacher_comment, parent_feedback, teacher_reply, status, submitted_at, answers')
           .or(`student_id.in.(${studentIds.map(id => `"${id}"`).join(',')}),student_name.ilike."${student.name.trim()}"`),
         supabase
@@ -143,7 +172,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
     setSavingFeedback(true);
     try {
       const { error } = await supabase
-        .from(type === 'assignment' ? 'submissions' : 'exam_attempts')
+        .from(type === 'assignment' ? 'assignment_submissions' : 'exam_attempts')
         .update({ parent_feedback: feedbackText })
         .eq('id', id);
 
@@ -245,6 +274,16 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                       </span>
                     </div>
                     <h3 className="text-xl font-black text-brand-text mb-4 leading-tight">{attempt.exam?.title}</h3>
+
+                    <div className="flex items-center gap-3 mb-4">
+                       <button 
+                         onClick={() => setSelectedExam(attempt)}
+                         className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
+                       >
+                         <FileText size={14} />
+                         View Detailed Exam Answers
+                       </button>
+                    </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                       {attempt.teacher_feedback && (
@@ -522,7 +561,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
 
       {/* Detailed Work Modal */}
       <AnimatePresence>
-        {selectedSubmission && (
+        {(selectedSubmission || selectedExam) && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -537,11 +576,14 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
             >
               <header className="p-8 border-b border-brand-border flex items-center justify-between shrink-0">
                 <div>
-                  <h2 className="text-2xl font-black tracking-tight">{selectedSubmission.assignment.title}</h2>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">{selectedSubmission.assignment.subject} • Student Review</p>
+                  <h2 className="text-2xl font-black tracking-tight">{selectedSubmission?.assignment.title || selectedExam?.exam?.title}</h2>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">{selectedSubmission?.assignment.subject || selectedExam?.exam?.subject} • Student Review</p>
                 </div>
                 <button 
-                  onClick={() => setSelectedSubmission(null)}
+                  onClick={() => {
+                    setSelectedSubmission(null);
+                    setSelectedExam(null);
+                  }}
                   className="p-3 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-colors"
                 >
                   <ChevronRight size={18} className="rotate-180" />
@@ -549,21 +591,28 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
               </header>
 
               <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                {selectedSubmission.submission.teacher_comment && (
+                {(selectedSubmission?.submission.teacher_comment || selectedExam?.teacher_feedback) && (
                   <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-6 space-y-3">
                     <div className="flex items-center gap-3">
                       <Award className="text-brand-accent" size={20} />
                       <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</h3>
                     </div>
                     <p className="text-lg font-bold text-brand-text leading-relaxed">
-                      "{selectedSubmission.submission.teacher_comment}"
+                      "{selectedSubmission?.submission.teacher_comment || selectedExam?.teacher_feedback}"
                     </p>
                   </section>
                 )}
 
                 <div className="space-y-6">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-muted ml-2">Questions & Answers</h4>
-                  {selectedSubmission.assignment.questions?.map((q: any, idx: number) => (
+                  
+                  {loadingExamDetails && (
+                    <div className="flex items-center justify-center py-10">
+                      <Loader2 className="animate-spin text-brand-accent" size={32} />
+                    </div>
+                  )}
+
+                  {selectedSubmission && selectedSubmission.assignment.questions?.map((q: any, idx: number) => (
                     <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
                       <div className="flex items-start gap-4 mb-4">
                         <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
@@ -596,6 +645,48 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                       </div>
                     </div>
                   ))}
+
+                  {selectedExam && examData && examData.questions?.map((q: any, idx: number) => {
+                    const studentAnswer = (selectedExam as any).answers?.[idx];
+                    const isCorrect = q.type === 'mcq' ? studentAnswer === q.correct_answer : false;
+                    
+                    return (
+                      <div key={idx} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
+                        <div className="flex items-start gap-4 mb-4">
+                          <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
+                          <h4 className="font-bold text-sm leading-tight pt-0.5">{q.question}</h4>
+                        </div>
+                        <div className="pl-10 space-y-4">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Student Response</p>
+                            <div className={`p-4 rounded-xl text-sm font-bold border-2 ${
+                              q.type === 'mcq' 
+                                ? isCorrect ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600' : 'bg-red-500/5 border-red-500/20 text-red-600'
+                                : 'bg-brand-surface border-brand-border/50 text-brand-text'
+                            }`}>
+                              {studentAnswer || 'No response'}
+                            </div>
+                          </div>
+                          
+                          {q.type === 'mcq' && (
+                            <div>
+                               <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Correct Solution</p>
+                               <div className="p-4 rounded-xl text-sm font-bold bg-emerald-500/5 border-2 border-emerald-500/20 text-emerald-600">
+                                 {q.correct_answer}
+                               </div>
+                            </div>
+                          )}
+
+                          {!isCorrect && q.type !== 'mcq' && selectedExam.grading?.[idx] !== undefined && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-accent/10 text-brand-accent rounded-lg border border-brand-accent/20 w-fit">
+                              <Star size={12} />
+                              <span className="text-[10px] font-black uppercase tracking-widest">Graded: {selectedExam.grading[idx]} / {q.marks} Marks</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </motion.div>
