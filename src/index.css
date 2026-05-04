@@ -10,26 +10,29 @@
   --color-brand-accent: var(--accent);
   --color-brand-muted: var(--muted);
   --color-brand-border: var(--border);
+  --color-brand-card: var(--card);
 }
 
 :root {
-  --bg: #f5f5f5;
-  --text: #1a1a1a;
+  --bg: #F8FAFC;
+  --text: #0F172A;
   --surface: #ffffff;
   --accent: #F47B20;
-  --muted: #6b6b6b;
-  --border: #e0e0e0;
+  --muted: #64748B;
+  --border: #E2E8F0;
+  --card: #FFFFFF;
   --radius-pill: 999px;
   --radius-card: 14px;
 }
 
 .dark {
-  --bg: #121212;
-  --text: #f5f5f5;
-  --surface: #1e1e1e;
+  --bg: #0A0A0B;
+  --text: #F1F5F9;
+  --surface: #171719;
   --accent: #F47B20;
-  --muted: #a0a0a0;
-  --border: #333333;
+  --muted: #94A3B8;
+  --border: #27272A;
+  --card: #1C1C1E;
 }
 
 body {

@@ -211,10 +211,14 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
     try {
       // 1. Get the current teacher's school name to uniquely identify students by school
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      if (!teacherStr) return;
+      const tId = JSON.parse(teacherStr).id;
+
       const { data: teacherData } = await supabase
         .from('teachers')
         .select('school_name')
-        .eq('id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('id', tId)
         .single();
 
       const schoolName = teacherData?.school_name || '';
@@ -310,10 +314,14 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       setLoading(true);
       
       // Get school name
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      if (!teacherStr) return;
+      const bulkTId = JSON.parse(teacherStr).id;
+
       const { data: teacherData } = await supabase
         .from('teachers')
         .select('school_name')
-        .eq('id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('id', bulkTId)
         .single();
       const schoolName = teacherData?.school_name || '';
 

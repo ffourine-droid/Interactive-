@@ -83,6 +83,21 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const fetchDashboardData = async (teacherId: string) => {
     try {
       setLoading(true);
+
+      // Verify teacher exists in DB
+      const { data: teacherCheck, error: teacherError } = await supabase
+        .from('teachers')
+        .select('id')
+        .eq('id', teacherId)
+        .single();
+
+      if (teacherError || !teacherCheck) {
+        console.error("Teacher record not found in database.");
+        showToast("Session expired or database reset. Please sign up again.", "error");
+        handleLogout();
+        return;
+      }
+
       // Fetch Classes and Assignments in parallel
       const [classesResponse, assignmentsResponse, examsResponse] = await Promise.all([
         supabase

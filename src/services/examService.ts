@@ -72,9 +72,9 @@ export const examService = {
     return data;
   },
 
-  async searchExams(grade: string, searchTerm: string) {
-    // Search by title, subject, or join with teacher profile to search by teacher name/school
-    const { data, error } = await supabase
+  async searchExams(grade: string, teacherName?: string, schoolName?: string) {
+    // Determine the query
+    let baseQuery = supabase
       .from('exams')
       .select(`
         *,
@@ -83,22 +83,38 @@ export const examService = {
           school_name
         )
       `)
-      .eq('grade', grade)
-      .eq('is_published', true)
-      .order('created_at', { ascending: false });
+      .eq('is_published', true);
+
+    if (grade) {
+      baseQuery = baseQuery.eq('grade', grade);
+    }
+
+    const { data, error } = await baseQuery.order('created_at', { ascending: false });
 
     if (error) throw error;
+    if (!data) return [];
 
-    if (!searchTerm) return data;
+    let filtered = data;
 
-    const term = searchTerm.toLowerCase();
-    return data.filter((exam: any) => 
-      exam.title.toLowerCase().includes(term) ||
-      exam.subject.toLowerCase().includes(term) ||
-      exam.teacher?.name?.toLowerCase().includes(term) ||
-      exam.teacher?.school_name?.toLowerCase().includes(term) ||
-      exam.class?.name?.toLowerCase().includes(term)
-    );
+    if (teacherName) {
+      const term = teacherName.toLowerCase().trim();
+      if (term) {
+        filtered = filtered.filter((exam: any) => 
+          exam.teacher?.name?.toLowerCase().includes(term)
+        );
+      }
+    }
+
+    if (schoolName) {
+      const term = schoolName.toLowerCase().trim();
+      if (term) {
+        filtered = filtered.filter((exam: any) => 
+          exam.teacher?.school_name?.toLowerCase().includes(term)
+        );
+      }
+    }
+
+    return filtered;
   },
 
   async getExamById(id: string) {
@@ -110,6 +126,40 @@ export const examService = {
     
     if (error) throw error;
     return data as Exam;
+  },
+
+  async identifyStudent(name: string, index?: string, grade?: string) {
+    // Try to find student by name and optional index
+    let query = supabase.from('students').select('*').ilike('name', name.trim());
+    
+    const { data: students, error: fetchError } = await query;
+    if (fetchError) throw fetchError;
+
+    // If multiple with same name, and we have index, filter
+    let existing = null;
+    if (students && students.length > 0) {
+      if (index) {
+        existing = students.find((s: any) => s.index_number === index.trim());
+      } else {
+        existing = students[0];
+      }
+    }
+    
+    if (existing) return existing;
+
+    // Create new student
+    const { data: created, error: createError } = await supabase
+      .from('students')
+      .insert({
+        name: name.trim(),
+        index_number: index?.trim() || null,
+        grade: grade || 'Grade 7'
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+    return created;
   },
 
   async startExamAttempt(examId: string, studentId: string) {

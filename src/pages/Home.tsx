@@ -316,7 +316,6 @@ export default function Home({
             <input 
               ref={searchInputRef}
               type="text" 
-              placeholder="Search topic or enter code..." 
               className="flex-1 bg-transparent border-none outline-none font-sans text-[15px] text-brand-text placeholder:text-brand-muted/60"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -329,25 +328,6 @@ export default function Home({
               }}
             />
             <div className="flex items-center gap-2 shrink-0">
-              {searchQuery && (
-                <button 
-                  onClick={() => {
-                    setSearchQuery('');
-                    handleSearch('', category, selectedClass, true);
-                  }}
-                  className="p-1.5 hover:bg-brand-bg rounded-full text-brand-muted transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              )}
-              <button 
-                onClick={() => handleSearch(searchQuery, category, selectedClass, true)}
-                className={`p-2 rounded-full transition-all active:scale-90 ${searchQuery ? 'text-brand-accent bg-brand-accent/10' : 'text-brand-muted'}`}
-                title="Search"
-              >
-                <Search size={20} />
-              </button>
-              <div className="w-[1px] h-6 bg-brand-border/50 mx-1" />
               <button 
                 className="w-9 h-9 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform relative overflow-hidden shrink-0"
               >
@@ -488,11 +468,11 @@ export default function Home({
                   <input 
                     ref={searchInputRef}
                     type="text"
-                    placeholder={`Search in ${selectedClass}...`}
-                    className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-2 pl-10 pr-4 outline-none focus:border-brand-accent transition-all font-bold text-xs"
+                    className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-2 pl-10 pr-4 outline-none focus:border-brand-accent transition-all font-bold text-xs text-brand-text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
+                  <span className="absolute left-10 -top-2 px-2 bg-brand-surface text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all">Quick Search</span>
                 </div>
 
                 <div className="mb-6">

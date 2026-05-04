@@ -42,7 +42,10 @@ interface Assignment {
 
 export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?: () => void }> = ({ onBack, onExamsClick }) => {
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
-  const [search, setSearch] = useState('');
+  const [searchTeacher, setSearchTeacher] = useState('');
+  const [searchSchool, setSearchSchool] = useState('');
+  const [searchGrade, setSearchGrade] = useState('Grade 7');
+  const [hasSearched, setHasSearched] = useState(false);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [studentName, setStudentName] = useState(sessionStorage.getItem('azilearn_student_name') || '');
   const [studentId, setStudentId] = useState<string | null>(null);
@@ -56,25 +59,29 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?
 
   useEffect(() => {
     if (step === 'entry') {
-      const fetchList = async () => {
-        setLoading(true);
-        try {
-          const studentStr = localStorage.getItem('azilearn_student');
-          const student = studentStr ? JSON.parse(studentStr) : null;
-          const grade = student?.grade || 'Grade 7';
-          const data = await assignmentService.searchAssignments(grade, search);
-          setAssignments(data);
-        } catch (err: any) {
-          showToast(err.message, "error");
-        } finally {
-          setLoading(false);
-        }
-      };
-      
-      const timer = setTimeout(fetchList, 400);
-      return () => clearTimeout(timer);
+      const studentStr = localStorage.getItem('azilearn_student');
+      if (studentStr) {
+        const student = JSON.parse(studentStr);
+        setSearchGrade(student.grade || 'Grade 7');
+        fetchAssignments();
+      } else {
+        setLoading(false);
+      }
     }
-  }, [step, search, showToast]);
+  }, [step]);
+
+  const fetchAssignments = async () => {
+    setLoading(true);
+    setHasSearched(true);
+    try {
+      const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool);
+      setAssignments(data);
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleJoinAssignment = async (id: string) => {
     if (!studentName.trim()) {
@@ -452,15 +459,53 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?
             </div>
           </div>
 
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
-            <input 
-              type="text"
-              placeholder="Search teacher, school or class..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
-            />
+          <div className="space-y-4">
+            <div className="relative group">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
+              <input 
+                type="text"
+                placeholder="Teacher's Name"
+                value={searchTeacher}
+                onChange={e => setSearchTeacher(e.target.value)}
+                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
+              />
+              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">Teacher Name</span>
+            </div>
+
+            <div className="relative group">
+              <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
+              <input 
+                type="text"
+                placeholder="School Name"
+                value={searchSchool}
+                onChange={e => setSearchSchool(e.target.value)}
+                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
+              />
+              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">School</span>
+            </div>
+
+            <div className="relative group">
+              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
+              <select 
+                value={searchGrade}
+                onChange={e => setSearchGrade(e.target.value)}
+                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm appearance-none"
+              >
+                {['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">Grade</span>
+            </div>
+            
+            <button
+              onClick={fetchAssignments}
+              disabled={loading}
+              className="w-full bg-brand-text text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-brand-text/10 flex items-center justify-center gap-3 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
+              Search for Assignments
+            </button>
           </div>
         </div>
 
@@ -469,6 +514,16 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?
             <Loader2 className="animate-spin text-brand-accent mb-4" size={32} />
             <p className="text-xs font-bold text-brand-muted uppercase tracking-widest">Checking assignments...</p>
           </div>
+        ) : !hasSearched ? (
+           <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-brand-accent/5 flex items-center justify-center text-brand-accent/30">
+                 <Search size={32} />
+              </div>
+              <div className="space-y-1">
+                 <p className="font-bold text-brand-text">Find Your Assignment</p>
+                 <p className="text-xs text-brand-muted max-w-[200px]">Enter details above to find your classwork.</p>
+              </div>
+           </div>
         ) : assignments.length > 0 ? (
           <div className="space-y-4">
             {assignments.map((asgn, idx) => (

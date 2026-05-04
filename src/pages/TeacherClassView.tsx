@@ -14,7 +14,8 @@ import {
   Plus,
   ShieldCheck,
   Settings,
-  ListTodo
+  ListTodo,
+  Save
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -80,10 +81,15 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([]);
   const [expandedAssignment, setExpandedAssignment] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  const [exams, setExams] = useState<any[]>([]);
+  const [examAttempts, setExamAttempts] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams'>('assignments');
+  const [selectedExamAttempt, setSelectedExamAttempt] = useState<any | null>(null);
+  const [gradingExam, setGradingExam] = useState(false);
   const [showParentCodes, setShowParentCodes] = useState(false);
-  const [viewMode, setViewMode] = useState<'assignments' | 'students'>('assignments');
   const [gradeInput, setGradeInput] = useState<string>('');
   const [feedbackInput, setFeedbackInput] = useState<string>('');
+  const [replyInput, setReplyInput] = useState<string>('');
 
   useEffect(() => {
     fetchInitialData();
@@ -125,6 +131,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         .update({ 
           score,
           teacher_comment: feedbackInput,
+          teacher_reply: replyInput,
           status: 'graded'
         })
         .eq('id', selectedSubmission.id);
@@ -144,6 +151,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     setSelectedSubmission(submission);
     setGradeInput(submission.score?.toString() || '');
     setFeedbackInput(submission.teacher_comment || '');
+    setReplyInput((submission as any).teacher_reply || '');
   };
 
   const fetchInitialData = async () => {
@@ -156,8 +164,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     const teacherId = tData.id;
 
     try {
-      // 1. Fetch assignments, students, and teacher info in parallel
-      const [assignmentsRes, studentsRes, teacherRes] = await Promise.all([
+      // 1. Fetch assignments, students, exams, and teacher info in parallel
+      const [assignmentsRes, studentsRes, teacherRes, examsRes] = await Promise.all([
         supabase
           .from('assignments')
           .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at')
@@ -172,41 +180,62 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           .from('teachers')
           .select('id, name, school_name')
           .eq('id', teacherId)
-          .single()
+          .single(),
+        supabase
+          .from('exams')
+          .select('*')
+          .eq('class_id', classId)
+          .order('created_at', { ascending: false })
       ]);
 
       if (assignmentsRes.error) throw assignmentsRes.error;
       if (studentsRes.error) throw studentsRes.error;
       if (teacherRes.error) throw teacherRes.error;
+      if (examsRes.error) throw examsRes.error;
 
       const assignmentsData = assignmentsRes.data || [];
       const studentsData = studentsRes.data || [];
-      const studentIds = studentsData.map(s => s.id);
+      const examsData = examsRes.data || [];
       
       setAssignments(assignmentsData);
       setStudents(studentsData);
       setTeacher(teacherRes.data);
+      setExams(examsData);
 
-      // 2. Fetch submissions and acknowledgements only for these students/assignments
-      if (assignmentsData.length > 0) {
-        const assignmentIds = assignmentsData.map(a => a.id);
-        const [submissionsRes, acksRes] = await Promise.all([
-          supabase
-            .from('submissions')
-            .select('id, assignment_id, student_id, student_name, answers, score, teacher_comment, status, submitted_at')
-            .in('assignment_id', assignmentIds),
-          supabase
-            .from('parent_acknowledgements')
-            .select('assignment_id, student_id, acknowledged_at')
-            .in('assignment_id', assignmentIds)
-        ]);
+      // 2. Fetch submissions, acknowledgements, and exam attempts only for these students/assignments/exams
+      const examIds = examsData.map(e => e.id);
+      
+      const fetchSubmissionsAndAcks = assignmentsData.length > 0 ? [
+        supabase
+          .from('submissions')
+          .select('id, assignment_id, student_id, student_name, answers, score, teacher_comment, parent_feedback, status, submitted_at')
+          .in('assignment_id', assignmentsData.map(a => a.id)),
+        supabase
+          .from('parent_acknowledgements')
+          .select('assignment_id, student_id, acknowledged_at')
+          .in('assignment_id', assignmentsData.map(a => a.id))
+      ] : [
+        Promise.resolve({ data: [], error: null }),
+        Promise.resolve({ data: [], error: null })
+      ];
 
-        if (submissionsRes.error) throw submissionsRes.error;
-        if (acksRes.error) throw acksRes.error;
+      const fetchExamAttempts = examIds.length > 0 ? supabase
+        .from('exam_attempts')
+        .select('*')
+        .in('exam_id', examIds) : Promise.resolve({ data: [], error: null });
 
-        setSubmissions(submissionsRes.data || []);
-        setAcknowledgements(acksRes.data || []);
-      }
+      const [submissionsRes, acksRes, examAttemptsRes] = await Promise.all([
+        ...fetchSubmissionsAndAcks,
+        fetchExamAttempts
+      ] as any);
+
+      if (submissionsRes.error) throw submissionsRes.error;
+      if (acksRes.error) throw acksRes.error;
+      if (examAttemptsRes.error) throw examAttemptsRes.error;
+
+      setSubmissions(submissionsRes.data || []);
+      setAcknowledgements(acksRes.data || []);
+      setExamAttempts(examAttemptsRes.data || []);
     } catch (err: any) {
       console.error("Error loading class data:", err);
       showToast("Error loading data: " + (err.message || "Unknown error"), "error");
@@ -238,18 +267,25 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             <div>
               <h1 className="text-4xl font-black tracking-tight">{className}</h1>
               <p className="text-brand-muted text-sm font-bold uppercase tracking-widest mt-1">
-                {viewMode === 'assignments' ? 'Class Overview & Assignments' : 'Manage Students & Index Nos'}
+                {viewMode === 'assignments' ? 'Class Overview & Assignments' : viewMode === 'exams' ? 'Exam Results & Management' : 'Manage Students & Index Nos'}
               </p>
             </div>
           </div>
 
-          <div className="flex bg-brand-surface border border-brand-border p-1 rounded-2xl">
+          <div className="flex bg-brand-surface border border-brand-border p-1 rounded-2xl overflow-x-auto no-scrollbar">
             <button 
               onClick={() => setViewMode('assignments')}
               className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'assignments' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
             >
               <ListTodo size={14} />
-              Assignments
+              Assessments
+            </button>
+            <button 
+              onClick={() => setViewMode('exams')}
+              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'exams' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+            >
+              <Award size={14} />
+              Exams
             </button>
             <button 
               onClick={() => setViewMode('students')}
@@ -261,14 +297,14 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           </div>
         </div>
 
-        {viewMode === 'assignments' && (
+        {viewMode !== 'students' && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 mb-8">
             <button 
               onClick={onAddAssignment}
               className="px-6 py-3 bg-brand-accent text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Add Assignment
+              Add Assessment
             </button>
             <button 
               onClick={onAddExam}
@@ -277,10 +313,6 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               <Plus className="w-4 h-4" />
               New Exam
             </button>
-            <div className="bg-brand-accent/10 text-brand-accent px-4 py-2 rounded-2xl border border-brand-accent/10 flex items-center gap-2 h-max">
-              <Users size={16} />
-              <span className="font-black text-sm">{assignments.length} assignments</span>
-            </div>
           </div>
         )}
       </header>
@@ -336,6 +368,92 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               )}
             </AnimatePresence>
           </section>
+        ) : viewMode === 'exams' ? (
+          <div className="space-y-6">
+            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2 px-2">
+              <Award size={14} />
+              Published Exams
+            </h2>
+            {exams.length === 0 ? (
+              <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">
+                <p className="font-bold">No exams created for this class yet.</p>
+              </div>
+            ) : (
+              exams.map((exam) => {
+                const attempts = examAttempts.filter(a => a.exam_id === exam.id);
+                const isExpanded = expandedAssignment === exam.id; // Reuse expandedAssignment state for exams
+
+                return (
+                  <div key={exam.id} className="bg-brand-surface border border-brand-border rounded-[2rem] overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                    <div 
+                      className="p-6 cursor-pointer"
+                      onClick={() => setExpandedAssignment(isExpanded ? null : exam.id)}
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div>
+                          <h3 className="text-xl font-black tracking-tight">{exam.title}</h3>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-1">
+                            {exam.subject} • {exam.duration_minutes} Mins • {attempts.length} Submissions
+                          </p>
+                        </div>
+                        <div className="text-brand-muted">
+                          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        </div>
+                      </div>
+                    </div>
+
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div 
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="border-t border-brand-border bg-brand-bg/30"
+                        >
+                          <div className="p-6">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted mb-4 px-1">Examinee Results</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {students.map(student => {
+                                const attempt = attempts.find(a => a.student_id === student.id);
+                                return (
+                                  <div key={student.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${attempt ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-brand-bg border-brand-border'}`}>
+                                    <div className="flex items-center gap-3">
+                                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${attempt ? 'bg-emerald-500/10 text-emerald-600' : 'bg-brand-muted/10 text-brand-muted'}`}>
+                                        {attempt ? <CheckCircle2 size={18} /> : <Clock size={18} />}
+                                      </div>
+                                      <div>
+                                        <p className="font-bold text-sm text-brand-text">{student.name}</p>
+                                        <p className="text-[8px] font-black text-brand-muted uppercase tracking-widest">
+                                          {attempt ? `Scored ${attempt.score}/${attempt.total_marks}` : 'Not attempted'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {attempt && (
+                                      <button 
+                                        onClick={() => {
+                                          setSelectedExamAttempt(attempt);
+                                          setGradeInput(attempt.score?.toString() || '');
+                                          setFeedbackInput(attempt.teacher_feedback || '');
+                                          setReplyInput(attempt.teacher_reply || '');
+                                        }}
+                                        className="p-2 bg-brand-surface border border-brand-border rounded-lg text-brand-muted hover:text-brand-accent"
+                                      >
+                                        <Award size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })
+            )}
+          </div>
         ) : (
           <>
             {/* Class Members Summary Section */}
@@ -560,6 +678,133 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     )}
   </main>
 
+      {/* Exam Grading Modal */}
+      <AnimatePresence>
+        {selectedExamAttempt && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-brand-bg/80 backdrop-blur-md p-4 flex items-center justify-center"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-brand-surface border border-brand-border rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
+            >
+              <header className="p-8 border-b border-brand-border flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-brand-accent rounded-2xl flex items-center justify-center text-white font-black text-xl">
+                    {students.find(s => s.id === selectedExamAttempt.student_id)?.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black tracking-tight">
+                      {students.find(s => s.id === selectedExamAttempt.student_id)?.name}
+                    </h2>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Exam Results & Feedback</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedExamAttempt(null)}
+                  className="p-3 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-red-500 transition-colors"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+              </header>
+
+              <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                <div className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-8 space-y-6">
+                  {selectedExamAttempt.parent_feedback && (
+                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users size={16} className="text-emerald-600" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Parent Feedback</span>
+                      </div>
+                      <p className="text-sm font-bold text-brand-text italic leading-relaxed">
+                        "{selectedExamAttempt.parent_feedback}"
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedExamAttempt.parent_feedback && (
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Teacher's Reply to Parent</label>
+                      <textarea 
+                        value={replyInput}
+                        onChange={e => setReplyInput(e.target.value)}
+                        placeholder="Reply to the parent's feedback..."
+                        className="w-full bg-brand-bg border border-brand-accent/20 rounded-xl p-4 text-xs font-bold outline-none focus:border-brand-accent transition-all min-h-[80px]"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <Award className="text-brand-accent" size={24} />
+                    <h3 className="text-lg font-black tracking-tight">Final Assessment</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-1">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Score / {selectedExamAttempt.total_marks}</label>
+                      <input 
+                        type="number"
+                        value={gradeInput}
+                        onChange={e => setGradeInput(e.target.value)}
+                        className="w-full bg-brand-surface border border-brand-accent/20 rounded-2xl py-4 px-6 font-black text-xl text-brand-accent outline-none"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Teacher Feedback</label>
+                      <textarea 
+                        value={feedbackInput}
+                        onChange={e => setFeedbackInput(e.target.value)}
+                        className="w-full bg-brand-surface border border-brand-accent/20 rounded-2xl py-4 px-6 font-bold text-sm outline-none min-h-[120px] resize-none"
+                        placeholder="Provide feedback on the exam performance..."
+                      />
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={async () => {
+                      setGradingExam(true);
+                      try {
+                        const { error } = await supabase
+                          .from('exam_attempts')
+                          .update({ 
+                            score: parseInt(gradeInput),
+                            teacher_feedback: feedbackInput,
+                            teacher_reply: replyInput
+                          })
+                          .eq('id', selectedExamAttempt.id);
+                        if (error) throw error;
+                        showToast("Exam graded!", "success");
+                        setSelectedExamAttempt(null);
+                        fetchInitialData();
+                      } catch (err: any) {
+                        showToast("Error: " + err.message, "error");
+                      } finally {
+                        setGradingExam(false);
+                      }
+                    }}
+                    disabled={gradingExam}
+                    className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 flex items-center justify-center gap-3"
+                  >
+                    {gradingExam ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                    Update Exam Feedback
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Item Analysis</h3>
+                  <p className="text-xs text-brand-muted italic">Detailed question review is available in the student's submission log.</p>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Submission Details Overlay */}
       <AnimatePresence>
         {selectedSubmission && (
@@ -649,6 +894,18 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                       <p className="text-sm font-bold text-brand-text italic leading-relaxed">
                         "{(selectedSubmission as any).parent_feedback}"
                       </p>
+                    </div>
+                  )}
+
+                  {(selectedSubmission as any).parent_feedback && (
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Teacher's Reply to Parent</label>
+                      <textarea 
+                        value={replyInput}
+                        onChange={e => setReplyInput(e.target.value)}
+                        placeholder="Reply to the parent's feedback..."
+                        className="w-full bg-brand-bg border border-brand-accent/20 rounded-xl p-4 text-xs font-bold outline-none focus:border-brand-accent transition-all min-h-[80px]"
+                      />
                     </div>
                   )}
 

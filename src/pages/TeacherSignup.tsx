@@ -99,8 +99,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
               <User className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
               <input 
                 type="text"
-                placeholder="Teacher Name"
-                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold"
+                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-brand-text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
@@ -113,8 +112,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
               <School className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
               <input 
                 type="text"
-                placeholder="Primary / Secondary School"
-                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold"
+                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-brand-text"
                 value={formData.schoolName}
                 onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
               />
@@ -130,8 +128,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
                   type="password"
                   inputMode="numeric"
                   maxLength={4}
-                  placeholder="0000"
-                  className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold tracking-[0.2em]"
+                  className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold tracking-[0.2em] text-brand-text"
                   value={formData.pin}
                   onChange={(e) => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '') })}
                 />
@@ -145,8 +142,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
                   type="password"
                   inputMode="numeric"
                   maxLength={4}
-                  placeholder="0000"
-                  className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold tracking-[0.2em]"
+                  className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold tracking-[0.2em] text-brand-text"
                   value={formData.confirmPin}
                   onChange={(e) => setFormData({ ...formData, confirmPin: e.target.value.replace(/\D/g, '') })}
                 />

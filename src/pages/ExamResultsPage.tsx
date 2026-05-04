@@ -170,7 +170,10 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
               <div className="flex items-center gap-2">
                  <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={14} />
-                    <input placeholder="Search student..." className="bg-brand-bg border-none rounded-xl py-2 pl-9 pr-4 text-xs focus:ring-1 focus:ring-brand-accent/30 outline-none w-48" />
+                    <input 
+                      placeholder="Search student..." 
+                      className="bg-brand-bg dark:bg-brand-card border border-brand-accent/10 rounded-xl py-2 pl-9 pr-4 text-xs text-brand-text focus:ring-1 focus:ring-brand-accent/30 outline-none w-48" 
+                    />
                  </div>
               </div>
            </div>

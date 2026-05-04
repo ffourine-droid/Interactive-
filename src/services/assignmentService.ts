@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 
 export const assignmentService = {
-  async searchAssignments(grade: string, searchTerm: string) {
+  async searchAssignments(grade: string, teacherName?: string, schoolName?: string) {
     const { data, error } = await supabase
       .from('assignments')
       .select(`
@@ -18,16 +18,29 @@ export const assignmentService = {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    if (!searchTerm) return data;
+    if (!data) return [];
 
-    const term = searchTerm.toLowerCase();
-    return data.filter((item: any) => 
-      item.title.toLowerCase().includes(term) ||
-      item.subject.toLowerCase().includes(term) ||
-      item.teacher?.name?.toLowerCase().includes(term) ||
-      item.teacher?.school_name?.toLowerCase().includes(term) ||
-      item.class?.name?.toLowerCase().includes(term)
-    );
+    let filtered = data;
+
+    if (teacherName) {
+      const term = teacherName.toLowerCase().trim();
+      if (term) {
+        filtered = filtered.filter((asgn: any) => 
+          asgn.teacher?.name?.toLowerCase().includes(term)
+        );
+      }
+    }
+
+    if (schoolName) {
+      const term = schoolName.toLowerCase().trim();
+      if (term) {
+        filtered = filtered.filter((asgn: any) => 
+          asgn.teacher?.school_name?.toLowerCase().includes(term)
+        );
+      }
+    }
+
+    return filtered;
   },
 
   async joinAssignment(assignmentId: string, studentName: string) {

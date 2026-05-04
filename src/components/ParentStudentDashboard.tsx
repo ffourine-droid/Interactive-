@@ -47,6 +47,7 @@ interface Submission {
   score: number | null;
   teacher_comment?: string;
   parent_feedback?: string;
+  teacher_reply?: string;
   status: 'pending' | 'graded';
   submitted_at: string;
   answers: Record<string, any>;
@@ -59,6 +60,7 @@ interface ExamAttempt {
   total_marks: number;
   teacher_feedback?: string;
   parent_feedback?: string;
+  teacher_reply?: string;
   submitted_at: string;
   exam?: Exam;
 }
@@ -104,12 +106,12 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           .order('created_at', { ascending: false }),
         supabase
           .from('submissions')
-          .select('id, assignment_id, score, teacher_comment, parent_feedback, status, submitted_at, answers')
+          .select('id, assignment_id, score, teacher_comment, parent_feedback, teacher_reply, status, submitted_at, answers')
           .or(`student_id.in.(${studentIds.map(id => `"${id}"`).join(',')}),student_name.ilike."${student.name.trim()}"`),
         supabase
           .from('exam_attempts')
           .select(`
-            id, exam_id, score, total_marks, teacher_feedback, parent_feedback, submitted_at,
+            id, exam_id, score, total_marks, teacher_feedback, parent_feedback, teacher_reply, submitted_at,
             exam:exam_id (id, title, subject)
           `)
           .in('student_id', studentIds)
@@ -307,6 +309,18 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                           )}
                         </div>
                       )}
+
+                      {attempt.teacher_reply && (
+                        <div className="p-4 bg-brand-accent/10 border border-brand-accent/20 rounded-2xl md:col-span-2">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FileText size={14} className="text-brand-accent" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Teacher's Reply</span>
+                          </div>
+                          <p className="text-xs font-bold text-brand-text leading-relaxed">
+                            "{attempt.teacher_reply}"
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -444,6 +458,18 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                                       Add Feedback for Teacher +
                                     </button>
                                   )}
+                                </div>
+                              )}
+
+                              {submission.teacher_reply && (
+                                <div className="p-4 bg-brand-accent/10 border border-brand-accent/20 rounded-2xl md:col-span-2">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <FileText size={14} className="text-brand-accent" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Teacher's Reply</span>
+                                  </div>
+                                  <p className="text-xs font-bold text-brand-text leading-relaxed">
+                                    "{submission.teacher_reply}"
+                                  </p>
                                 </div>
                               )}
                             </div>
