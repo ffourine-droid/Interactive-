@@ -13,7 +13,8 @@ import {
   ArrowLeft,
   MessageCircle,
   Download,
-  Clock
+  Clock,
+  Check
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';

@@ -10,7 +10,10 @@ import {
   Loader2,
   AlertTriangle,
   Trophy,
-  Star
+  Star,
+  MessageCircle,
+  User,
+  Save
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -88,6 +91,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [savingFeedback, setSavingFeedback] = useState(false);
+  const [modalFeedbackText, setModalFeedbackText] = useState('');
   const [examData, setExamData] = useState<any | null>(null);
   const [loadingExamDetails, setLoadingExamDetails] = useState(false);
 
@@ -98,10 +102,14 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   useEffect(() => {
     if (selectedExam) {
       fetchExamDetails(selectedExam.exam_id);
+      setModalFeedbackText(selectedExam.parent_feedback || '');
+    } else if (selectedSubmission) {
+      setModalFeedbackText(selectedSubmission.submission.parent_feedback || '');
     } else {
       setExamData(null);
+      setModalFeedbackText('');
     }
-  }, [selectedExam]);
+  }, [selectedExam, selectedSubmission]);
 
   const fetchExamDetails = async (examId: string) => {
     setLoadingExamDetails(true);
@@ -168,19 +176,22 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
     }
   };
 
-  const handleSaveParentFeedback = async (id: string, type: 'assignment' | 'exam') => {
+  const handleSaveParentFeedback = async (id: string, type: 'assignment' | 'exam', isFromModal = false) => {
     setSavingFeedback(true);
+    const feedbackToSave = isFromModal ? modalFeedbackText : feedbackText;
     try {
       const { error } = await supabase
         .from(type === 'assignment' ? 'assignment_submissions' : 'exam_attempts')
-        .update({ parent_feedback: feedbackText })
+        .update({ parent_feedback: feedbackToSave })
         .eq('id', id);
 
       if (error) throw error;
 
       showToast("Feedback sent to teacher!", "success");
-      setActiveFeedbackId(null);
-      setFeedbackText('');
+      if (!isFromModal) {
+        setActiveFeedbackId(null);
+        setFeedbackText('');
+      }
       fetchData(); // Refresh
     } catch (err: any) {
       showToast("Error saving feedback", "error");
@@ -591,17 +602,56 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
               </header>
 
               <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                {(selectedSubmission?.submission.teacher_comment || selectedExam?.teacher_feedback) && (
-                  <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-6 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <Award className="text-brand-accent" size={20} />
-                      <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</h3>
+                {/* Remarks Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   {/* Teacher's Feedback (Read Only) */}
+                   {(selectedSubmission?.submission.teacher_comment || selectedExam?.teacher_feedback) ? (
+                    <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-6 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <Award className="text-brand-accent" size={20} />
+                        <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</h3>
+                      </div>
+                      <p className="text-sm font-bold text-brand-text leading-relaxed">
+                        "{selectedSubmission?.submission.teacher_comment || selectedExam?.teacher_feedback}"
+                      </p>
+                      
+                      {(selectedSubmission?.submission.teacher_reply || selectedExam?.teacher_reply) && (
+                        <div className="mt-4 pt-4 border-t border-brand-accent/10">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-brand-accent mb-2">Teacher's Reply to your Remarks</p>
+                          <p className="font-bold text-xs text-brand-text italic">
+                            "{selectedSubmission?.submission.teacher_reply || selectedExam?.teacher_reply}"
+                          </p>
+                        </div>
+                      )}
+                    </section>
+                   ) : (
+                    <div className="bg-brand-bg border border-brand-border border-dashed rounded-[2rem] p-6 flex items-center justify-center text-brand-muted text-[10px] font-black uppercase tracking-widest">
+                      No teacher comments yet
                     </div>
-                    <p className="text-lg font-bold text-brand-text leading-relaxed">
-                      "{selectedSubmission?.submission.teacher_comment || selectedExam?.teacher_feedback}"
-                    </p>
-                  </section>
-                )}
+                   )}
+
+                   {/* Parent's Remarks (Editable) */}
+                   <section className="bg-emerald-500/5 border border-emerald-500/20 rounded-[2rem] p-6 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <User className="text-emerald-600" size={20} />
+                        <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600">My Remarks</h3>
+                      </div>
+                      <textarea 
+                        placeholder="Add your notes or questions for the teacher..."
+                        value={modalFeedbackText}
+                        onChange={(e) => setModalFeedbackText(e.target.value)}
+                        className="w-full bg-white dark:bg-brand-card border-none rounded-2xl p-4 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 min-h-[100px] resize-none transition-all"
+                      />
+                      <button 
+                        onClick={() => handleSaveParentFeedback(selectedSubmission?.submission.id || selectedExam?.id || '', selectedSubmission ? 'assignment' : 'exam', true)}
+                        disabled={savingFeedback}
+                        className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+                      >
+                        {savingFeedback ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                        {savingFeedback ? 'Saving...' : 'Save Remarks'}
+                      </button>
+                   </section>
+                </div>
 
                 <div className="space-y-6">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-muted ml-2">Questions & Answers</h4>
