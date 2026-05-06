@@ -158,28 +158,29 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           .in('student_id', studentIds)
           .eq('is_submitted', true)
           .order('submitted_at', { ascending: false }),
-        supabase
-          .from('parent_acknowledgements')
-          .select('assignment_id, acknowledged_at')
-          .eq('parent_code', student.parent_code)
-      ]);
+      // FIXED: query by student_id, not parent_code
+      supabase
+        .from('parent_acknowledgements')
+        .select('assignment_id, acknowledged_at')
+        .in('student_id', studentIds)
+    ]);
 
-      if (assignmentsRes.error) throw assignmentsRes.error;
-      if (submissionsRes.error) throw submissionsRes.error;
-      if (examsRes.error) throw examsRes.error;
-      if (acksRes.error) throw acksRes.error;
+    if (assignmentsRes.error) throw assignmentsRes.error;
+    if (submissionsRes.error) throw submissionsRes.error;
+    if (examsRes.error) throw examsRes.error;
+    if (acksRes.error) throw acksRes.error;
 
-      setAssignments(assignmentsRes.data || []);
-      setSubmissions(submissionsRes.data || []);
-      setExamAttempts(examsRes.data || []);
-      setAcknowledgements(acksRes.data || []);
-    } catch (err: any) {
-      console.error("Dashboard fetch error:", err);
-      showToast(`Error loading dashboard: ${err.message || 'Unknown error'}`, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+    setAssignments(assignmentsRes.data || []);
+    setSubmissions(submissionsRes.data || []);
+    setExamAttempts(examsRes.data || []);
+    setAcknowledgements(acksRes.data || []);
+  } catch (err: any) {
+    console.error("Dashboard fetch error:", err);
+    showToast(`Error loading dashboard: ${err.message || 'Unknown error'}`, "error");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSaveParentFeedback = async (id: string, type: 'assignment' | 'exam', isFromModal = false) => {
     setSavingFeedback(true);
@@ -208,10 +209,10 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const handleAcknowledge = async (assignmentId: string) => {
     setAckLoading(assignmentId);
     try {
+      // FIXED: removed parent_code — column doesn't exist on parent_acknowledgements
       const { error } = await supabase
         .from('parent_acknowledgements')
         .insert({
-          parent_code: student.parent_code,
           student_id: student.id,
           assignment_id: assignmentId
         });
