@@ -25,11 +25,14 @@ interface HomeProps {
   onParentClick: () => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
+  selectedClass: string | null;
+  setSelectedClass: (grade: string | null) => void;
 }
 
 export default function Home({ 
   onBack, onAdminClick, onAdminTerminalClick, onTeacherClick, onTeacherDashboardClick, 
-  onAssignmentsClick, onExamsClick, onParentClick, theme, setTheme 
+  onAssignmentsClick, onExamsClick, onParentClick, theme, setTheme,
+  selectedClass, setSelectedClass
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -74,7 +77,6 @@ export default function Home({
   const [isOpening, setIsOpening] = useState(false);
   
   const [activeTab, setActiveTab] = useState('home');
-  const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const middleSearchRef = useRef<HTMLInputElement>(null);
   const lastRequestId = useRef(0);

@@ -171,8 +171,8 @@ export const examService = {
     
     const { data: students, error: fetchError } = await query;
     if (fetchError) {
-      if (fetchError.message.includes('column "index_number" does not exist')) {
-        throw new Error("Missing 'index_number' column. Please run the provided SQL in Supabase.");
+      if (fetchError.message.includes('column "parent_code" does not exist')) {
+        throw new Error("Missing 'parent_code' column. Please run the provided SQL in Supabase.");
       }
       throw fetchError;
     }
@@ -181,7 +181,7 @@ export const examService = {
     let existing = null;
     if (students && students.length > 0) {
       if (index) {
-        existing = students.find((s: any) => s.index_number === index.trim());
+        existing = students.find((s: any) => s.parent_code === index.trim());
       }
       if (!existing) {
         existing = students[0];
@@ -195,14 +195,14 @@ export const examService = {
       .from('students')
       .insert({
         name: name.trim(),
-        index_number: index?.trim() || null,
+        parent_code: index?.trim() || null,
         grade: grade || 'Grade 7'
       })
       .select();
 
     if (createError) {
-      if (createError.message.includes('column "index_number" does not exist')) {
-        throw new Error("Database schema update required. Please run the provided SQL to add 'index_number' column to students table.");
+      if (createError.message.includes('column "parent_code" does not exist')) {
+        throw new Error("Database schema update required. Please run the provided SQL to add 'parent_code' column to students table.");
       }
       throw createError;
     }

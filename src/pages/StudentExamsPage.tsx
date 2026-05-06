@@ -36,6 +36,11 @@ export default function StudentExamsPage({ onBack, onStartExam, onSelectAssignme
 
   const [hasSearched, setHasSearched] = useState(false);
 
+  // Update search grade when prop changes
+  useEffect(() => {
+    setSearchGrade(grade);
+  }, [grade]);
+
   useEffect(() => {
     const studentStr = localStorage.getItem('azilearn_student');
     if (studentStr) {
@@ -64,6 +69,17 @@ export default function StudentExamsPage({ onBack, onStartExam, onSelectAssignme
 
       setExams(examData);
       setAssignments(assignmentData);
+
+      // Auto-switch view type if code search returned only one type of result
+      if (searchCode.trim()) {
+        if (examData.length > 0 && assignmentData.length === 0 && viewType === 'assignments') {
+          setViewType('timed');
+          showToast(`Found assessment for code: ${searchCode}`, 'success');
+        } else if (assignmentData.length > 0 && examData.length === 0 && viewType === 'timed') {
+          setViewType('assignments');
+          showToast(`Found homework for code: ${searchCode}`, 'success');
+        }
+      }
 
       if (student?.id) {
         const attemptPromises = examData.map(e => examService.getAttempt(e.id, student.id));
@@ -181,19 +197,17 @@ export default function StudentExamsPage({ onBack, onStartExam, onSelectAssignme
               <span className="absolute left-10 -top-2 px-2 bg-brand-surface dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-border/30">School</span>
             </div>
 
-            {viewType === 'timed' && (
-              <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
-                <input 
-                  type="text"
-                  value={searchCode}
-                  onChange={e => setSearchCode(e.target.value)}
-                  className="w-full bg-brand-surface dark:bg-brand-card border border-brand-border border-2 rounded-2xl py-4 pl-12 pr-4 text-sm font-black focus:ring-0 focus:border-brand-accent outline-none transition-all shadow-sm shadow-brand-accent/5 text-brand-accent uppercase tracking-widest"
-                  placeholder="OR Enter Share Code"
-                />
-                <span className="absolute left-10 -top-2 px-2 bg-brand-surface dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-border/30">Direct Access</span>
-              </div>
-            )}
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
+              <input 
+                type="text"
+                value={searchCode}
+                onChange={e => setSearchCode(e.target.value)}
+                className="w-full bg-brand-surface dark:bg-brand-card border border-brand-border border-2 rounded-2xl py-4 pl-12 pr-4 text-sm font-black focus:ring-0 focus:border-brand-accent outline-none transition-all shadow-sm shadow-brand-accent/5 text-brand-accent uppercase tracking-widest"
+                placeholder="OR Enter Share Code"
+              />
+              <span className="absolute left-10 -top-2 px-2 bg-brand-surface dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-border/30">Direct Access</span>
+            </div>
 
             <div className="relative group">
               <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />

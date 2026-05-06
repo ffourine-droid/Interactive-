@@ -264,12 +264,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           .order('created_at', { ascending: false }),
         supabase
           .from('assignments')
-          .select('id, title, subject, grade, due_date, created_at, class_id')
+          .select('id, title, subject, grade, due_date, created_at, class_id, share_code')
           .eq('teacher_id', teacherId)
           .order('created_at', { ascending: false }),
         supabase
           .from('exams')
-          .select('id, title, subject, grade, is_published, created_at')
+          .select('id, title, subject, grade, is_published, created_at, share_code')
           .eq('created_by', teacherId)
           .order('created_at', { ascending: false })
       ]);

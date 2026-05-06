@@ -180,7 +180,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       const [assignmentsRes, studentsRes, teacherRes, examsRes] = await Promise.all([
         supabase
           .from('assignments')
-          .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at')
+          .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at, share_code')
           .eq('teacher_id', teacherId)
           .eq('class_id', classId)
           .order('created_at', { ascending: false }),
@@ -565,6 +565,17 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                     <div>
                       <h3 className="text-xl font-black tracking-tight">{assignment.title}</h3>
                       <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-1">{assignment.subject} • Due {new Date(assignment.due_date).toLocaleDateString()}</p>
+                      
+                      {assignment.share_code && (
+                        <div className="mt-3 p-2 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-center justify-between group/code hover:border-emerald-500 transition-all inline-flex min-w-[120px]"
+                             onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(assignment.share_code); showToast("Code copied!", "success"); }}>
+                          <div className="flex flex-col pr-4">
+                            <span className="text-[7px] font-black uppercase tracking-widest text-brand-muted mb-0.5">Share Code</span>
+                            <span className="text-xs font-black tracking-[0.2em] text-emerald-600">{assignment.share_code}</span>
+                          </div>
+                          <Plus size={12} className="text-emerald-500/40 group-hover/code:text-emerald-500 transition-colors" />
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-6 sm:gap-8">

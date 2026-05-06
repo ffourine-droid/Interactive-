@@ -64,6 +64,7 @@ function AppContent() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [showImportOnCreator, setShowImportOnCreator] = useState(false);
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   const { showToast } = useToast();
@@ -142,6 +143,7 @@ function AppContent() {
             >
               <StudentExamsPage 
                 onBack={() => setCurrentPage('home')}
+                grade={selectedClass || 'Grade 7'}
                 onStartExam={(id) => {
                   setSelectedExamId(id);
                   setCurrentPage('take-exam');
@@ -395,6 +397,8 @@ function AppContent() {
                 onAssignmentsClick={() => setCurrentPage('assignments')}
                 onExamsClick={() => setCurrentPage('student-exams')}
                 onParentClick={() => setCurrentPage('parent')}
+                selectedClass={selectedClass}
+                setSelectedClass={setSelectedClass}
                 theme={theme}
                 setTheme={setTheme}
               />
