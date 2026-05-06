@@ -141,16 +141,11 @@ function AppContent() {
               key="student-exams"
               className="min-h-screen"
             >
-              <StudentExamsPage 
+              <StudentExamsPage
                 onBack={() => setCurrentPage('home')}
-                grade={selectedClass || 'Grade 7'}
                 onStartExam={(id) => {
                   setSelectedExamId(id);
                   setCurrentPage('take-exam');
-                }}
-                onSelectAssignment={(id) => {
-                  setCurrentPageProps({ preSelectedAssignmentId: id });
-                  setCurrentPage('assignments');
                 }}
               />
             </motion.div>
@@ -193,6 +188,7 @@ function AppContent() {
               <CreateExamPage 
                 onBack={() => setCurrentPage('teacher-dashboard')} 
                 initialData={currentPageProps?.editingExam || currentPageProps?.importedWork}
+                preSelectedClassId={currentPageProps?.preSelectedClassId}
               />
             </motion.div>
           </Suspense>
@@ -287,8 +283,15 @@ function AppContent() {
                 classId={selectedClassId || ''}
                 className={selectedClassName || ''} 
                 onBack={() => setCurrentPage('teacher-dashboard')} 
-                onAddAssignment={() => setCurrentPage('teacher')}
-                onAddExam={() => setCurrentPage('create-exam')}
+                onAddAssignment={(cid) => {
+                  setSelectedClassId(cid);
+                  setCurrentPage('teacher');
+                }}
+                onAddExam={(cid) => {
+                  setSelectedClassId(cid);
+                  setCurrentPageProps({ preSelectedClassId: cid });
+                  setCurrentPage('create-exam');
+                }}
               />
             </motion.div>
           </Suspense>

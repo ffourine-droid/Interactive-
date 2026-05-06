@@ -20,6 +20,8 @@ export const assignmentService = {
         .maybeSingle();
       
       if (codeAsgn) return [codeAsgn];
+      // If code was provided but not found, return empty (don't fall back to grade search if code was intended)
+      return [];
     }
 
     const { data, error } = await supabase

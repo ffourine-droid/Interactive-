@@ -48,8 +48,8 @@ interface TeacherClassViewProps {
   classId: string;
   className: string;
   onBack: () => void;
-  onAddAssignment: () => void;
-  onAddExam: () => void;
+  onAddAssignment: (classId: string) => void;
+  onAddExam: (classId: string) => void;
 }
 
 interface Student {
@@ -312,14 +312,14 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         {viewMode !== 'students' && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 mb-8">
             <button 
-              onClick={onAddAssignment}
+              onClick={() => onAddAssignment(classId)}
               className="px-6 py-3 bg-brand-accent text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               Add Assessment
             </button>
             <button 
-              onClick={onAddExam}
+              onClick={() => onAddExam(classId)}
               className="px-6 py-3 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-2xl text-xs font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />

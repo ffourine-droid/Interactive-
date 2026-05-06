@@ -85,7 +85,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
   ]);
 
   const subjects = ['Mathematics', 'Science', 'English', 'Kiswahili', 'Social Studies'];
-  const grades = ['6', '7', '8', '9'];
+  const grades = ['Grade 6', 'Grade 7', 'Grade 8', 'Grade 9'];
 
   React.useEffect(() => {
     fetchClasses();
@@ -112,7 +112,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           ...prev,
           title: data.title,
           subject: data.subject,
-          grade: data.grade.replace('Grade ', ''),
+          grade: data.grade,
           // We don't import class_id as it belongs to the teacher claiming it
         }));
         setQuestions(data.questions);
@@ -180,9 +180,19 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       return;
     }
 
-    // Fetch students for this class
+    // Fetch students and class info
     try {
       setLoading(true);
+      const { data: classData } = await supabase
+        .from('classes')
+        .select('grade')
+        .eq('id', classId)
+        .maybeSingle();
+
+      if (classData?.grade) {
+        setForm(prev => ({ ...prev, grade: classData.grade }));
+      }
+
       const { data, error } = await supabase
         .from('students')
         .select('id, name, parent_code')
@@ -200,7 +210,8 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         expected_students: studentNames
       }));
     } catch (err) {
-      showToast("Error fetching students", "error");
+      console.error("Error in class select:", err);
+      showToast("Error fetching student/class data", "error");
     } finally {
       setLoading(false);
     }
@@ -235,7 +246,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           )
         `)
         .ilike('name', newStudentName.trim())
-        .eq('grade', `Grade ${form.grade}`)
+        .eq('grade', form.grade)
         .eq('classes.teachers.school_name', schoolName)
         .maybeSingle();
 
@@ -259,7 +270,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
             )
           `)
           .eq('classes.teachers.school_name', schoolName)
-          .eq('grade', `Grade ${form.grade}`);
+          .eq('grade', form.grade);
 
         if (fetchError) throw fetchError;
 
@@ -281,7 +292,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         .insert([{
           name: newStudentName.trim(),
           class_id: form.class_id,
-          grade: `Grade ${form.grade}`,
+          grade: form.grade,
           parent_code: parent_code
         }])
         .select()
@@ -379,7 +390,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         newStudents.push({
           name,
           class_id: form.class_id,
-          grade: `Grade ${form.grade}`,
+          grade: form.grade,
           parent_code: parent_code
         });
       }
@@ -544,7 +555,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           class_id: form.class_id && form.class_id !== 'new' ? form.class_id : null,
           title: form.title,
           subject: form.subject,
-          grade: `Grade ${form.grade}`,
+          grade: form.grade,
           class_name: form.class_name,
           due_date: new Date(form.due_date).toISOString(),
           questions: questions,
@@ -727,7 +738,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                       onChange={e => setForm({...form, grade: e.target.value})}
                     >
                       <option value="">Select</option>
-                      {grades.map(g => <option key={g} value={g}>Grade {g}</option>)}
+                      {grades.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted/40 pointer-events-none" size={18} />
                   </div>

@@ -13,21 +13,22 @@ interface CreateExamPageProps {
   onBack: () => void;
   onPreview?: (exam: Partial<Exam>) => void;
   initialData?: any;
+  preSelectedClassId?: string;
 }
 
-export default function CreateExamPage({ onBack, initialData }: CreateExamPageProps) {
+export default function CreateExamPage({ onBack, initialData, preSelectedClassId }: CreateExamPageProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState<{id: string, name: string}[]>([]);
   const [teacher, setTeacher] = useState<any>(null);
 
-  const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState({
     title: initialData?.title || '',
     subject: initialData?.subject || 'Mathematics',
     grade: initialData?.grade || 'Grade 6',
     duration: initialData?.duration_minutes || 30,
     instructions: '',
-    classId: '',
+    classId: preSelectedClassId || '',
     isPrebuilt: false
   });
 
@@ -61,13 +62,21 @@ export default function CreateExamPage({ onBack, initialData }: CreateExamPagePr
 
       const { data, error } = await supabase
         .from('classes')
-        .select('id, name')
+        .select('id, name, grade')
         .eq('teacher_id', teacherData.id);
 
       if (error) throw error;
       setClasses(data || []);
       if (data && data.length > 0) {
-        setFormData(prev => ({ ...prev, classId: data[0].id }));
+        const defaultClass = preSelectedClassId ? data.find(c => c.id === preSelectedClassId) : data[0];
+        const finalClassId = defaultClass?.id || data[0].id;
+        const finalGrade = defaultClass?.grade || data[0].grade || formData.grade;
+        
+        setFormData(prev => ({ 
+          ...prev, 
+          classId: finalClassId,
+          grade: finalGrade
+        }));
       }
     } catch (err) {
       console.error('Error fetching classes:', err);
@@ -115,7 +124,16 @@ export default function CreateExamPage({ onBack, initialData }: CreateExamPagePr
     }
   };
 
-  const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+  const handleClassChange = (classId: string) => {
+    const selectedClass = classes.find(c => c.id === classId);
+    setFormData(prev => ({ 
+      ...prev, 
+      classId,
+      grade: selectedClass?.grade || prev.grade
+    }));
+  };
+
+  const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
 
   const generateShareCode = (schoolName: string, className: string, subject: string) => {
     // School Code (first 3-4 chars)
@@ -322,7 +340,7 @@ export default function CreateExamPage({ onBack, initialData }: CreateExamPagePr
                     <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/30" size={18} />
                     <select 
                       value={formData.classId}
-                      onChange={e => setFormData({ ...formData, classId: e.target.value })}
+                      onChange={e => handleClassChange(e.target.value)}
                       className="w-full bg-brand-bg border border-brand-border rounded-xl px-12 py-3.5 text-sm font-bold appearance-none outline-none focus:border-brand-accent transition-all cursor-pointer"
                     >
                       <option value="">Public Prebuilt</option>
