@@ -267,7 +267,7 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?
               onClick={onExamsClick}
               className="w-full mt-4 bg-brand-bg border-2 border-brand-accent text-brand-accent py-5 rounded-2xl font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
             >
-              Take a Timed Exam
+              Take a Timed Assessment
             </button>
           )}
         </motion.div>

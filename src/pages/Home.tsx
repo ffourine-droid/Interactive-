@@ -5,7 +5,7 @@ import {
   FileText, PlayCircle, Mic2, X, Download, 
   BarChart3, Plus, Moon, Sun, Trash2, Smartphone, 
   ExternalLink, CheckCircle2, XCircle, MoreHorizontal,
-  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft
+  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft, Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -21,13 +21,14 @@ interface HomeProps {
   onTeacherDashboardClick: () => void;
   onAssignmentsClick: () => void;
   onExamsClick: () => void;
+  onAdminTerminalClick: () => void;
   onParentClick: () => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
 }
 
 export default function Home({ 
-  onBack, onAdminClick, onTeacherClick, onTeacherDashboardClick, 
+  onBack, onAdminClick, onAdminTerminalClick, onTeacherClick, onTeacherDashboardClick, 
   onAssignmentsClick, onExamsClick, onParentClick, theme, setTheme 
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,12 +43,13 @@ export default function Home({
 
   const handleLogoClick = () => {
     const nextClicks = logoClicks + 1;
-    if (nextClicks >= 5) {
-      onAdminClick();
+    if (nextClicks >= 10) {
+      onAdminTerminalClick();
       setLogoClicks(0);
-    } else {
-      setLogoClicks(nextClicks);
+    } else if (nextClicks >= 5) {
+      onAdminClick();
     }
+    setLogoClicks(nextClicks);
   };
 
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
@@ -409,7 +411,7 @@ export default function Home({
                         <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
                           <FileText size={18} />
                         </div>
-                        <h2 className="text-[12px] font-black uppercase tracking-[0.15em] text-brand-muted">National Examinations</h2>
+                        <h2 className="text-[12px] font-black uppercase tracking-[0.15em] text-brand-muted">National Assessments</h2>
                       </div>
                       <button
                         onClick={(e) => {
@@ -690,6 +692,26 @@ export default function Home({
                   <ChevronRight size={16} />
                 </div>
               </button>
+
+              <div className="h-px bg-brand-border/50" />
+
+              <button 
+                onClick={onAdminTerminalClick}
+                className="w-full flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-accent/5 rounded-xl flex items-center justify-center text-brand-accent">
+                    <Database size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Admin Terminal</p>
+                    <p className="text-[11px] text-brand-muted">Manage system assets & codes</p>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ChevronRight size={16} />
+                </div>
+              </button>
             </div>
           </div>
         </motion.div>
@@ -701,7 +723,7 @@ export default function Home({
           {[
             { id: 'home', label: 'Home', icon: HomeIcon, action: () => setActiveTab('home') },
             { id: 'assignments', label: 'Class', icon: FileText, action: () => { setActiveTab('home'); onAssignmentsClick(); } },
-            { id: 'exams', label: 'Exams', icon: Clock, action: () => { setActiveTab('home'); onExamsClick(); } },
+            { id: 'exams', label: 'Assessments', icon: Clock, action: () => { setActiveTab('home'); onExamsClick(); } },
             { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
           ].map((tab) => (
             <button

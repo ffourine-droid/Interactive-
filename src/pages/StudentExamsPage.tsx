@@ -68,7 +68,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
         setAttempts(attemptMap);
       }
     } catch (err: any) {
-      showToast(err.message || 'Failed to load exams', 'error');
+      showToast(err.message || 'Failed to load assessments', 'error');
     } finally {
       setLoading(false);
     }
@@ -111,7 +111,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
             </button>
             <div>
               <h1 className="font-black text-xl text-brand-text leading-none tracking-tighter">THE ASSESSMENT HUB</h1>
-              <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-1">Timed Academic Exams</p>
+              <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-1">Timed Academic Assessments</p>
             </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-brand-accent/10 flex items-center justify-center border border-brand-accent/20">
@@ -170,7 +170,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
             className="w-full bg-brand-text text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-brand-text/10 flex items-center justify-center gap-3 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
-            Search for Exams
+            Search for Assessments
           </button>
 
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
@@ -190,7 +190,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
           </div>
         </div>
 
-        {/* Exams List */}
+        {/* Assessments List */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 space-y-6">
             <div className="relative">
@@ -205,7 +205,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
                 <Search size={48} />
              </div>
              <div className="space-y-2">
-                <h3 className="font-black text-xl text-brand-text uppercase tracking-tighter">Locate Your Exam</h3>
+                <h3 className="font-black text-xl text-brand-text uppercase tracking-tighter">Locate Your Assessment</h3>
                 <p className="text-xs text-brand-muted max-w-[240px] font-bold mx-auto leading-relaxed">
                    Enter your school, teacher or grade level above to view and begin your assessments.
                 </p>
@@ -223,7 +223,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
               const isCompleted = attempt?.is_submitted;
               const isStarted = attempt && !isCompleted;
               
-              let statusText = 'Begin Exam';
+              let statusText = 'Begin Assessment';
               let statusColor = 'bg-brand-accent';
               let statusIcon = <PlayCircle size={18} />;
 
@@ -334,7 +334,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
                 <div className="absolute inset-0 bg-brand-accent/10 blur-2xl rounded-full scale-150 animate-pulse" />
              </div>
              <div className="space-y-2">
-                <h3 className="font-black text-xl text-brand-text uppercase tracking-tighter">No Active Exams</h3>
+                <h3 className="font-black text-xl text-brand-text uppercase tracking-tighter">No Active Assessments</h3>
                 <p className="text-xs text-brand-muted max-w-[240px] font-bold mx-auto leading-relaxed">
                    There are currently no listed assessments for {grade}. Please coordinate with your department head.
                 </p>
@@ -348,7 +348,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
               <div className="w-1.5 h-1.5 rounded-full bg-brand-accent" />
               <div className="w-1.5 h-1.5 rounded-full bg-brand-accent" />
            </div>
-           <p className="text-[9px] font-black text-brand-muted uppercase tracking-[0.5em]">AZILEARN EXAMINATION VER 2.0</p>
+           <p className="text-[9px] font-black text-brand-muted uppercase tracking-[0.5em]">AZILEARN ASSESSMENT VER 2.0</p>
         </footer>
       </div>
 

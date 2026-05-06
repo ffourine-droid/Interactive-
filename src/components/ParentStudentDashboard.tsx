@@ -122,7 +122,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       if (error) throw error;
       setExamData(data);
     } catch (err: any) {
-      showToast("Error loading exam details", "error");
+      showToast("Error loading assessment details", "error");
     } finally {
       setLoadingExamDetails(false);
     }
@@ -262,14 +262,14 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         <div className="flex items-center justify-between px-2">
           <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
             <Award size={14} />
-            Exam Results
+            Assessment Results
           </h2>
           <span className="text-[10px] font-black text-brand-muted shrink-0">{examAttempts.length} completed</span>
         </div>
 
         {examAttempts.length === 0 ? (
           <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-8 text-center text-brand-muted">
-            <p className="text-xs font-bold uppercase tracking-widest opacity-50">No exam scores yet</p>
+            <p className="text-xs font-bold uppercase tracking-widest opacity-50">No assessment scores yet</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4">
@@ -278,7 +278,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{attempt.exam?.subject || 'Exam'}</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{attempt.exam?.subject || 'Assessment'}</span>
                       <div className="w-1 h-1 bg-brand-border rounded-full" />
                       <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">
                         Completed {new Date(attempt.submitted_at).toLocaleDateString()}
@@ -292,7 +292,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                          className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
                        >
                          <FileText size={14} />
-                         View Detailed Exam Answers
+                         View Detailed Assessment Answers
                        </button>
                     </div>
 
@@ -326,7 +326,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                               <textarea 
                                 value={feedbackText}
                                 onChange={(e) => setFeedbackText(e.target.value)}
-                                placeholder="Response to examine results..."
+                                placeholder="Response to assessment results..."
                                 className="w-full bg-brand-surface border border-brand-accent/20 rounded-xl p-3 text-xs font-bold outline-none focus:border-brand-accent"
                                 rows={2}
                               />
@@ -392,7 +392,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         <div className="flex items-center justify-between px-2">
           <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
             <FileText size={14} />
-            Assignments & Progress
+            Assessments & Progress
           </h2>
           <span className="text-[10px] font-black text-brand-muted">{assignments.length} total</span>
         </div>

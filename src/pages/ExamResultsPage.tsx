@@ -67,7 +67,7 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
         .maybeSingle();
 
       if (examError) throw examError;
-      if (!examData) throw new Error('Exam not found');
+      if (!examData) throw new Error('Assessment not found');
       setExam(examData);
 
       const { data: attemptData, error: attemptError } = await supabase
@@ -166,7 +166,7 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
     return (
       <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center p-8">
         <Loader2 className="animate-spin text-brand-accent mb-4" size={40} />
-        <p className="text-xs font-black text-brand-muted uppercase tracking-widest animate-pulse">Analyzing Results...</p>
+        <p className="text-xs font-black text-brand-muted uppercase tracking-widest animate-pulse">Analyzing Assessment Results...</p>
       </div>
     );
   }
@@ -329,7 +329,7 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
                              </td>
                              <td colSpan={2} className="px-6 py-4">
                                 <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] animate-pulse flex items-center gap-2">
-                                  <AlertCircle size={12}/> EXAM NOT STARTED
+                                  <AlertCircle size={12}/> ASSESSMENT NOT STARTED
                                 </span>
                              </td>
                              <td className="px-6 py-4">
@@ -374,7 +374,7 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
                       <button onClick={() => setSelectedAttempt(null)} className="p-2 hover:bg-brand-bg rounded-full text-brand-muted"><ArrowLeft size={20}/></button>
                       <div>
                          <h2 className="font-bold text-lg text-brand-text">{selectedAttempt.students?.name}</h2>
-                         <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Reviewing Exam Attempt</p>
+                         <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Reviewing Assessment Attempt</p>
                       </div>
                    </div>
                    <button 

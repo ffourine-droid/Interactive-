@@ -30,6 +30,7 @@ const StudentExamsPage = lazy(() => import('./pages/StudentExamsPage'));
 const TakeExamPage = lazy(() => import('./pages/TakeExamPage'));
 const CreateExamPage = lazy(() => import('./pages/CreateExamPage'));
 const ExamResultsPage = lazy(() => import('./pages/ExamResultsPage'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 
 import { examService } from './services/examService';
 
@@ -127,7 +128,7 @@ function AppContent() {
         );
       case 'student-exams':
         return (
-          <Suspense fallback={<LoadingFallback text="Loading Exams..." />}>
+          <Suspense fallback={<LoadingFallback text="Loading Assessments..." />}>
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -147,7 +148,7 @@ function AppContent() {
         );
       case 'take-exam':
         return (
-          <Suspense fallback={<LoadingFallback text="Starting Exam..." />}>
+          <Suspense fallback={<LoadingFallback text="Starting Assessment..." />}>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -354,6 +355,12 @@ function AppContent() {
             </motion.div>
           </Suspense>
         );
+      case 'admin-dashboard':
+        return (
+          <Suspense fallback={<LoadingFallback text="Entering Admin Terminal..." />}>
+            <AdminDashboard onBack={() => setCurrentPage('home')} />
+          </Suspense>
+        );
       case 'home':
       default:
         return (
@@ -368,6 +375,7 @@ function AppContent() {
               <Home 
                 onBack={() => setCurrentPage('landing')}
                 onAdminClick={() => setCurrentPage('admin')}
+                onAdminTerminalClick={() => setCurrentPage('admin-dashboard')}
                 onTeacherClick={() => setCurrentPage('teacher')}
                 onTeacherDashboardClick={() => {
                   const teacherData = localStorage.getItem('azilearn_teacher');

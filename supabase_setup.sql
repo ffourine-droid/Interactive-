@@ -170,7 +170,42 @@ ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exam_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.parent_acknowledgements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.exam_answer_logs ENABLE ROW LEVEL SECURITY;
+-- Admin table for access control
+CREATE TABLE IF NOT EXISTS public.admins (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add share_code to exams (assessments)
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS share_code TEXT UNIQUE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS target_teacher_name TEXT;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS target_school_name TEXT;
+
+-- Add share_code to assignments
+ALTER TABLE public.assignments ADD COLUMN IF NOT EXISTS share_code TEXT UNIQUE;
+ALTER TABLE public.assignments ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.assignments ADD COLUMN IF NOT EXISTS target_teacher_name TEXT;
+ALTER TABLE public.assignments ADD COLUMN IF NOT EXISTS target_school_name TEXT;
+
+-- Indices and Realtime
+CREATE INDEX IF NOT EXISTS idx_exams_share_code ON public.exams(share_code);
+CREATE INDEX IF NOT EXISTS idx_assignments_share_code ON public.assignments(share_code);
+
+-- Enable Realtime for these tables
+BEGIN;
+  DROP PUBLICATION IF EXISTS supabase_realtime;
+  CREATE PUBLICATION supabase_realtime FOR TABLE public.exams, public.assignments;
+COMMIT;
+
+ALTER TABLE public.admins ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admins are viewable by everyone" ON public.admins FOR SELECT USING (true);
+
+-- Seed current user as admin
+INSERT INTO public.admins (id, email)
+SELECT id, email FROM auth.users WHERE email = 'ffourine@gmail.com'
+ON CONFLICT (email) DO NOTHING;
 ALTER TABLE public.experiments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;

@@ -26,6 +26,7 @@ export type Page =
   | 'student-exams'
   | 'take-exam'
   | 'create-exam'
+  | 'admin-dashboard'
   | 'exam-results';
 
 export interface Question {

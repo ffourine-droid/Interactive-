@@ -70,7 +70,7 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
         startTimer(endTime);
       }
     } catch (err: any) {
-      showToast(err.message || 'Failed to initialize exam', 'error');
+      showToast(err.message || 'Failed to initialize assessment', 'error');
       onBack();
     } finally {
       setLoading(false);
@@ -123,7 +123,7 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
       const l = await examService.getAnswerLogs(finalAttempt.id);
       setLogs(l);
       setStep('result');
-      showToast('Exam submitted successfully!', 'success');
+      showToast('Assessment submitted successfully!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Submission failed', 'error');
     } finally {
@@ -136,7 +136,7 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
     return (
       <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center p-8 grayscale opacity-50">
         <Loader2 className="animate-spin text-brand-accent mb-4" size={40} />
-        <p className="text-xs font-black text-brand-muted uppercase tracking-widest animate-pulse">Loading Exam Canvas...</p>
+        <p className="text-xs font-black text-brand-muted uppercase tracking-widest animate-pulse">Loading Assessment Canvas...</p>
       </div>
     );
   }
@@ -173,7 +173,7 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
                 <ArrowLeft size={18} />
               </button>
               <div className="text-center">
-                 <h1 className="font-black text-xs uppercase tracking-[0.3em] text-brand-muted mb-0.5">Exam Submitted</h1>
+                 <h1 className="font-black text-xs uppercase tracking-[0.3em] text-brand-muted mb-0.5">Assessment Submitted</h1>
                  <p className="font-black text-sm text-brand-text truncate max-w-[200px]">{exam.title}</p>
               </div>
               <div className="w-10" />
@@ -197,7 +197,7 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
                       <span className="text-[9px] font-black text-brand-accent uppercase tracking-[0.2em]">Official Report</span>
                    </div>
                    <h2 className="text-5xl font-black text-brand-text tracking-tighter uppercase leading-none mt-4">Finished!</h2>
-                   <p className="text-sm font-bold text-brand-muted max-w-[280px] leading-relaxed">Your exam has been submitted and sent to your teacher for review.</p>
+                   <p className="text-sm font-bold text-brand-muted max-w-[280px] leading-relaxed">Your assessment has been submitted and sent to your teacher for review.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
@@ -249,7 +249,7 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
               <div className="flex items-center justify-between px-4">
                  <h3 className="font-black text-xs uppercase tracking-[0.4em] text-brand-muted flex items-center gap-4">
                     <div className="w-8 h-[2px] bg-brand-border" />
-                    EXAM SUMMARY
+                    ASSESSMENT SUMMARY
                  </h3>
                  <span className="text-[9px] font-black text-brand-accent uppercase tracking-widest">{exam.questions.length} Questions Answered</span>
               </div>
@@ -363,7 +363,7 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
                 onClick={() => setShowConfirm(true)}
                 className="group relative bg-brand-accent hover:brightness-110 px-8 py-3.5 rounded-2xl text-white font-black uppercase text-xs tracking-[0.15em] shadow-[0_10px_30px_rgba(244,123,32,0.3)] active:scale-95 transition-all overflow-hidden"
                >
-                 <span className="relative z-10">SUBMIT EXAM</span>
+                 <span className="relative z-10">SUBMIT ASSESSMENT</span>
                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
                </button>
             </div>
@@ -486,14 +486,14 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
         <div className="pt-20 pb-12 flex flex-col items-center space-y-8">
            <div className="w-px h-24 bg-gradient-to-bottom from-brand-border to-transparent" />
            <div className="text-center space-y-3">
-              <h3 className="font-black text-lg text-brand-text tracking-tighter uppercase leading-none">Finished with your exam?</h3>
+              <h3 className="font-black text-lg text-brand-text tracking-tighter uppercase leading-none">Finished with your assessment?</h3>
               <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.4em]">Make sure you answered everything</p>
            </div>
            <button 
              onClick={() => setShowConfirm(true)}
              className="bg-brand-accent text-white px-12 py-5 rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-xs shadow-[0_20px_50px_rgba(244,123,32,0.3)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-4"
            >
-              Submit Exam Now
+              Submit Assessment Now
               <ArrowLeft size={18} className="rotate-180" />
            </button>
         </div>

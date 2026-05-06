@@ -104,7 +104,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setSubmissions(prev => [payload.new as Submission, ...prev]);
-          showToast("New assignment submission received!", "info");
+          showToast("New assessment submission received!", "info");
         } else if (payload.eventType === 'UPDATE') {
           setSubmissions(prev => prev.map(s => s.id === payload.new.id ? payload.new as Submission : s));
         }
@@ -116,7 +116,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setExamAttempts(prev => [payload.new, ...prev]);
-          showToast("New exam attempt received!", "info");
+          showToast("New assessment attempt received!", "info");
         } else if (payload.eventType === 'UPDATE') {
           setExamAttempts(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
         }
@@ -279,7 +279,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             <div>
               <h1 className="text-4xl font-black tracking-tight">{className}</h1>
               <p className="text-brand-muted text-sm font-bold uppercase tracking-widest mt-1">
-                {viewMode === 'assignments' ? 'Class Overview & Assignments' : viewMode === 'exams' ? 'Exam Results & Management' : 'Manage Students & Index Nos'}
+                {viewMode === 'assignments' ? 'Class Overview & Assessments' : viewMode === 'exams' ? 'Timed Assessment Results & Management' : 'Manage Students & Index Nos'}
               </p>
             </div>
           </div>
@@ -297,7 +297,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'exams' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
             >
               <Award size={14} />
-              Exams
+              Timed Assessments
             </button>
             <button 
               onClick={() => setViewMode('students')}
@@ -323,7 +323,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               className="px-6 py-3 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-2xl text-xs font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              New Exam
+              New Timed Assessment
             </button>
           </div>
         )}
@@ -384,11 +384,11 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           <div className="space-y-6">
             <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2 px-2">
               <Award size={14} />
-              Published Exams
+              Published Assessments
             </h2>
             {exams.length === 0 ? (
               <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">
-                <p className="font-bold">No exams created for this class yet.</p>
+                <p className="font-bold">No assessments created for this class yet.</p>
               </div>
             ) : (
               exams.map((exam) => {
@@ -423,7 +423,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                           className="border-t border-brand-border bg-brand-bg/30"
                         >
                           <div className="p-6">
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted mb-4 px-1">Examinee Results</h4>
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted mb-4 px-1">Assessment Results</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               {students.map(student => {
                                 const attempt = attempts.find(a => a.student_id === student.id);
@@ -526,9 +526,9 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         </section>
 
         <div className="space-y-4">
-          <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2 px-2">
+            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2 px-2">
             <FileText size={14} />
-            Assignments
+            Assessments
           </h2>
           {assignments.length === 0 ? (
           <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">
@@ -692,7 +692,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     )}
   </main>
 
-      {/* Exam Grading Modal */}
+      {/* Assessment Grading Modal */}
       <AnimatePresence>
         {selectedExamAttempt && (
           <motion.div 
@@ -716,7 +716,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                     <h2 className="text-2xl font-black tracking-tight">
                       {students.find(s => s.id === selectedExamAttempt.student_id)?.name}
                     </h2>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Exam Results & Feedback</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Assessment Results & Feedback</p>
                   </div>
                 </div>
                 <button 
@@ -774,7 +774,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                         value={feedbackInput}
                         onChange={e => setFeedbackInput(e.target.value)}
                         className="w-full bg-brand-surface border border-brand-accent/20 rounded-2xl py-4 px-6 font-bold text-sm outline-none min-h-[120px] resize-none"
-                        placeholder="Provide feedback on the exam performance..."
+                        placeholder="Provide feedback on the assessment performance..."
                       />
                     </div>
                   </div>
@@ -792,7 +792,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                           })
                           .eq('id', selectedExamAttempt.id);
                         if (error) throw error;
-                        showToast("Exam graded!", "success");
+                        showToast("Assessment graded!", "success");
                         setSelectedExamAttempt(null);
                         fetchInitialData();
                       } catch (err: any) {
@@ -805,7 +805,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                     className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 flex items-center justify-center gap-3"
                   >
                     {gradingExam ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                    Update Exam Feedback
+                    Update Assessment Feedback
                   </button>
                 </div>
 

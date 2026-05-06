@@ -65,6 +65,87 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
   const [activeView, setActiveView] = useState<'classes' | 'exams'>('classes');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importCode, setImportCode] = useState('');
+  const [importing, setImporting] = useState(false);
+
+  const WHATSAPP_NUMBER = "0799426863";
+
+  const handleRequestWhatsApp = () => {
+    const message = encodeURIComponent(`Hello Admin, I am ${teacher?.name} from ${teacher?.school_name}. I would like to request an assessment/assignment creation.`);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
+  };
+
+  const handleImportByCode = async () => {
+    if (!importCode.trim()) {
+      showToast("Please enter a valid code", "error");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const { data: examData, error: examErr } = await supabase
+        .from('exams')
+        .select('*')
+        .eq('share_code', importCode.trim())
+        .maybeSingle();
+
+      if (examData) {
+        showToast("Assessment found! Importing...", "info");
+        const { error: copyErr } = await supabase
+          .from('exams')
+          .insert({
+            ...examData,
+            id: undefined,
+            created_at: undefined,
+            created_by: teacher?.id,
+            is_published: false,
+            share_code: null,
+            created_by_admin: false
+          });
+        
+        if (copyErr) throw copyErr;
+        showToast("Assessment imported successfully!", "success");
+        if (teacher) fetchDashboardData(teacher.id);
+        setShowImportModal(false);
+        setImportCode('');
+        return;
+      }
+
+      const { data: assignData, error: assignErr } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('share_code', importCode.trim())
+        .maybeSingle();
+
+      if (assignData) {
+        showToast("Assignment found! Importing...", "info");
+        const { error: copyErr } = await supabase
+          .from('assignments')
+          .insert({
+            ...assignData,
+            id: undefined,
+            created_at: undefined,
+            teacher_id: teacher?.id,
+            share_code: null,
+            created_by_admin: false
+          });
+        
+        if (copyErr) throw copyErr;
+        showToast("Assignment imported successfully!", "success");
+        if (teacher) fetchDashboardData(teacher.id);
+        setShowImportModal(false);
+        setImportCode('');
+        return;
+      }
+
+      showToast("No work found with this code.", "error");
+    } catch (err: any) {
+      showToast(err.message || "Failed to import work", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const grades = [
     'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 
@@ -100,7 +181,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       }, (payload) => {
         setRecentActivity(prev => [payload.new, ...prev].slice(0, 5));
         fetchDashboardData(t.id);
-        showToast("New exam attempt started!", "info");
+        showToast("New assessment attempt started!", "info");
       })
       .subscribe();
 
@@ -113,16 +194,41 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     try {
       setLoading(true);
 
+      const teacherData = localStorage.getItem('azilearn_teacher');
+      const t = teacherData ? JSON.parse(teacherData) : null;
+
       // Verify teacher exists in DB
-      const { data: teacherCheck, error: teacherError } = await supabase
+      let { data: teacherCheck, error: teacherError } = await supabase
         .from('teachers')
-        .select('id')
+        .select('id, name, school_name')
         .eq('id', teacherId)
         .maybeSingle();
 
+      // If not found by ID, try finding by name and school (fallback for DB resets)
+      if (!teacherCheck && !teacherError && t) {
+        const { data: fallbackTeacher, error: fallbackError } = await supabase
+          .from('teachers')
+          .select('id, name, school_name')
+          .eq('name', t.name)
+          .eq('school_name', t.school_name)
+          .maybeSingle();
+        
+        if (fallbackTeacher && !fallbackError) {
+          teacherCheck = fallbackTeacher;
+          // Update localStorage with new ID
+          localStorage.setItem('azilearn_teacher', JSON.stringify({
+            id: fallbackTeacher.id,
+            name: fallbackTeacher.name,
+            school_name: fallbackTeacher.school_name
+          }));
+          teacherId = fallbackTeacher.id;
+          setTeacher(fallbackTeacher);
+        }
+      }
+
       if (teacherError || !teacherCheck) {
         console.error("Teacher record not found in database.");
-        showToast("Session expired or database reset. Please sign up again.", "error");
+        showToast("Your session has expired or the database was reset. Please sign up or login again.", "error");
         handleLogout();
         return;
       }
@@ -335,7 +441,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 className={`text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-colors ${activeView === 'exams' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
               >
                 <Clock size={14} />
-                Timed Exams
+                Timed Assessments
               </button>
            </div>
           <div className="flex flex-wrap gap-2">
@@ -360,17 +466,47 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   className="flex items-center gap-2 px-4 py-2 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
                 >
                   <Plus size={14} />
-                  New Exam
+                  New Assessment
+                </button>
+                <button 
+                  onClick={() => setShowImportModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
+                >
+                  <Download size={14} />
+                  Import Code
+                </button>
+                <button 
+                  onClick={handleRequestWhatsApp}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                >
+                  <MessageCircle size={14} />
+                  Request Admin
                 </button>
               </>
             ) : (
-              <button 
-                onClick={onExamsClick}
-                className="flex items-center gap-2 px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
-              >
-                <Plus size={14} />
-                Create Exam
-              </button>
+              <>
+                <button 
+                  onClick={onExamsClick}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+                >
+                  <Plus size={14} />
+                  Create Assessment
+                </button>
+                <button 
+                  onClick={() => setShowImportModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
+                >
+                  <Download size={14} />
+                  Import Code
+                </button>
+                <button 
+                  onClick={handleRequestWhatsApp}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                >
+                  <MessageCircle size={14} />
+                  Request Admin
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -395,7 +531,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                    <div className="flex-1">
                       <p className="text-xs font-bold text-brand-text">
                         <span className="text-brand-accent">{act.student_name || 'A student'}</span> 
-                        {act.student_name ? ' submitted an assignment' : ' started an exam attempt'}
+                        {act.student_name ? ' submitted an assignment' : ' started an assessment attempt'}
                       </p>
                       <p className="text-[8px] font-black text-brand-muted uppercase tracking-widest">
                         {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -528,8 +664,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <Clock size={32} />
                 </div>
                 <div>
-                  <p className="text-brand-muted font-bold">No exams created yet.</p>
-                  <p className="text-xs text-brand-muted/60 mt-1">Create your first timed exam to test your students.</p>
+                  <p className="text-brand-muted font-bold">No assessments created yet.</p>
+                  <p className="text-xs text-brand-muted/60 mt-1">Create your first timed assessment to test your students.</p>
                 </div>
               </div>
             ) : (
@@ -567,6 +703,68 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         )}
       </main>
+
+      {/* Import Code Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 bg-brand-bg/80 backdrop-blur-md"
+            onClick={() => setShowImportModal(false)}
+          />
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="relative w-full max-w-md bg-brand-surface border-2 border-brand-accent/20 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-brand-accent" />
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight uppercase leading-none">Import Shared Work</h2>
+                <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-2">Enter the code provided by admin</p>
+              </div>
+              <button 
+                onClick={() => setShowImportModal(false)}
+                className="w-10 h-10 rounded-2xl bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted hover:text-red-500 transition-colors"
+              >
+                <Plus className="rotate-45" size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest px-1">Unique Share Code</label>
+                <input 
+                  type="text"
+                  value={importCode}
+                  onChange={(e) => setImportCode(e.target.value.toUpperCase())}
+                  placeholder="E.G. AZ-9X2V-KL"
+                  className="w-full bg-brand-bg border-2 border-brand-border rounded-2xl px-6 py-4 font-black tracking-widest text-center text-brand-text outline-none focus:border-brand-accent transition-colors"
+                />
+              </div>
+
+              <button 
+                onClick={handleImportByCode}
+                disabled={importing || !importCode}
+                className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale transition-all active:scale-95"
+              >
+                {importing ? <Loader2 className="animate-spin" size={20} /> : <Download size={20} />}
+                {importing ? 'Importing...' : 'Link to My Dashboard'}
+              </button>
+
+              <div className="bg-brand-accent/5 rounded-2xl p-4 flex gap-4 items-start">
+                 <div className="bg-brand-accent text-white p-2 rounded-xl mt-1 shrink-0">
+                    <MessageCircle size={14} />
+                 </div>
+                 <p className="text-[10px] font-black text-brand-muted uppercase leading-relaxed">
+                    Don't have a code? Use the <span className="text-brand-accent">"Request Admin"</span> button to ask the admin to create professional work for you.
+                 </p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

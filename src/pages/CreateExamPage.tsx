@@ -106,7 +106,7 @@ export default function CreateExamPage({ onBack }: CreateExamPageProps) {
 
   const handleSave = async (isPublished: boolean) => {
     if (!formData.title) {
-      showToast('Please enter an exam title', 'error');
+      showToast('Please enter an assessment title', 'error');
       return;
     }
     if (questions.length === 0) {
@@ -141,10 +141,10 @@ export default function CreateExamPage({ onBack }: CreateExamPageProps) {
 
       if (error) throw error;
 
-      showToast(isPublished ? 'Exam published!' : 'Exam saved as draft', 'success');
+      showToast(isPublished ? 'Assessment published!' : 'Assessment saved as draft', 'success');
       onBack();
     } catch (err: any) {
-      showToast(err.message || 'Failed to save exam', 'error');
+      showToast(err.message || 'Failed to save assessment', 'error');
     } finally {
       setLoading(false);
     }
@@ -169,7 +169,7 @@ export default function CreateExamPage({ onBack }: CreateExamPageProps) {
               <ArrowLeft size={18} className="text-brand-muted group-hover:text-brand-accent transition-colors" />
             </button>
             <div className="hidden sm:block">
-              <h1 className="font-black text-xl text-brand-text leading-none uppercase tracking-tighter">EXAM ARCHITECT</h1>
+              <h1 className="font-black text-xl text-brand-text leading-none uppercase tracking-tighter">ASSESSMENT ARCHITECT</h1>
               <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-1">Professional Assessment Builder</p>
             </div>
           </div>
@@ -211,7 +211,7 @@ export default function CreateExamPage({ onBack }: CreateExamPageProps) {
 
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="block text-[9px] font-black text-brand-muted uppercase tracking-[0.15em] opacity-60">Examination Title</label>
+                  <label className="block text-[9px] font-black text-brand-muted uppercase tracking-[0.15em] opacity-60">Assessment Title</label>
                   <input 
                     type="text"
                     value={formData.title}

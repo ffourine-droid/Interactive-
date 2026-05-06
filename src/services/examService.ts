@@ -125,7 +125,7 @@ export const examService = {
       .maybeSingle();
     
     if (error) throw error;
-    if (!data) throw new Error("Exam not found.");
+    if (!data) throw new Error("Assessment not found.");
     return data as Exam;
   },
 
