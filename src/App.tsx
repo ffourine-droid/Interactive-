@@ -15,8 +15,6 @@ import { Page } from './types';
 
 // Lazy load all pages
 const Home = lazy(() => import('./pages/Home'));
-const AdminPayments = lazy(() => import('./pages/AdminPayments'));
-const AdminAssignmentUploader = lazy(() => import('./pages/AdminAssignmentUploader'));
 const TeacherAssignmentCreator = lazy(() => import('./components/TeacherAssignmentCreator'));
 const StudentAssignmentView = lazy(() => import('./components/StudentAssignmentView'));
 const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard'));
@@ -25,7 +23,6 @@ const TeacherLogin = lazy(() => import('./pages/TeacherLogin'));
 const TeacherClassView = lazy(() => import('./pages/TeacherClassView'));
 const ParentPage = lazy(() => import('./pages/ParentPage'));
 const LandingPage = lazy(() => import('./components/LandingPage'));
-
 const StudentExamsPage = lazy(() => import('./pages/StudentExamsPage'));
 const TakeExamPage = lazy(() => import('./pages/TakeExamPage'));
 const CreateExamPage = lazy(() => import('./pages/CreateExamPage'));
@@ -52,6 +49,12 @@ function AppContent() {
     }
     return 'landing';
   });
+  const [currentPageProps, setCurrentPageProps] = useState<any>(null);
+
+  const navigateTo = (page: Page, props?: any) => {
+    setCurrentPage(page);
+    setCurrentPageProps(props);
+  };
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('azilearn_theme') as 'light' | 'dark') || 'light';
@@ -122,6 +125,7 @@ function AppContent() {
               <StudentAssignmentView 
                 onBack={() => setCurrentPage('home')} 
                 onExamsClick={() => setCurrentPage('student-exams')}
+                preSelectedAssignmentId={currentPageProps?.preSelectedAssignmentId}
               />
             </motion.div>
           </Suspense>
@@ -141,6 +145,10 @@ function AppContent() {
                 onStartExam={(id) => {
                   setSelectedExamId(id);
                   setCurrentPage('take-exam');
+                }}
+                onSelectAssignment={(id) => {
+                  setCurrentPageProps({ preSelectedAssignmentId: id });
+                  setCurrentPage('assignments');
                 }}
               />
             </motion.div>
@@ -180,7 +188,10 @@ function AppContent() {
               key="create-exam"
               className="min-h-screen"
             >
-              <CreateExamPage onBack={() => setCurrentPage('teacher-dashboard')} />
+              <CreateExamPage 
+                onBack={() => setCurrentPage('teacher-dashboard')} 
+                initialData={currentPageProps?.editingExam || currentPageProps?.importedWork}
+              />
             </motion.div>
           </Suspense>
         );
@@ -244,10 +255,18 @@ function AppContent() {
                   setSelectedExamId(id);
                   setCurrentPage('exam-results');
                 }}
+                onEditExam={(exam) => {
+                  setCurrentPageProps({ editingExam: exam });
+                  setCurrentPage('create-exam');
+                }}
                 onCreateAssignment={(importMode) => {
                   setSelectedClassId(null);
                   setShowImportOnCreator(!!importMode);
                   setCurrentPage('teacher');
+                }}
+                onImportWork={(work) => {
+                  setCurrentPageProps({ importedWork: work });
+                  setCurrentPage('create-exam'); // Redirect to exam creator for admin shared work
                 }}
               />
             </motion.div>
@@ -306,19 +325,7 @@ function AppContent() {
             </motion.div>
           </Suspense>
         );
-      case 'admin':
-        return (
-          <Suspense fallback={<LoadingFallback text="Loading Admin Panel..." />}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              key="admin"
-            >
-              <AdminPayments onBack={() => setCurrentPage('home')} />
-            </motion.div>
-          </Suspense>
-        );
+/* Admin consolidated into admin-dashboard */
       case 'parent':
         return (
           <Suspense fallback={<LoadingFallback text="Opening Parent Portal..." />}>
@@ -374,7 +381,7 @@ function AppContent() {
             >
               <Home 
                 onBack={() => setCurrentPage('landing')}
-                onAdminClick={() => setCurrentPage('admin')}
+                onAdminClick={() => setCurrentPage('admin-dashboard')}
                 onAdminTerminalClick={() => setCurrentPage('admin-dashboard')}
                 onTeacherClick={() => setCurrentPage('teacher')}
                 onTeacherDashboardClick={() => {

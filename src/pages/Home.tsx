@@ -5,7 +5,7 @@ import {
   FileText, PlayCircle, Mic2, X, Download, 
   BarChart3, Plus, Moon, Sun, Trash2, Smartphone, 
   ExternalLink, CheckCircle2, XCircle, MoreHorizontal,
-  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft, Database
+  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft, Database, FileJson
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -43,13 +43,12 @@ export default function Home({
 
   const handleLogoClick = () => {
     const nextClicks = logoClicks + 1;
-    if (nextClicks >= 10) {
+    if (nextClicks >= 5) {
       onAdminTerminalClick();
       setLogoClicks(0);
-    } else if (nextClicks >= 5) {
-      onAdminClick();
+    } else {
+      setLogoClicks(nextClicks);
     }
-    setLogoClicks(nextClicks);
   };
 
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
@@ -694,24 +693,6 @@ export default function Home({
               </button>
 
               <div className="h-px bg-brand-border/50" />
-
-              <button 
-                onClick={onAdminTerminalClick}
-                className="w-full flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-brand-accent/5 rounded-xl flex items-center justify-center text-brand-accent">
-                    <Database size={20} />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-bold text-brand-text text-sm group-hover:text-brand-accent transition-colors">Admin Terminal</p>
-                    <p className="text-[11px] text-brand-muted">Manage system assets & codes</p>
-                  </div>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
-                  <ChevronRight size={16} />
-                </div>
-              </button>
             </div>
           </div>
         </motion.div>

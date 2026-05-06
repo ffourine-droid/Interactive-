@@ -12,25 +12,38 @@ import { Question, Exam } from '../types';
 interface CreateExamPageProps {
   onBack: () => void;
   onPreview?: (exam: Partial<Exam>) => void;
+  initialData?: any;
 }
 
-export default function CreateExamPage({ onBack }: CreateExamPageProps) {
+export default function CreateExamPage({ onBack, initialData }: CreateExamPageProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState<{id: string, name: string}[]>([]);
   const [teacher, setTeacher] = useState<any>(null);
 
   const [formData, setFormData] = useState({
-    title: '',
-    subject: 'Mathematics',
-    grade: 'Grade 6',
-    duration: 30,
+    title: initialData?.title || '',
+    subject: initialData?.subject || 'Mathematics',
+    grade: initialData?.grade || 'Grade 6',
+    duration: initialData?.duration_minutes || 30,
     instructions: '',
     classId: '',
     isPrebuilt: false
   });
 
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions, setQuestions] = useState<Question[]>(() => {
+    if (initialData?.questions) {
+      return initialData.questions.map((q: any, i: number) => ({
+        index: i,
+        type: q.type === 'mcq' ? 'mcq' : 'short_answer',
+        question: q.text || q.question || '',
+        options: q.options || (q.type === 'mcq' ? ['', '', '', ''] : undefined),
+        correct_answer: q.correct_option !== undefined ? String(q.correct_option) : (q.correct_answer || ''),
+        marks: q.marks || (q.type === 'mcq' ? 2 : 4)
+      }));
+    }
+    return [];
+  });
 
   useEffect(() => {
     fetchTeacherAndClasses();
@@ -104,6 +117,25 @@ export default function CreateExamPage({ onBack }: CreateExamPageProps) {
 
   const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
 
+  const generateShareCode = (schoolName: string, className: string, subject: string) => {
+    // School Code (first 3-4 chars)
+    const schoolPart = schoolName.replace(/\s+/g, '').substring(0, 4).toUpperCase() || 'AZI';
+    
+    // Class/Subject Code
+    const classPart = className 
+      ? className.replace(/\s+/g, '').substring(0, 4).toUpperCase() 
+      : subject.substring(0, 3).toUpperCase() || 'GEN';
+    
+    // Random 4 chars
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let randomPart = '';
+    for (let i = 0; i < 4; i++) {
+      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    
+    return `${schoolPart}-${classPart}-${randomPart}`;
+  };
+
   const handleSave = async (isPublished: boolean) => {
     if (!formData.title) {
       showToast('Please enter an assessment title', 'error');
@@ -116,6 +148,17 @@ export default function CreateExamPage({ onBack }: CreateExamPageProps) {
 
     setLoading(true);
     try {
+      // Get class name if needed for code generation
+      let className = '';
+      if (formData.classId) {
+        const targetClass = classes.find(c => c.id === formData.classId);
+        className = targetClass ? targetClass.name : '';
+      }
+
+      const shareCode = isPublished 
+        ? generateShareCode(teacher?.school_name || 'AZI', className, formData.subject)
+        : null;
+
       // Prepare exam data
       const examData: any = {
         title: formData.title,
@@ -126,18 +169,24 @@ export default function CreateExamPage({ onBack }: CreateExamPageProps) {
         class_id: formData.classId || null,
         questions: questions,
         is_prebuilt: formData.isPrebuilt,
-        is_published: isPublished
+        is_published: isPublished,
+        share_code: shareCode
       };
 
-      // Only add created_by if teacher exists to avoid foreign key violations
-      // if the DB was reset but local storage was not.
+      // Only add created_by if teacher exists
       if (teacher && teacher.id) {
         examData.created_by = teacher.id;
       }
 
+      // If we're editing an existing exam (has is_published property), use its ID for upsert
+      // If it's an import from admin_assignments, we want a NEW record in the exams table.
+      if (initialData?.id && initialData?.hasOwnProperty('is_published')) {
+        examData.id = initialData.id;
+      }
+
       const { error } = await supabase
         .from('exams')
-        .insert(examData);
+        .upsert(examData);
 
       if (error) throw error;
 

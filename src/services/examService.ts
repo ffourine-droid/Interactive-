@@ -72,7 +72,25 @@ export const examService = {
     return data;
   },
 
-  async searchExams(grade: string, teacherName?: string, schoolName?: string) {
+  async searchExams(grade: string, teacherName?: string, schoolName?: string, code?: string) {
+    // If a code is provided, we try to find that specific exam first
+    if (code?.trim()) {
+      const { data: codeExam, error: codeError } = await supabase
+        .from('exams')
+        .select(`
+          *,
+          teacher:created_by (
+            name,
+            school_name
+          )
+        `)
+        .eq('share_code', code.trim().toUpperCase())
+        .eq('is_published', true)
+        .maybeSingle();
+      
+      if (codeExam) return [codeExam];
+    }
+
     // Determine the query
     let baseQuery = supabase
       .from('exams')
@@ -115,6 +133,24 @@ export const examService = {
     }
 
     return filtered;
+  },
+
+  async getExamByCode(code: string) {
+    const { data, error } = await supabase
+      .from('exams')
+      .select(`
+        *,
+        teacher:created_by (
+          name,
+          school_name
+        )
+      `)
+      .eq('share_code', code.toUpperCase())
+      .eq('is_published', true)
+      .maybeSingle();
+    
+    if (error) throw error;
+    return data;
   },
 
   async getExamById(id: string) {

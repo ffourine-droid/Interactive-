@@ -48,10 +48,12 @@ interface TeacherDashboardProps {
   onCreateAssignment: (importMode?: boolean) => void;
   onExamsClick: () => void;
   onViewExamResults: (examId: string) => void;
+  onEditExam: (exam: any) => void;
+  onImportWork: (work: any) => void;
 }
 
 const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ 
-  onBack, onViewClass, onLogout, onCreateAssignment, onExamsClick, onViewExamResults 
+  onBack, onViewClass, onLogout, onCreateAssignment, onExamsClick, onViewExamResults, onEditExam, onImportWork
 }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -84,10 +86,30 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
     setImporting(true);
     try {
-      const { data: examData, error: examErr } = await supabase
+      const code = importCode.trim().toUpperCase();
+
+      // Check admin_assignments table (New preferred source)
+      const { data: adminData } = await supabase
+        .from('admin_assignments')
+        .select('*')
+        .eq('share_code', code)
+        .maybeSingle();
+
+      if (adminData) {
+        showToast("Shared work found!", "success");
+        // Open the appropriate creator with initial data
+        // For simplicity, we treat admin work as Assessments (can be extended)
+        onImportWork(adminData);
+        setShowImportModal(false);
+        setImportCode('');
+        return;
+      }
+
+      // Legacy fallback (checking existing exams/assignments)
+      const { data: examData } = await supabase
         .from('exams')
         .select('*')
-        .eq('share_code', importCode.trim())
+        .eq('share_code', code)
         .maybeSingle();
 
       if (examData) {
@@ -112,10 +134,10 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         return;
       }
 
-      const { data: assignData, error: assignErr } = await supabase
+      const { data: assignData } = await supabase
         .from('assignments')
         .select('*')
-        .eq('share_code', importCode.trim())
+        .eq('share_code', code)
         .maybeSingle();
 
       if (assignData) {
@@ -676,7 +698,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.05 }}
                   className="p-6 rounded-[2rem] border border-brand-border bg-brand-surface shadow-sm hover:border-brand-accent group cursor-pointer transition-all active:scale-[0.98]"
-                  onClick={() => onViewExamResults(exam.id)}
+                  onClick={() => exam.is_published ? onViewExamResults(exam.id) : onEditExam(exam)}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-3 rounded-2xl bg-brand-accent/10 text-brand-accent group-hover:scale-110 transition-transform">
@@ -687,14 +709,35 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
                   </div>
                   <h3 className="text-xl font-black tracking-tight mb-2 truncate">{exam.title}</h3>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-6">{exam.subject} • {exam.grade}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-4">{exam.subject} • {exam.grade}</p>
                   
+                  {exam.is_published && exam.share_code && (
+                    <div className="mb-6 p-3 bg-brand-accent/5 rounded-2xl border border-brand-accent/10 flex items-center justify-between group/code hover:border-brand-accent transition-all"
+                         onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(exam.share_code); showToast("Code copied!", "success"); }}>
+                      <div className="flex flex-col">
+                        <span className="text-[7px] font-black uppercase tracking-widest text-brand-muted mb-0.5">Share Code</span>
+                        <span className="text-xs font-black tracking-[0.2em] text-brand-accent">{exam.share_code}</span>
+                      </div>
+                      <Plus size={14} className="text-brand-accent/40 group-hover/code:text-brand-accent transition-colors" />
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between text-brand-muted">
                     <div className="flex items-center gap-2 text-[10px] font-black tracking-widest uppercase">
-                      View Results
+                      {exam.is_published ? 'View Results' : 'Complete Draft'}
                     </div>
-                    <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center group-hover:bg-brand-accent group-hover:text-white transition-colors">
-                      <ChevronRight size={16} />
+                    <div className="flex gap-2">
+                       {!exam.is_published && (
+                         <button 
+                           onClick={(e) => { e.stopPropagation(); onEditExam(exam); }}
+                           className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center hover:bg-brand-accent hover:text-white transition-colors"
+                         >
+                           <Plus size={16} />
+                         </button>
+                       )}
+                       <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center group-hover:bg-brand-accent group-hover:text-white transition-colors">
+                         <ChevronRight size={16} />
+                       </div>
                     </div>
                   </div>
                 </motion.div>

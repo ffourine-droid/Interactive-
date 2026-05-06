@@ -134,6 +134,10 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       const studentIds = student.all_student_ids || [student.id];
       const classIds = student.all_class_ids || [student.class_id];
 
+      // Format student IDs for the .in filter in .or clause
+      // Postgrest .in expects (val1,val2)
+      const idsFormatted = studentIds.join(',');
+
       // Fetch assignments, submissions, exam attempts, and acks
       const [assignmentsRes, submissionsRes, examsRes, acksRes] = await Promise.all([
         supabase
@@ -143,8 +147,8 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           .order('created_at', { ascending: false }),
         supabase
           .from('assignment_submissions')
-          .select('id, assignment_id, score, teacher_comment, parent_feedback, teacher_reply, status, submitted_at, answers')
-          .or(`student_id.in.(${studentIds.map(id => `"${id}"`).join(',')}),student_name.ilike."${student.name.trim()}"`),
+          .select('id, assignment_id, score, teacher_comment, parent_feedback, teacher_reply, status, submitted_at, answers, student_id, student_name')
+          .or(`student_id.in.(${idsFormatted}),student_name.ilike."${student.name.trim()}"`),
         supabase
           .from('exam_attempts')
           .select(`
@@ -170,7 +174,8 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       setExamAttempts(examsRes.data || []);
       setAcknowledgements(acksRes.data || []);
     } catch (err: any) {
-      showToast("Error loading dashboard data", "error");
+      console.error("Dashboard fetch error:", err);
+      showToast(`Error loading dashboard: ${err.message || 'Unknown error'}`, "error");
     } finally {
       setLoading(false);
     }

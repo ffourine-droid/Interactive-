@@ -40,7 +40,11 @@ interface Assignment {
   questions: Question[];
 }
 
-export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?: () => void }> = ({ onBack, onExamsClick }) => {
+export const StudentAssignmentView: React.FC<{ 
+  onBack: () => void, 
+  onExamsClick?: () => void,
+  preSelectedAssignmentId?: string 
+}> = ({ onBack, onExamsClick, preSelectedAssignmentId }) => {
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchSchool, setSearchSchool] = useState('');
@@ -63,12 +67,20 @@ export const StudentAssignmentView: React.FC<{ onBack: () => void, onExamsClick?
       if (studentStr) {
         const student = JSON.parse(studentStr);
         setSearchGrade(student.grade || 'Grade 7');
-        fetchAssignments();
+        if (!preSelectedAssignmentId) {
+          fetchAssignments();
+        }
       } else {
         setLoading(false);
       }
     }
   }, [step]);
+
+  useEffect(() => {
+    if (preSelectedAssignmentId && step === 'entry') {
+      handleJoinAssignment(preSelectedAssignmentId);
+    }
+  }, [preSelectedAssignmentId, step]);
 
   const fetchAssignments = async () => {
     setLoading(true);

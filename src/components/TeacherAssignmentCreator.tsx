@@ -102,7 +102,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       const { data, error } = await supabase
         .from('assignments')
         .select('*')
-        .eq('short_code', code.toUpperCase())
+        .eq('share_code', code.toUpperCase())
         .maybeSingle();
 
       if (error) throw error;
@@ -515,19 +515,17 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
   const publishAssignment = async () => {
     if (!validateForm()) return;
 
-    let teacherId = localStorage.getItem('azilearn_teacher_id');
     const teacherData = localStorage.getItem('azilearn_teacher');
+    let teacherId = '';
     
     if (teacherData) {
       teacherId = JSON.parse(teacherData).id;
     }
 
     if (!teacherId) {
-      teacherId = 'teacher_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('azilearn_teacher_id', teacherId);
+      showToast("Session expired. Please login again.", "error");
+      return;
     }
-
-    const shortCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     setLoading(true);
     try {
@@ -535,6 +533,9 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       const studentList = isDynamic 
         ? form.expected_students.split(',').map(s => s.trim()).filter(s => s !== '')
         : students.map(s => s.name);
+
+      // Generate a share code for teachers too
+      const shareCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
       const { data, error } = await supabase
         .from('assignments')
@@ -548,7 +549,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           due_date: new Date(form.due_date).toISOString(),
           questions: questions,
           expected_students: studentList,
-          short_code: null // Codes are only for admin imports now
+          share_code: shareCode
         }])
         .select()
         .single();

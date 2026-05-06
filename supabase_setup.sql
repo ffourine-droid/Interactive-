@@ -53,11 +53,11 @@ CREATE TABLE IF NOT EXISTS public.assignments (
     due_date TIMESTAMPTZ,
     questions JSONB DEFAULT '[]',
     expected_students TEXT[],
-    short_code TEXT,
+    share_code TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS public.submissions (
+CREATE TABLE IF NOT EXISTS public.assignment_submissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     assignment_id UUID REFERENCES public.assignments(id) ON DELETE CASCADE,
     student_id TEXT NOT NULL,
@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS public.submissions (
 CREATE TABLE IF NOT EXISTS public.parent_acknowledgements (
     assignment_id UUID REFERENCES public.assignments(id) ON DELETE CASCADE,
     student_id TEXT NOT NULL,
+    parent_code TEXT,
     acknowledged_at TIMESTAMPTZ DEFAULT now(),
     PRIMARY KEY (assignment_id, student_id)
 );
@@ -91,8 +92,18 @@ CREATE TABLE IF NOT EXISTS public.exams (
     created_by UUID REFERENCES public.teachers(id) ON DELETE SET NULL,
     is_prebuilt BOOLEAN DEFAULT false,
     is_published BOOLEAN DEFAULT false,
+    share_code TEXT UNIQUE,
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Index for fast code lookups
+CREATE INDEX IF NOT EXISTS idx_exams_share_code ON public.exams(share_code);
+CREATE INDEX IF NOT EXISTS idx_assignments_share_code ON public.assignments(share_code);
+
+-- Enable Realtime
+ALTER TABLE public.exams REPLICA IDENTITY FULL;
+ALTER TABLE public.assignments REPLICA IDENTITY FULL;
+ALTER TABLE public.admin_assignments REPLICA IDENTITY FULL;
 
 CREATE TABLE IF NOT EXISTS public.exam_attempts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -168,39 +179,37 @@ ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exam_attempts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.assignment_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.parent_acknowledgements ENABLE ROW LEVEL SECURITY;
--- Admin table for access control
 CREATE TABLE IF NOT EXISTS public.admins (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Master table for shared work created by admins
+CREATE TABLE IF NOT EXISTS public.admin_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    grade TEXT NOT NULL,
+    type TEXT DEFAULT 'assessment',
+    questions JSONB NOT NULL,
+    share_code TEXT UNIQUE NOT NULL,
+    target_teacher_name TEXT,
+    target_school_name TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Add share_code to exams (assessments)
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS share_code TEXT UNIQUE;
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN DEFAULT FALSE;
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS target_teacher_name TEXT;
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS target_school_name TEXT;
+-- Index for fast code lookups
+CREATE INDEX IF NOT EXISTS idx_admin_assignments_share_code ON public.admin_assignments(share_code);
+CREATE INDEX IF NOT EXISTS idx_students_parent_code ON public.students(parent_code);
+CREATE INDEX IF NOT EXISTS idx_students_name_grade ON public.students(name, grade);
 
--- Add share_code to assignments
-ALTER TABLE public.assignments ADD COLUMN IF NOT EXISTS share_code TEXT UNIQUE;
-ALTER TABLE public.assignments ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN DEFAULT FALSE;
-ALTER TABLE public.assignments ADD COLUMN IF NOT EXISTS target_teacher_name TEXT;
-ALTER TABLE public.assignments ADD COLUMN IF NOT EXISTS target_school_name TEXT;
-
--- Indices and Realtime
-CREATE INDEX IF NOT EXISTS idx_exams_share_code ON public.exams(share_code);
-CREATE INDEX IF NOT EXISTS idx_assignments_share_code ON public.assignments(share_code);
-
--- Enable Realtime for these tables
-BEGIN;
-  DROP PUBLICATION IF EXISTS supabase_realtime;
-  CREATE PUBLICATION supabase_realtime FOR TABLE public.exams, public.assignments;
-COMMIT;
-
-ALTER TABLE public.admins ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins are viewable by everyone" ON public.admins FOR SELECT USING (true);
+-- Enable Realtime
+ALTER TABLE public.admin_assignments REPLICA IDENTITY FULL;
+-- We'll assume publication setup handles this or use:
+-- ALTER PUBLICATION supabase_realtime ADD TABLE public.admin_assignments;
 
 -- Seed current user as admin
 INSERT INTO public.admins (id, email)
