@@ -18,10 +18,12 @@ import {
   Database,
   FileJson,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Zap
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { ArenaQuestionCreator } from '../components/ArenaQuestionCreator';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -30,7 +32,7 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'shared' | 'system' | 'finance' | 'users'>('shared');
+  const [activeTab, setActiveTab] = useState<'shared' | 'system' | 'finance' | 'users' | 'arena'>('shared');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
   
@@ -303,6 +305,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             {[
               { id: 'shared', icon: Layout, label: 'Shared' },
               { id: 'system', icon: Database, label: 'System' },
+              { id: 'arena', icon: Zap, label: 'Arena' },
               { id: 'finance', icon: Code, label: 'Finance' },
               { id: 'users', icon: MessageCircle, label: 'Users' }
             ].map(tab => (
@@ -556,6 +559,12 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {!loading && activeTab === 'arena' && (
+          <div className="space-y-6">
+            <ArenaQuestionCreator />
           </div>
         )}
 

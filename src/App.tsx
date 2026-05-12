@@ -28,6 +28,7 @@ const TakeExamPage = lazy(() => import('./pages/TakeExamPage'));
 const CreateExamPage = lazy(() => import('./pages/CreateExamPage'));
 const ExamResultsPage = lazy(() => import('./pages/ExamResultsPage'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const ArenaPage = lazy(() => import('./pages/ArenaPage'));
 
 import { examService } from './services/examService';
 
@@ -373,6 +374,20 @@ function AppContent() {
             <AdminDashboard onBack={() => setCurrentPage('home')} />
           </Suspense>
         );
+      case 'arena':
+        return (
+          <Suspense fallback={<LoadingFallback text="Entering Speed Arena..." />}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              key="arena"
+              className="min-h-screen"
+            >
+              <ArenaPage onBack={() => setCurrentPage('home')} />
+            </motion.div>
+          </Suspense>
+        );
       case 'home':
       default:
         return (
@@ -399,6 +414,7 @@ function AppContent() {
                 }}
                 onAssignmentsClick={() => setCurrentPage('assignments')}
                 onExamsClick={() => setCurrentPage('student-exams')}
+                onArenaClick={() => setCurrentPage('arena')}
                 onParentClick={() => setCurrentPage('parent')}
                 selectedClass={selectedClass}
                 setSelectedClass={setSelectedClass}

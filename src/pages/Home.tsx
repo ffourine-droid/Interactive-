@@ -5,7 +5,7 @@ import {
   FileText, PlayCircle, Mic2, X, Download, 
   BarChart3, Plus, Moon, Sun, Trash2, Smartphone, 
   ExternalLink, CheckCircle2, XCircle, MoreHorizontal,
-  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft, Database, FileJson
+  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft, Database, FileJson, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -21,6 +21,7 @@ interface HomeProps {
   onTeacherDashboardClick: () => void;
   onAssignmentsClick: () => void;
   onExamsClick: () => void;
+  onArenaClick: () => void;
   onAdminTerminalClick: () => void;
   onParentClick: () => void;
   theme: 'light' | 'dark';
@@ -31,7 +32,7 @@ interface HomeProps {
 
 export default function Home({ 
   onBack, onAdminClick, onAdminTerminalClick, onTeacherClick, onTeacherDashboardClick, 
-  onAssignmentsClick, onExamsClick, onParentClick, theme, setTheme,
+  onAssignmentsClick, onExamsClick, onArenaClick, onParentClick, theme, setTheme,
   selectedClass, setSelectedClass
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -383,7 +384,37 @@ export default function Home({
                 </header>
 
                 <div className="space-y-8">
-                    <div className="space-y-4">
+                  {/* Arena Speed Challenge */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
+                        <Zap size={18} />
+                      </div>
+                      <h2 className="text-[12px] font-black uppercase tracking-[0.15em] text-brand-muted">Competition</h2>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        rippleEffect(e);
+                        onArenaClick();
+                      }}
+                      className="w-full bg-brand-surface border border-brand-border/40 rounded-[2rem] p-6 flex items-center justify-between hover:border-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 group shadow-sm"
+                    >
+                      <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent group-hover:scale-110 transition-transform">
+                          <Zap size={32} />
+                        </div>
+                        <div className="text-left">
+                          <h3 className="text-xl font-black text-[#FF6B2C] tracking-tight uppercase">Speed Arena</h3>
+                          <p className="text-[11px] font-black uppercase tracking-widest text-brand-muted/60">60s Speed Round</p>
+                        </div>
+                      </div>
+                      <div className="w-10 h-10 bg-brand-bg rounded-full flex items-center justify-center text-brand-muted group-hover:text-[#FF6B2C] group-hover:translate-x-1 transition-all">
+                        <ChevronRight size={24} />
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
                           <GraduationCap size={18} />
@@ -706,7 +737,8 @@ export default function Home({
           {[
             { id: 'home', label: 'Home', icon: HomeIcon, action: () => setActiveTab('home') },
             { id: 'assignments', label: 'Class', icon: FileText, action: () => { setActiveTab('home'); onAssignmentsClick(); } },
-            { id: 'exams', label: 'Assessments', icon: Clock, action: () => { setActiveTab('home'); onExamsClick(); } },
+            { id: 'arena', label: 'Arena', icon: Zap, action: () => onArenaClick() },
+            { id: 'exams', label: 'Exams', icon: Clock, action: () => { setActiveTab('home'); onExamsClick(); } },
             { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
           ].map((tab) => (
             <button
