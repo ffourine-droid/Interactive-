@@ -737,7 +737,7 @@ export default function Home({
           {[
             { id: 'home', label: 'Home', icon: HomeIcon, action: () => setActiveTab('home') },
             { id: 'assignments', label: 'Class', icon: FileText, action: () => { setActiveTab('home'); onAssignmentsClick(); } },
-            { id: 'arena', label: 'Arena', icon: Zap, action: () => onArenaClick() },
+            { id: 'arena', label: 'Arena', icon: Zap, action: () => { setActiveTab('home'); onArenaClick(); } },
             { id: 'exams', label: 'Exams', icon: Clock, action: () => { setActiveTab('home'); onExamsClick(); } },
             { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
           ].map((tab) => (

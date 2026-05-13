@@ -24,6 +24,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { ArenaQuestionCreator } from '../components/ArenaQuestionCreator';
+import { QuestionManager } from '../components/QuestionManager';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -563,8 +564,9 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
         )}
 
         {!loading && activeTab === 'arena' && (
-          <div className="space-y-6">
+          <div className="space-y-12">
             <ArenaQuestionCreator />
+            <QuestionManager />
           </div>
         )}
 

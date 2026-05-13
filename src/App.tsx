@@ -376,13 +376,13 @@ function AppContent() {
         );
       case 'arena':
         return (
-          <Suspense fallback={<LoadingFallback text="Entering Speed Arena..." />}>
+          <Suspense fallback={<LoadingFallback text="Entering Arena..." />}>
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
               key="arena"
-              className="min-h-screen"
+              className="max-w-[360px] mx-auto min-h-screen"
             >
               <ArenaPage onBack={() => setCurrentPage('home')} />
             </motion.div>
