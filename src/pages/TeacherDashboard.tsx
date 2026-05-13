@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
   Plus, 
@@ -14,10 +14,16 @@ import {
   MessageCircle,
   Download,
   Clock,
-  Check
+  Check,
+  Trophy
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { TeacherCompetitionManager } from '../components/TeacherCompetitionManager';
+import { QuestionRequestForm } from '../components/QuestionRequestForm';
+import { MaterialCard } from '../components/MaterialCard';
+import { SlidesViewer } from '../components/SlidesViewer';
+import { Experiment } from '../types';
 
 interface Assignment {
   id: string;
@@ -66,17 +72,11 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [newClassName, setNewClassName] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
-  const [activeView, setActiveView] = useState<'classes' | 'exams'>('classes');
+  const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions'>('classes');
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
   const [importCode, setImportCode] = useState('');
   const [importing, setImporting] = useState(false);
-
-  const WHATSAPP_NUMBER = "0799426863";
-
-  const handleRequestWhatsApp = () => {
-    const message = encodeURIComponent(`Hello Admin, I am ${teacher?.name} from ${teacher?.school_name}. I would like to request an assessment/assignment creation.`);
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
-  };
 
   const handleImportByCode = async () => {
     if (!importCode.trim()) {
@@ -180,7 +180,17 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       onLogout();
       return;
     }
-    const t = JSON.parse(teacherData);
+    let t;
+    try {
+      t = teacherData ? JSON.parse(teacherData) : null;
+    } catch {
+      t = null;
+    }
+    
+    if (!t) {
+      onLogout();
+      return;
+    }
     setTeacher(t);
     fetchDashboardData(t.id);
 
@@ -465,6 +475,13 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <Clock size={14} />
                 Timed Assessments
               </button>
+              <button 
+                onClick={() => setActiveView('competitions')}
+                className={`text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-colors ${activeView === 'competitions' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <Trophy size={14} />
+                Arena
+              </button>
            </div>
           <div className="flex flex-wrap gap-2">
             {activeView === 'classes' ? (
@@ -498,14 +515,14 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   Import Code
                 </button>
                 <button 
-                  onClick={handleRequestWhatsApp}
+                  onClick={() => setShowRequestModal(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
                 >
                   <MessageCircle size={14} />
                   Request Admin
                 </button>
               </>
-            ) : (
+            ) : activeView === 'exams' ? (
               <>
                 <button 
                   onClick={onExamsClick}
@@ -522,13 +539,21 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   Import Code
                 </button>
                 <button 
-                  onClick={handleRequestWhatsApp}
+                  onClick={() => setShowRequestModal(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
                 >
                   <MessageCircle size={14} />
                   Request Admin
                 </button>
               </>
+            ) : (
+                <button 
+                  onClick={() => setShowRequestModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                >
+                  <MessageCircle size={14} />
+                  Request Admin
+                </button>
             )}
           </div>
         </div>
@@ -678,7 +703,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               )}
             </div>
           </>
-        ) : (
+        ) : activeView === 'exams' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {exams.length === 0 ? (
               <div className="col-span-full py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
@@ -744,8 +769,32 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               ))
             )}
           </div>
+        ) : (
+          <TeacherCompetitionManager teacherId={teacher?.id || ''} />
         )}
       </main>
+
+      {/* Request Admin Modal */}
+      {showRequestModal && teacher && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 bg-brand-bg/80 backdrop-blur-md"
+            onClick={() => setShowRequestModal(false)}
+          />
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="relative w-full max-w-2xl bg-brand-surface border-2 border-brand-accent/20 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+          >
+            <QuestionRequestForm 
+              teacher={teacher} 
+              onClose={() => setShowRequestModal(false)} 
+            />
+          </motion.div>
+        </div>
+      )}
 
       {/* Import Code Modal */}
       {showImportModal && (

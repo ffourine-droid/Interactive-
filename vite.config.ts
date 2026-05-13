@@ -19,10 +19,7 @@ export default defineConfig(({mode}) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom'],
-            'vendor-utils': ['lucide-react', 'motion/react', '@supabase/supabase-js'],
-          }
+          // No manual chunks to prevent loading issues in this environment
         }
       }
     },

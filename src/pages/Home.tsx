@@ -58,7 +58,11 @@ export default function Home({
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('azilearn_search_history');
-      return saved ? JSON.parse(saved) : [];
+      try {
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
     }
     return [];
   });
@@ -66,12 +70,17 @@ export default function Home({
   const [searchCache, setSearchCache] = useState<Record<string, Experiment[]>>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('azilearn_search_cache');
-      return saved ? JSON.parse(saved) : {};
+      try {
+        return saved ? JSON.parse(saved) : {};
+      } catch {
+        return {};
+      }
     }
     return {};
   });
 
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'slides' | 'pdf' | 'ppt' | 'notes'>('slides');
   const [zoom, setZoom] = useState(100);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -310,11 +319,103 @@ export default function Home({
   };
 
   return (
-    <div className="max-w-[360px] mx-auto bg-brand-bg min-h-screen relative flex flex-col">
+    <div className="max-w-[360px] mx-auto bg-brand-bg min-h-screen relative flex flex-col overflow-hidden">
+      {/* Sidebar Overlay */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSidebarOpen(false)}
+              className="fixed inset-0 z-[300] bg-brand-bg/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 w-[280px] z-[301] bg-brand-surface border-r border-brand-border p-6 shadow-2xl flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center text-white">
+                    <FlaskConical size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black tracking-tighter">AziLearn</h2>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-accent/60">Student Portal</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="w-8 h-8 rounded-full bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="flex-1 space-y-2">
+                {[
+                  { id: 'home', label: 'Home Hub', icon: HomeIcon, action: () => { setActiveTab('home'); setIsSidebarOpen(false); setSelectedClass(null); } },
+                  { id: 'assignments', label: 'My Classes', icon: FileText, action: () => { onAssignmentsClick(); setIsSidebarOpen(false); } },
+                  { id: 'arena', label: 'Level Up Arena', icon: Zap, action: () => { onArenaClick(); setIsSidebarOpen(false); } },
+                  { id: 'exams', label: 'Timed Exams', icon: Clock, action: () => { onExamsClick(); setIsSidebarOpen(false); } },
+                  { id: 'parent', label: 'Parent Portal', icon: ShieldCheck, action: () => { onParentClick(); setIsSidebarOpen(false); } },
+                  { id: 'settings', label: 'App Settings', icon: Settings, action: () => { setActiveTab('settings'); setIsSidebarOpen(false); } },
+                ].map(item => (
+                  <button
+                    key={item.id}
+                    onClick={item.action}
+                    className="w-full flex items-center gap-4 p-3 rounded-2xl hover:bg-brand-accent/5 transition-colors group"
+                  >
+                    <div className="text-brand-muted group-hover:text-brand-accent transition-colors">
+                      <item.icon size={18} />
+                    </div>
+                    <span className="font-bold text-xs text-brand-text group-hover:text-brand-accent transition-colors">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-6 border-t border-brand-border space-y-4">
+                <button 
+                   onClick={() => onBack()}
+                   className="w-full flex items-center gap-4 p-4 rounded-2xl text-red-500 hover:bg-red-500/5 transition-colors font-bold text-sm"
+                >
+                  <LogOut size={20} />
+                  Exit Portal
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       <div className="flex-1 pb-32">
+        {/* Header with Sidebar Toggle */}
+        <div className="px-6 pt-6 pb-2 flex items-center justify-between">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border flex items-center justify-center text-brand-text shadow-sm"
+          >
+            <MoreHorizontal size={20} />
+          </button>
+          
+          <div className="flex items-center gap-3">
+             <div className="text-right">
+                <p className="text-[9px] font-black uppercase tracking-widest text-brand-muted">Learning Hub</p>
+                <p className="text-xs font-black text-brand-text">{selectedClass || 'Select Grade'}</p>
+             </div>
+             <div className="w-10 h-10 rounded-xl bg-brand-accent/10 flex items-center justify-center text-brand-accent">
+                <GraduationCap size={20} />
+             </div>
+          </div>
+        </div>
+
       {/* TOP SEARCH BAR */}
       {activeTab === 'home' && selectedClass && (
-        <div className="sticky top-0 z-[100] p-3 pt-4 bg-transparent pointer-events-none">
+        <div className="sticky top-0 z-[100] p-3 bg-transparent pointer-events-none">
           <div className={`flex items-center bg-brand-surface rounded-full shadow-lg px-4 h-14 gap-3 pointer-events-auto border transition-all duration-300 ${isSearchFocused ? 'border-brand-accent ring-4 ring-brand-accent/10' : 'border-brand-border/50'}`}>
             <Search className={`${isSearchFocused ? 'text-brand-accent' : 'text-brand-muted'} transition-colors shrink-0`} size={20} />
             <input 
@@ -330,16 +431,8 @@ export default function Home({
                   handleSearch(searchQuery, category, selectedClass, true);
                 }
               }}
+              placeholder="Search study topics..."
             />
-            <div className="flex items-center gap-2 shrink-0">
-              <button 
-                className="w-9 h-9 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform relative overflow-hidden shrink-0"
-              >
-                <span className="font-sans font-bold text-sm uppercase">
-                  A
-                </span>
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -351,122 +444,55 @@ export default function Home({
             {!selectedClass ? (
               <motion.div 
                 key="class-selection"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="px-6 py-8 space-y-10"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.05 }}
+                className="px-6 pt-4 pb-12 flex flex-col items-center space-y-8"
               >
-                <header className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <button 
-                      onClick={onBack}
-                      className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-accent transition-colors shadow-sm"
-                    >
-                      <ArrowLeft size={18} />
-                    </button>
-                    <div 
-                      className="flex items-center gap-3 cursor-pointer active:scale-95 transition-transform"
-                      onClick={handleLogoClick}
-                    >
-                      <div className="w-12 h-12 bg-[#FF6B2C] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#FF6B2C]/20 transform rotate-12">
-                        <FlaskConical size={28} />
-                      </div>
-                      <div>
-                        <h1 className="text-2xl font-black text-brand-text tracking-tighter leading-none">AziLearn</h1>
-                        <p className="text-[10px] text-brand-muted font-bold uppercase tracking-widest mt-1">Study Materials</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-brand-surface border border-brand-border px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
-                     <span className="text-xs font-bold text-brand-text">Welcome!</span>
-                     <span className="text-sm">👋</span>
-                  </div>
-                </header>
+                <div className="relative">
+                  <motion.div 
+                    animate={{ rotate: [0, 10, -10, 0] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                    className="w-20 h-20 bg-[#FF6B2C] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#FF6B2C]/30 relative z-10"
+                    onClick={handleLogoClick}
+                  >
+                    <FlaskConical size={40} />
+                  </motion.div>
+                  <div className="absolute -inset-4 bg-brand-accent/10 rounded-[3rem] blur-2xl -z-10 animate-pulse" />
+                </div>
 
-                <div className="space-y-8">
-                  {/* Arena Speed Challenge */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
-                        <Zap size={18} />
-                      </div>
-                      <h2 className="text-[12px] font-black uppercase tracking-[0.15em] text-brand-muted">Competition</h2>
+                <div className="text-center space-y-1">
+                  <h1 className="text-3xl font-black text-brand-text tracking-tighter">Ready to Learn?</h1>
+                  <p className="text-brand-muted font-bold text-[11px] px-8">Select your grade level to start exploring interactive notes.</p>
+                </div>
+
+                <div className="w-full">
+                    <div className="grid grid-cols-4 gap-2">
+                      {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((grade) => (
+                        <button
+                          key={grade}
+                          onClick={(e) => {
+                            rippleEffect(e);
+                            handleClassSelect(grade);
+                          }}
+                          className="aspect-square bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-0.5 hover:border-brand-accent transition-all active:scale-95 shadow-sm"
+                        >
+                          <span className="text-lg font-black">{grade.split(' ')[1]}</span>
+                          <span className="text-[7px] font-black uppercase tracking-widest text-brand-muted">Grade</span>
+                        </button>
+                      ))}
                     </div>
+                    
                     <button
                       onClick={(e) => {
                         rippleEffect(e);
-                        onArenaClick();
+                        handleClassSelect('KCSE');
                       }}
-                      className="w-full bg-brand-surface border border-brand-border/40 rounded-[2rem] p-6 flex items-center justify-between hover:border-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 group shadow-sm"
+                      className="w-full mt-4 bg-brand-accent/5 border border-brand-accent/20 text-brand-accent rounded-2xl py-3 flex items-center justify-center gap-2 font-black uppercase tracking-widest text-[9px]"
                     >
-                      <div className="flex items-center gap-6">
-                        <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent group-hover:scale-110 transition-transform">
-                          <Zap size={32} />
-                        </div>
-                        <div className="text-left">
-                          <h3 className="text-xl font-black text-[#FF6B2C] tracking-tight uppercase">Speed Arena</h3>
-                          <p className="text-[11px] font-black uppercase tracking-widest text-brand-muted/60">60s Speed Round</p>
-                        </div>
-                      </div>
-                      <div className="w-10 h-10 bg-brand-bg rounded-full flex items-center justify-center text-brand-muted group-hover:text-[#FF6B2C] group-hover:translate-x-1 transition-all">
-                        <ChevronRight size={24} />
-                      </div>
+                      <ShieldCheck size={14} /> National Exams
                     </button>
-                  </div>
-
-                  <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
-                          <GraduationCap size={18} />
-                        </div>
-                        <h2 className="text-[12px] font-black uppercase tracking-[0.15em] text-brand-muted">Primary & Junior School</h2>
-                      </div>
-                      <div className="grid grid-cols-3 gap-3">
-                        {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((grade, i) => (
-                          <button
-                            key={grade}
-                            onClick={(e) => {
-                              rippleEffect(e);
-                              handleClassSelect(grade);
-                            }}
-                            className="aspect-square bg-brand-surface border border-brand-border/40 rounded-3xl flex flex-col items-center justify-center gap-1 hover:border-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 group shadow-sm hover:shadow-lg hover:shadow-brand-accent/5"
-                          >
-                            <span className="text-2xl font-black text-brand-text group-hover:text-[#FF6B2C] transition-colors">{i + 1}</span>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted/60 opacity-80 group-hover:opacity-100 transition-opacity">Grade</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
-                          <FileText size={18} />
-                        </div>
-                        <h2 className="text-[12px] font-black uppercase tracking-[0.15em] text-brand-muted">National Assessments</h2>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          rippleEffect(e);
-                          handleClassSelect('KCSE');
-                        }}
-                        className="w-full bg-brand-surface border border-brand-border/40 rounded-[2rem] p-6 flex items-center justify-between hover:border-brand-accent hover:bg-brand-accent/5 transition-all active:scale-95 group shadow-sm"
-                      >
-                        <div className="flex items-center gap-6">
-                          <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent group-hover:scale-110 transition-transform">
-                            <CheckCircle2 size={32} />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="text-xl font-black text-[#FF6B2C] tracking-tight">KCSE REVISION</h3>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-brand-muted/60">Secondary Level</p>
-                          </div>
-                        </div>
-                        <div className="w-10 h-10 bg-brand-bg rounded-full flex items-center justify-center text-brand-muted group-hover:text-[#FF6B2C] group-hover:translate-x-1 transition-all">
-                          <ChevronRight size={24} />
-                        </div>
-                      </button>
-                    </div>
-                  </div>
+                </div>
               </motion.div>
             ) : (
               <motion.div 
@@ -731,40 +757,39 @@ export default function Home({
         </motion.div>
       )}
 
-      {/* BOTTOM SHEET NAV */}
-      <div className="fixed bottom-0 left-0 right-0 z-[200] bg-brand-surface border-t border-brand-border/50 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] pb-safe rounded-t-[2.5rem]">
-        <div className="flex justify-around items-center px-6 py-4">
-          {[
-            { id: 'home', label: 'Home', icon: HomeIcon, action: () => setActiveTab('home') },
-            { id: 'assignments', label: 'Class', icon: FileText, action: () => { setActiveTab('home'); onAssignmentsClick(); } },
-            { id: 'arena', label: 'Arena', icon: Zap, action: () => { setActiveTab('home'); onArenaClick(); } },
-            { id: 'exams', label: 'Exams', icon: Clock, action: () => { setActiveTab('home'); onExamsClick(); } },
-            { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={(e) => {
-                rippleEffect(e);
-                tab.action();
-              }}
-              className={`flex flex-col items-center gap-2 transition-all group ${
-                activeTab === tab.id ? 'text-[#FF6B2C]' : 'text-brand-muted/60 hover:text-brand-text'
-              }`}
-            >
-              <div className={`w-14 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                activeTab === tab.id ? 'bg-brand-accent/10 shadow-sm' : 'bg-transparent'
-              }`}>
-                <tab.icon size={26} className="transition-transform group-active:scale-90" />
-              </div>
-              <span className={`text-[11px] font-black uppercase tracking-widest transition-opacity ${
-                activeTab === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}>
-                {tab.label}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* BOTTOM SHEET NAV - Simplified or Removed based on user request */}
+      <AnimatePresence>
+        {!selectedExperiment && (
+          <motion.div 
+            initial={{ y: 100 }}
+            animate={{ y: 0 }}
+            exit={{ y: 100 }}
+            className="fixed bottom-6 left-6 right-6 z-[200] bg-brand-surface/80 backdrop-blur-xl border border-brand-border/50 shadow-2xl rounded-[2rem]"
+          >
+            <div className="flex justify-around items-center p-3">
+              {[
+                { id: 'home', label: 'Home', icon: HomeIcon, action: () => { setActiveTab('home'); setSelectedClass(null); } },
+                { id: 'menu', label: 'Menu', icon: MoreHorizontal, action: () => setIsSidebarOpen(true) },
+                { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={(e) => {
+                    rippleEffect(e);
+                    tab.action();
+                  }}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all ${
+                    activeTab === tab.id ? 'bg-brand-accent text-white shadow-xl shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-text'
+                  }`}
+                >
+                  <tab.icon size={16} />
+                  {activeTab === tab.id && <span className="text-[9px] font-black uppercase tracking-widest">{tab.label}</span>}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* LOADING OVERLAY FOR OPENING MATERIAL */}
       <AnimatePresence>

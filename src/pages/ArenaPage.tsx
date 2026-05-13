@@ -5,6 +5,7 @@ import SpeedRoundPage from './SpeedRoundPage';
 import ArenaLobby from '../components/ArenaLobby';
 import LiveGame from '../components/LiveGame';
 import LiveResults from '../components/LiveResults';
+import { StudentCompetitionLobby } from '../components/StudentCompetitionLobby';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ interface RoomPlayer {
   is_finished: boolean;
 }
 
-type ArenaView = 'hub' | 'speed' | 'lobby' | 'live' | 'results';
+type ArenaView = 'hub' | 'speed' | 'lobby' | 'live' | 'results' | 'competitions';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -133,6 +134,29 @@ export default function ArenaPage({ onBack }: ArenaPageProps) {
             </div>
           </motion.button>
 
+          {/* Class Battles */}
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setView('competitions')}
+            className="w-full bg-brand-surface border border-amber-500/30 rounded-[2rem] p-6 text-left space-y-3 hover:border-amber-500 transition-all group shadow-lg shadow-amber-500/5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center group-hover:bg-amber-500/20 transition-colors">
+                <Swords size={28} className="text-amber-500" />
+              </div>
+              <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest px-2 py-1 bg-amber-500/10 rounded-full">School</span>
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-brand-text tracking-tighter">Class Battles</h2>
+              <p className="text-xs font-bold text-brand-muted mt-0.5">Teacher-led battles · limited time · special trophies</p>
+            </div>
+            <div className="flex gap-2">
+              {['MCQ', 'Text', 'Prizes'].map(tag => (
+                <span key={tag} className="text-[9px] font-black text-brand-muted px-2 py-1 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
+              ))}
+            </div>
+          </motion.button>
+
           {/* Points guide */}
           <div className="bg-brand-bg border border-brand-border rounded-[2rem] p-5 space-y-2">
             <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">How Points Work</p>
@@ -200,6 +224,19 @@ export default function ArenaPage({ onBack }: ArenaPageProps) {
           username={username}
           onPlayAgain={() => { setActiveRoom(null); setRoomPlayers([]); setView('lobby'); }}
           onHome={() => { setActiveRoom(null); setRoomPlayers([]); setView('hub'); }}
+        />
+      </motion.div>
+    );
+  }
+
+  // ── Class Competitions ──
+  if (view === 'competitions') {
+    return (
+      <motion.div key="competitions" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+        <StudentCompetitionLobby
+          username={username}
+          grade={player?.grade ? `Grade ${player.grade}` : 'Grade 7'}
+          onBack={() => setView('hub')}
         />
       </motion.div>
     );

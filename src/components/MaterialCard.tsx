@@ -2,10 +2,11 @@ import React from 'react';
 import { PlayCircle, Mic2, FileText, ExternalLink, Download, ChevronRight } from 'lucide-react';
 import { Experiment } from '../types';
 
-export function MaterialCard({ exp, onClick }: { exp: Experiment, onClick: (e: React.MouseEvent) => void }) {
+export const MaterialCard: React.FC<{ exp: Experiment; onClick: (e: any) => void }> = ({ exp, onClick }) => {
   return (
     <div 
-      onClick={onClick}
+      id={`material-card-${exp.id}`}
+      onClick={(e) => onClick(e)}
       className={`bg-brand-surface rounded-2xl p-4 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden border group cursor-pointer border-brand-border/40`}
     >
       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${

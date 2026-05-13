@@ -19,12 +19,14 @@ import {
   FileJson,
   CheckCircle2,
   AlertCircle,
-  Zap
+  Zap,
+  Users
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { ArenaQuestionCreator } from '../components/ArenaQuestionCreator';
 import { QuestionManager } from '../components/QuestionManager';
+import { MaterialManager } from '../components/MaterialManager';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -33,9 +35,12 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'shared' | 'system' | 'finance' | 'users' | 'arena'>('shared');
+  const [activeTab, setActiveTab] = useState<'shared' | 'system' | 'finance' | 'users' | 'arena' | 'requests'>('shared');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
+  
+  // Requests State
+  const [teacherRequests, setTeacherRequests] = useState<any[]>([]);
   
   // Finance State
   const [payments, setPayments] = useState<any[]>([]);
@@ -75,7 +80,21 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
     else if (activeTab === 'finance') fetchPayments();
     else if (activeTab === 'system') fetchExperiments();
     else if (activeTab === 'users') fetchProfiles();
+    else if (activeTab === 'requests') fetchRequests();
   }, [activeTab, subTab]);
+
+  const fetchRequests = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('question_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setTeacherRequests(data || []);
+    } catch (err: any) { showToast(err.message, 'error'); }
+    finally { setLoading(false); }
+  };
 
   const fetchSharedWorks = async () => {
     setLoading(true);
@@ -305,10 +324,11 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
           <div className="flex gap-2">
             {[
               { id: 'shared', icon: Layout, label: 'Shared' },
-              { id: 'system', icon: Database, label: 'System' },
+              { id: 'system', icon: Database, label: 'Materials' },
               { id: 'arena', icon: Zap, label: 'Arena' },
+              { id: 'requests', icon: MessageCircle, label: 'Requests' },
               { id: 'finance', icon: Code, label: 'Finance' },
-              { id: 'users', icon: MessageCircle, label: 'Users' }
+              { id: 'users', icon: Users, label: 'Users' }
             ].map(tab => (
               <button 
                 key={tab.id}
@@ -526,47 +546,72 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
         )}
 
         {!loading && activeTab === 'system' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between px-2">
-              <div>
-                <h3 className="text-xl font-black uppercase tracking-tight">System Library</h3>
-                <p className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mt-1">Core study materials and experiments</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={fetchExperiments} className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-accent transition-colors">
-                  <RefreshCw size={16} />
-                </button>
-                <button 
-                  onClick={() => {
-                    setActiveTab('shared');
-                    setSubTab('assessments');
-                    setIsCreating(true);
-                    setCreationMode('json');
-                  }} 
-                  className="bg-brand-accent text-white px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center gap-2"
-                >
-                  <Plus size={14} /> Add Material
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-3">
-              {experiments.map(exp => (
-                <div key={exp.id} className="bg-brand-surface border border-brand-border p-5 rounded-3xl flex items-center justify-between">
-                  <div>
-                    <p className="text-[9px] font-black text-brand-accent uppercase tracking-widest mb-1">{exp.subject} • {exp.grade}</p>
-                    <h4 className="font-black text-lg tracking-tight leading-tight">{exp.title}</h4>
-                  </div>
-                  <button onClick={() => deleteExperiment(exp.id)} className="p-2 text-red-500/20 hover:text-red-500 transition-colors"><Trash2 size={18} /></button>
-                </div>
-              ))}
-            </div>
-          </div>
+          <MaterialManager />
         )}
 
         {!loading && activeTab === 'arena' && (
           <div className="space-y-12">
             <ArenaQuestionCreator />
             <QuestionManager />
+          </div>
+        )}
+
+        {!loading && activeTab === 'requests' && (
+          <div className="space-y-6">
+             <div className="flex items-center justify-between px-2">
+                <h3 className="text-xl font-black tracking-tight uppercase">Teacher Requests</h3>
+                <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">{teacherRequests.length} Pending</p>
+             </div>
+             <div className="grid grid-cols-1 gap-4">
+                {teacherRequests.length === 0 ? (
+                  <div className="py-20 text-center border-2 border-dashed border-brand-border rounded-[2.5rem] bg-brand-surface">
+                    <p className="text-brand-muted font-bold uppercase tracking-widest text-xs">No pending requests</p>
+                  </div>
+                ) : (
+                  teacherRequests.map(req => (
+                    <div key={req.id} className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-[10px] font-black text-brand-accent uppercase tracking-widest mb-1">{req.subject} • {req.grade}</p>
+                          <h4 className="text-lg font-black tracking-tight uppercase">{req.topic}</h4>
+                        </div>
+                        <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${req.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                          {req.status}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-brand-muted italic">"{req.description}"</p>
+                      <div className="flex items-center justify-between pt-4 border-t border-brand-border">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-brand-accent/5 flex items-center justify-center text-brand-accent font-black text-[10px]">
+                            {req.teacher_name[0]}
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest leading-none">{req.teacher_name}</p>
+                            <p className="text-[8px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">{req.school_name || 'No School'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => {
+                              setActiveTab('shared');
+                              setCreationMode('json');
+                              setIsCreating(true);
+                              setTargetTeacher(req.teacher_name);
+                              setTargetSchool(req.school_name);
+                              setExamSubject(req.subject);
+                              setExamGrade(req.grade);
+                              setExamTitle(`${req.topic} - For ${req.teacher_name}`);
+                            }}
+                            className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+                          >
+                            Create for Teacher
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+             </div>
           </div>
         )}
 
