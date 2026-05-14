@@ -438,8 +438,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <UserPersona initial={teacher?.name?.charAt(0) || 'T'} />
               </div>
               <div className="hidden sm:block">
-                <h1 className="text-lg font-black tracking-tight leading-none uppercase">HEY {teacher?.name?.split(' ')[0]}</h1>
-                <div className="flex items-center gap-2 text-brand-muted text-[8px] font-bold uppercase tracking-[0.1em] mt-0.5">
+                <h1 className="text-lg font-bold tracking-tight leading-none uppercase">HEY {teacher?.name?.split(' ')[0]}</h1>
+                <div className="flex items-center gap-2 text-brand-muted text-[8px] font-semibold uppercase tracking-wider mt-0.5">
                   <School size={8} />
                   {teacher?.school_name}
                 </div>
@@ -463,21 +463,21 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
            <div className="flex items-center gap-4">
               <button 
                 onClick={() => setActiveView('classes')}
-                className={`text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-colors ${activeView === 'classes' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
+                className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors ${activeView === 'classes' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
               >
                 <BookOpen size={14} />
                 My Classes
               </button>
               <button 
                 onClick={() => setActiveView('exams')}
-                className={`text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-colors ${activeView === 'exams' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
+                className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors ${activeView === 'exams' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
               >
                 <Clock size={14} />
                 Timed Assessments
               </button>
               <button 
                 onClick={() => setActiveView('competitions')}
-                className={`text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-colors ${activeView === 'competitions' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
+                className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors ${activeView === 'competitions' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
               >
                 <Trophy size={14} />
                 Arena
@@ -560,7 +560,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
         {recentActivity.length > 0 && (
           <div className="bg-brand-surface border border-brand-accent/20 p-6 rounded-[2rem] shadow-lg shadow-brand-accent/5">
-             <h3 className="text-[10px] font-black text-brand-accent uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+             <h3 className="text-[10px] font-bold text-brand-accent uppercase tracking-wider mb-4 flex items-center gap-2">
                <Clock size={12} />
                Live Activity Feed
              </h3>
@@ -577,10 +577,10 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                    </div>
                    <div className="flex-1">
                       <p className="text-xs font-bold text-brand-text">
-                        <span className="text-brand-accent">{act.student_name || 'A student'}</span> 
+                        <span className="font-bold text-brand-accent">{act.student_name || 'A student'}</span> 
                         {act.student_name ? ' submitted an assignment' : ' started an assessment attempt'}
                       </p>
-                      <p className="text-[8px] font-black text-brand-muted uppercase tracking-widest">
+                      <p className="text-[8px] font-bold text-brand-muted uppercase tracking-wider">
                         {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                    </div>
@@ -600,11 +600,11 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               >
                 <form onSubmit={handleAddClass} className="space-y-4">
                   <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-black tracking-tight">Create New Class</h3>
+                    <h3 className="font-bold tracking-tight">Create New Class</h3>
                     <button 
                       type="button" 
                       onClick={() => setIsAddingClass(false)}
-                      className="text-brand-muted hover:text-brand-accent"
+                      className="text-brand-muted hover:text-brand-accent font-medium text-sm"
                     >
                       Cancel
                     </button>
@@ -685,12 +685,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           <Users size={24} />
                         </div>
                         <div className="bg-brand-bg border border-brand-border px-3 py-1.5 rounded-xl">
-                          <span className="text-[10px] font-black tracking-widest text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
+                          <span className="text-[10px] font-bold tracking-wider text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
                         </div>
                       </div>
-                      <h3 className="text-2xl font-black tracking-tight mb-6">{cls.name}</h3>
+                      <h3 className="text-2xl font-bold tracking-tight mb-6">{cls.name}</h3>
                       <div className="flex items-center justify-between text-brand-muted">
-                        <div className="flex items-center gap-2 text-[10px] font-black tracking-widest uppercase">
+                        <div className="flex items-center gap-2 text-[10px] font-bold tracking-wider uppercase">
                           View Class
                         </div>
                         <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center group-hover:bg-brand-accent group-hover:text-white transition-colors">

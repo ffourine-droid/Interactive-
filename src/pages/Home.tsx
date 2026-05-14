@@ -344,8 +344,8 @@ export default function Home({
                     <FlaskConical size={20} />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black tracking-tighter">AziLearn</h2>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-accent/60">Student Portal</p>
+                    <h2 className="text-lg font-bold tracking-tight">AziLearn</h2>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-accent/60">Student Portal</p>
                   </div>
                 </div>
                 <button 
@@ -404,8 +404,8 @@ export default function Home({
           
           <div className="flex items-center gap-3">
              <div className="text-right">
-                <p className="text-[9px] font-black uppercase tracking-widest text-brand-muted">Learning Hub</p>
-                <p className="text-xs font-black text-brand-text">{selectedClass || 'Select Grade'}</p>
+                <p className="text-[9px] font-bold uppercase tracking-wider text-brand-muted">Learning Hub</p>
+                <p className="text-sm font-bold text-brand-text">{selectedClass || 'Select Grade'}</p>
              </div>
              <div className="w-10 h-10 rounded-xl bg-brand-accent/10 flex items-center justify-center text-brand-accent">
                 <GraduationCap size={20} />
@@ -461,12 +461,10 @@ export default function Home({
                   <div className="absolute -inset-4 bg-brand-accent/10 rounded-[3rem] blur-2xl -z-10 animate-pulse" />
                 </div>
 
-                <div className="text-center space-y-1">
-                  <h1 className="text-3xl font-black text-brand-text tracking-tighter">Ready to Learn?</h1>
-                  <p className="text-brand-muted font-bold text-[11px] px-8">Select your grade level to start exploring interactive notes.</p>
-                </div>
-
-                <div className="w-full">
+                 <div className="w-full space-y-4">
+                    <div className="flex items-center justify-between px-1">
+                      <h2 className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">Select Grade</h2>
+                    </div>
                     <div className="grid grid-cols-4 gap-2">
                       {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((grade) => (
                         <button
@@ -475,10 +473,10 @@ export default function Home({
                             rippleEffect(e);
                             handleClassSelect(grade);
                           }}
-                          className="aspect-square bg-brand-surface border border-brand-border rounded-2xl flex flex-col items-center justify-center gap-0.5 hover:border-brand-accent transition-all active:scale-95 shadow-sm"
+                          className="aspect-square bg-brand-surface border border-brand-border rounded-xl flex flex-col items-center justify-center gap-0.5 hover:border-brand-accent transition-all active:scale-95 shadow-sm"
                         >
-                          <span className="text-lg font-black">{grade.split(' ')[1]}</span>
-                          <span className="text-[7px] font-black uppercase tracking-widest text-brand-muted">Grade</span>
+                          <span className="text-lg font-bold">{grade.split(' ')[1]}</span>
+                          <span className="text-[8px] font-semibold uppercase tracking-wider text-brand-muted">Grade</span>
                         </button>
                       ))}
                     </div>
@@ -488,10 +486,15 @@ export default function Home({
                         rippleEffect(e);
                         handleClassSelect('KCSE');
                       }}
-                      className="w-full mt-4 bg-brand-accent/5 border border-brand-accent/20 text-brand-accent rounded-2xl py-3 flex items-center justify-center gap-2 font-black uppercase tracking-widest text-[9px]"
+                      className="w-full bg-brand-accent/5 border border-brand-accent/20 text-brand-accent rounded-2xl py-3 flex items-center justify-center gap-2 font-bold uppercase tracking-wider text-[9px]"
                     >
                       <ShieldCheck size={14} /> National Exams
                     </button>
+                </div>
+
+                <div className="text-center space-y-1">
+                  <h1 className="text-2xl font-bold text-brand-text tracking-tight">Ready to Learn?</h1>
+                  <p className="text-brand-muted font-medium text-[12px] px-8">Select your grade level to start exploring interactive notes.</p>
                 </div>
               </motion.div>
             ) : (
@@ -584,19 +587,19 @@ export default function Home({
                     </button>
                   </div>
                 ) : results.length === 0 ? (
-                  <div className="text-center py-20 bg-brand-surface/50 rounded-[3rem] border-2 border-dashed border-brand-border">
-                    <div className="w-20 h-20 bg-brand-accent/10 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+                  <div className="text-center py-20 bg-brand-surface border border-brand-border rounded-[2rem]">
+                    <div className="w-20 h-20 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
                       <Search className="text-brand-accent" size={40} />
                     </div>
-                    <h3 className="text-xl font-black mb-2">No materials found</h3>
+                    <h3 className="text-xl font-bold mb-2">No materials found</h3>
                     <p className="text-brand-muted text-sm font-medium px-10">We couldn't find any materials for this search. Try a different keyword!</p>
                   </div>
                 ) : (
                   <div className="space-y-8">
                     <div className="space-y-4">
                       <div className="flex items-center justify-between px-2">
-                        <h3 className="text-xs font-black uppercase tracking-widest text-brand-muted">Study Materials</h3>
-                        <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-brand-muted">Study Materials</h3>
+                        <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full">
                           {results.length} Items
                         </span>
                       </div>

@@ -24,13 +24,13 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
             <GraduationCap size={32} />
           </div>
           <div className="text-left">
-            <h1 className="text-3xl font-black text-brand-text tracking-tighter leading-none italic">AziLearn</h1>
-            <p className="text-[10px] text-brand-muted font-black uppercase tracking-widest mt-1">Study Materials Platform</p>
+            <h1 className="text-3xl font-bold text-brand-text tracking-tight leading-none">AziLearn</h1>
+            <p className="text-[10px] text-brand-muted font-semibold uppercase tracking-widest mt-1">Study Materials Platform</p>
           </div>
         </div>
 
         <div className="space-y-4">
-          <h2 className="text-4xl sm:text-6xl font-black text-brand-text tracking-tight leading-[1.1]">
+          <h2 className="text-4xl sm:text-6xl font-bold text-brand-text tracking-tight leading-[1.1]">
             Welcome to <br />
             <span className="text-[#FF6B2C]">AziLearn.</span>
           </h2>
@@ -46,15 +46,15 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
             whileHover={{ y: -8, scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => onNavigate('teacher')}
-            className="group relative bg-brand-surface p-8 rounded-[2.5rem] border border-brand-border shadow-xl shadow-brand-text/5 hover:border-emerald-500/30 transition-all flex flex-col items-center text-center space-y-4"
+            className="group relative bg-brand-surface p-8 rounded-3xl border border-brand-border shadow-xl shadow-brand-text/5 hover:border-emerald-500/30 transition-all flex flex-col items-center text-center space-y-4"
           >
             <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
               <GraduationCap size={32} />
             </div>
-            <h3 className="text-xl font-black text-brand-text">Teacher</h3>
+            <h3 className="text-xl font-bold text-brand-text">Teacher</h3>
             <p className="text-sm text-brand-muted font-medium">Manage classes, grade work, and track metrics.</p>
             <div className="pt-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 px-3 py-1 bg-emerald-500/5 rounded-full">Enter Portal</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 px-3 py-1 bg-emerald-500/5 rounded-full">Enter Portal</span>
             </div>
           </motion.button>
 
@@ -63,15 +63,15 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
             whileHover={{ y: -8, scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => onNavigate('student')}
-            className="group relative bg-brand-surface p-8 rounded-[2.5rem] border border-brand-border shadow-xl shadow-brand-text/5 hover:border-brand-accent/30 transition-all flex flex-col items-center text-center space-y-4"
+            className="group relative bg-brand-surface p-8 rounded-3xl border border-brand-border shadow-xl shadow-brand-text/5 hover:border-brand-accent/30 transition-all flex flex-col items-center text-center space-y-4"
           >
             <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent group-hover:bg-brand-accent group-hover:text-white transition-colors">
               <BookOpen size={32} />
             </div>
-            <h3 className="text-xl font-black text-brand-text">Student</h3>
+            <h3 className="text-xl font-bold text-brand-text">Student</h3>
             <p className="text-sm text-brand-muted font-medium">Access materials, take quizzes, and view progress.</p>
             <div className="pt-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent px-3 py-1 bg-brand-accent/5 rounded-full">Start Learning</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-accent px-3 py-1 bg-brand-accent/5 rounded-full">Start Learning</span>
             </div>
           </motion.button>
 
@@ -80,15 +80,15 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
             whileHover={{ y: -8, scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => onNavigate('parent')}
-            className="group relative bg-brand-surface p-8 rounded-[2.5rem] border border-brand-border shadow-xl shadow-brand-text/5 hover:border-[#FF6B2C]/30 transition-all flex flex-col items-center text-center space-y-4"
+            className="group relative bg-brand-surface p-8 rounded-3xl border border-brand-border shadow-xl shadow-brand-text/5 hover:border-[#FF6B2C]/30 transition-all flex flex-col items-center text-center space-y-4"
           >
             <div className="w-16 h-16 bg-[#FF6B2C]/10 rounded-2xl flex items-center justify-center text-[#FF6B2C] group-hover:bg-[#FF6B2C] group-hover:text-white transition-colors">
               <BarChart3 size={32} />
             </div>
-            <h3 className="text-xl font-black text-brand-text">Parent</h3>
+            <h3 className="text-xl font-bold text-brand-text">Parent</h3>
             <p className="text-sm text-brand-muted font-medium">Monitor grades, view remarks, and acknowledge tasks.</p>
             <div className="pt-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-[#FF6B2C] px-3 py-1 bg-[#FF6B2C]/5 rounded-full">Check Progress</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#FF6B2C] px-3 py-1 bg-[#FF6B2C]/5 rounded-full">Check Progress</span>
             </div>
           </motion.button>
         </div>

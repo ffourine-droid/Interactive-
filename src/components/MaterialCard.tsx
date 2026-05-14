@@ -25,9 +25,9 @@ export const MaterialCard: React.FC<{ exp: Experiment; onClick: (e: any) => void
       <div className={`flex-1 min-w-0`}>
         <div className="font-sans text-[15px] font-bold text-brand-text truncate">{exp.title}</div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">{exp.subject || 'Study Material'}</span>
+          <span className="text-[10px] text-brand-muted font-semibold uppercase tracking-wider">{exp.subject || 'Study Material'}</span>
           {(exp.pdf_url || exp.ppt_url) && (
-            <span className="flex items-center gap-1 text-[9px] font-black bg-brand-accent/10 text-brand-accent px-1.5 py-0.5 rounded-md uppercase">
+            <span className="flex items-center gap-1 text-[9px] font-bold bg-brand-accent/5 text-brand-accent px-1.5 py-0.5 rounded-md uppercase">
               <Download size={10} />
               Viewable
             </span>

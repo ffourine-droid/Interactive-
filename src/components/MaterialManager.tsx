@@ -13,11 +13,13 @@ import {
   PlayCircle,
   Eye,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  FileUp
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
 import { Experiment } from '../types';
+import { FileUploadZone } from './FileUploadZone';
 
 export const MaterialManager: React.FC = () => {
   const { showToast } = useToast();
@@ -135,8 +137,8 @@ export const MaterialManager: React.FC = () => {
         <>
           <div className="flex items-center justify-between px-2">
             <div>
-              <h3 className="text-xl font-black uppercase tracking-tight">HTML Master Library</h3>
-              <p className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mt-1">Manage interactive materials and slides</p>
+              <h3 className="text-xl font-bold text-brand-text">Material Library</h3>
+              <p className="text-sm font-medium text-brand-muted mt-1">Manage interactive materials and lessons</p>
             </div>
             <button 
               onClick={() => {
@@ -150,9 +152,9 @@ export const MaterialManager: React.FC = () => {
                 });
                 setShowEditor(true);
               }}
-              className="bg-brand-accent text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl flex items-center gap-2"
+              className="bg-brand-accent text-white px-5 py-2.5 rounded-xl font-semibold text-sm shadow-lg shadow-brand-accent/20 flex items-center gap-2 hover:scale-[1.02] transition-transform"
             >
-              <Plus size={16} /> New Material
+              <Plus size={18} /> New Material
             </button>
           </div>
 
@@ -207,156 +209,151 @@ export const MaterialManager: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Title</label>
-                        <input 
-                            value={editingMaterial?.title || ''} 
-                            onChange={e => setEditingMaterial({...editingMaterial, title: e.target.value})}
-                            placeholder="Material Title" 
-                            className="w-full bg-brand-bg border border-brand-border p-4 rounded-xl font-bold text-sm" 
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Subject</label>
-                        <input 
-                            value={editingMaterial?.subject || ''} 
-                            onChange={e => setEditingMaterial({...editingMaterial, subject: e.target.value})}
-                            placeholder="e.g. Science" 
-                            className="w-full bg-brand-bg border border-brand-border p-4 rounded-xl font-bold text-sm" 
-                        />
-                    </div>
-                </div>
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <label className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider px-1">Title</label>
+                                <input 
+                                    value={editingMaterial?.title || ''} 
+                                    onChange={e => setEditingMaterial({...editingMaterial, title: e.target.value})}
+                                    placeholder="Enter title..." 
+                                    className="w-full bg-brand-bg border border-brand-border p-3.5 rounded-xl font-medium text-sm focus:ring-2 focus:ring-brand-accent/20 outline-none transition-all" 
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider px-1">Subject</label>
+                                <input 
+                                    value={editingMaterial?.subject || ''} 
+                                    onChange={e => setEditingMaterial({...editingMaterial, subject: e.target.value})}
+                                    placeholder="e.g. Science" 
+                                    className="w-full bg-brand-bg border border-brand-border p-3.5 rounded-xl font-medium text-sm focus:ring-2 focus:ring-brand-accent/20 outline-none transition-all" 
+                                />
+                            </div>
+                        </div>
 
-                <div className="flex gap-4">
-                    <div className="flex-1 space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Grade</label>
-                        <select 
-                            value={editingMaterial?.grade || ''} 
-                            onChange={e => setEditingMaterial({...editingMaterial, grade: e.target.value})}
-                            className="w-full bg-brand-bg border border-brand-border p-4 rounded-xl font-bold text-sm"
-                        >
-                            {[...Array(12)].map((_, i) => (
-                                <option key={i} value={`Grade ${i+1}`}>Grade {i+1}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="flex items-center gap-2 mt-6">
-                        <input 
-                            type="checkbox"
-                            id="is_free"
-                            checked={editingMaterial?.is_free || false}
-                            onChange={e => setEditingMaterial({...editingMaterial, is_free: e.target.checked})}
-                            className="w-5 h-5 accent-brand-accent"
-                        />
-                        <label htmlFor="is_free" className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Free Material</label>
-                    </div>
-                </div>
+                        <div className="flex gap-4">
+                            <div className="flex-1 space-y-1.5">
+                                <label className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider px-1">Grade Level</label>
+                                <select 
+                                    value={editingMaterial?.grade || ''} 
+                                    onChange={e => setEditingMaterial({...editingMaterial, grade: e.target.value})}
+                                    className="w-full bg-brand-bg border border-brand-border p-3.5 rounded-xl font-medium text-sm appearance-none outline-none focus:ring-2 focus:ring-brand-accent/20"
+                                >
+                                    {[...Array(12)].map((_, i) => (
+                                        <option key={i} value={`Grade ${i+1}`}>Grade {i+1}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2.5 mt-7">
+                                <div 
+                                    onClick={() => setEditingMaterial({...editingMaterial, is_free: !editingMaterial?.is_free})}
+                                    className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${editingMaterial?.is_free ? 'bg-brand-accent' : 'bg-brand-border'}`}
+                                >
+                                    <div className={`w-4 h-4 bg-white rounded-full transition-transform ${editingMaterial?.is_free ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </div>
+                                <span className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider">Free Material</span>
+                            </div>
+                        </div>
 
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted">HTML Content</label>
-                        <div className="flex bg-brand-bg rounded-lg p-1">
-                            <button 
-                                onClick={() => setPreviewMode('edit')}
-                                className={`px-3 py-1 text-[8px] font-black uppercase rounded ${previewMode === 'edit' ? 'bg-brand-accent text-white' : 'text-brand-muted'}`}
-                            >
-                                Edit
-                            </button>
-                            <button 
-                                onClick={() => setPreviewMode('preview')}
-                                className={`px-3 py-1 text-[8px] font-black uppercase rounded ${previewMode === 'preview' ? 'bg-brand-accent text-white' : 'text-brand-muted'}`}
-                            >
-                                Preview
-                            </button>
+                        <div className="space-y-3 pt-2">
+                            <div className="flex items-center justify-between">
+                                <label className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider px-1">Content Block (HTML)</label>
+                                <div className="flex bg-brand-bg rounded-lg p-1 border border-brand-border">
+                                    <button 
+                                        onClick={() => setPreviewMode('edit')}
+                                        className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${previewMode === 'edit' ? 'bg-white shadow-sm text-brand-accent' : 'text-brand-muted'}`}
+                                    >
+                                        Editor
+                                    </button>
+                                    <button 
+                                        onClick={() => setPreviewMode('preview')}
+                                        className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${previewMode === 'preview' ? 'bg-white shadow-sm text-brand-accent' : 'text-brand-muted'}`}
+                                    >
+                                        Preview
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {previewMode === 'edit' ? (
+                                <textarea 
+                                    value={editingMaterial?.html_content || ''}
+                                    onChange={e => setEditingMaterial({...editingMaterial, html_content: e.target.value})}
+                                    className="w-full bg-brand-bg border border-brand-border rounded-xl p-4 font-mono text-sm h-64 outline-none focus:ring-2 focus:ring-brand-accent/20 transition-all resize-none"
+                                    placeholder="Enter HTML content..."
+                                />
+                            ) : (
+                                <div 
+                                    className="w-full bg-brand-bg border border-brand-border rounded-xl p-6 h-64 overflow-y-auto prose prose-sm max-w-none"
+                                    dangerouslySetInnerHTML={{ __html: editingMaterial?.html_content || '' }}
+                                />
+                            )}
                         </div>
                     </div>
-                    
-                    {previewMode === 'edit' ? (
-                        <textarea 
-                            value={editingMaterial?.html_content || ''}
-                            onChange={e => setEditingMaterial({...editingMaterial, html_content: e.target.value})}
-                            className="w-full bg-brand-bg border border-brand-border rounded-2xl p-6 font-mono text-xs h-64 outline-none focus:border-brand-accent transition-colors"
-                            placeholder="<h1>HTML Content</h1>..."
-                        />
-                    ) : (
-                        <div 
-                            className="w-full bg-brand-bg border border-brand-border rounded-2xl p-6 h-64 overflow-y-auto prose prose-sm max-w-none prose-headings:font-black prose-headings:tracking-tight prose-p:font-bold prose-p:text-brand-muted"
-                            dangerouslySetInnerHTML={{ __html: editingMaterial?.html_content || '' }}
-                        />
-                    )}
-                </div>
-            </div>
 
-            <div className="space-y-8">
+            <div className="space-y-6">
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Interactive Slides</label>
-                        <button onClick={addNewSlide} className="text-brand-accent text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
-                            <Plus size={12} /> Add Slide
+                        <label className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider px-1">Interactive Slides</label>
+                        <button 
+                          id="add-slide-btn"
+                          onClick={addNewSlide}
+                          className="bg-brand-bg border border-brand-border p-2 rounded-lg text-brand-accent hover:bg-brand-accent/10 transition-colors"
+                          title="Add Slide"
+                        >
+                          <Plus size={16} />
                         </button>
                     </div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                        {editingMaterial?.slides?.map((url, i) => (
-                            <div key={i} className="flex gap-2">
-                                <div className="w-10 h-10 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center shrink-0">
-                                    <ImageIcon size={16} className="text-brand-muted/40" />
-                                </div>
-                                <input 
-                                    value={url}
-                                    onChange={e => updateSlide(i, e.target.value)}
-                                    placeholder="Image URL..."
-                                    className="flex-1 bg-brand-bg border border-brand-border px-4 rounded-xl text-xs font-bold"
-                                />
-                                <button onClick={() => removeSlide(i)} className="p-2 text-red-500/40 hover:text-red-500">
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
-                        ))}
+                    <div className="grid grid-cols-1 gap-4">
+                        <FileUploadZone 
+                          label="Main Lesson Slides (Images)"
+                          multiple={true}
+                          onUploadComplete={(urls) => {
+                            if (Array.isArray(urls)) {
+                                const slides = [...(editingMaterial?.slides || []), ...urls];
+                                setEditingMaterial({...editingMaterial, slides});
+                            }
+                          }}
+                          onClear={() => setEditingMaterial({...editingMaterial, slides: []})}
+                          currentUrl={editingMaterial?.slides && editingMaterial.slides.length > 0 ? "Multiple Files Selected" : undefined}
+                          accept="image/*"
+                        />
                     </div>
                 </div>
 
                 <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Media & Files</label>
+                    <label className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider px-1">Attached Files</label>
                     <div className="grid grid-cols-1 gap-4">
-                        <div className="flex items-center gap-3">
-                            <span className="w-20 text-[8px] font-black uppercase text-brand-muted/60">PDF URL</span>
-                            <input 
-                                value={editingMaterial?.pdf_url || ''} 
-                                onChange={e => setEditingMaterial({...editingMaterial, pdf_url: e.target.value})}
-                                placeholder="https://..." 
-                                className="flex-1 bg-brand-bg border border-brand-border p-3 rounded-xl font-bold text-xs" 
-                            />
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <span className="w-20 text-[8px] font-black uppercase text-brand-muted/60">PPT URL</span>
-                            <input 
-                                value={editingMaterial?.ppt_url || ''} 
-                                onChange={e => setEditingMaterial({...editingMaterial, ppt_url: e.target.value})}
-                                placeholder="https://..." 
-                                className="flex-1 bg-brand-bg border border-brand-border p-3 rounded-xl font-bold text-xs" 
-                            />
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <span className="w-20 text-[8px] font-black uppercase text-brand-muted/60">Audio URL</span>
-                            <input 
-                                value={editingMaterial?.audio_url || ''} 
-                                onChange={e => setEditingMaterial({...editingMaterial, audio_url: e.target.value})}
-                                placeholder="https://..." 
-                                className="flex-1 bg-brand-bg border border-brand-border p-3 rounded-xl font-bold text-xs" 
-                            />
-                        </div>
+                        <FileUploadZone 
+                          label="PDF Attachment"
+                          onUploadComplete={(url) => setEditingMaterial({...editingMaterial, pdf_url: url})}
+                          currentUrl={editingMaterial?.pdf_url}
+                          onClear={() => setEditingMaterial({...editingMaterial, pdf_url: ''})}
+                          accept=".pdf"
+                        />
+                        <FileUploadZone 
+                          label="PowerPoint (PPT)"
+                          onUploadComplete={(url) => setEditingMaterial({...editingMaterial, ppt_url: url})}
+                          currentUrl={editingMaterial?.ppt_url}
+                          onClear={() => setEditingMaterial({...editingMaterial, ppt_url: ''})}
+                          accept=".ppt,.pptx"
+                        />
+                        <FileUploadZone 
+                          label="Audio Lesson"
+                          onUploadComplete={(url) => setEditingMaterial({...editingMaterial, audio_url: url})}
+                          currentUrl={editingMaterial?.audio_url}
+                          onClear={() => setEditingMaterial({...editingMaterial, audio_url: ''})}
+                          accept="audio/*"
+                        />
                     </div>
                 </div>
 
                 <button 
                   onClick={handleSave}
                   disabled={loading}
-                  className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-50"
+                  className="w-full bg-brand-accent text-white py-4 rounded-xl font-bold text-sm shadow-xl shadow-brand-accent/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50"
                 >
                   {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                  {editingMaterial?.id ? 'Update Material' : 'Publish Material'}
+                  {editingMaterial?.id ? 'Update Changes' : 'Create Material'}
                 </button>
             </div>
           </div>
