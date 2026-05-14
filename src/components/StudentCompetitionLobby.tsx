@@ -57,7 +57,23 @@ export const StudentCompetitionLobby: React.FC<{
         .in('status', ['active', 'marking', 'finished'])
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Fallback for relationship errors
+        if (error.message?.includes('relationship') || error.code === 'PGRST200') {
+          const { data: basicData, error: basicErr } = await supabase
+            .from('teacher_competitions')
+            .select('*')
+            .eq('grade', grade)
+            .in('status', ['active', 'marking', 'finished'])
+            .order('created_at', { ascending: false });
+          
+          if (basicErr) throw basicErr;
+          setCompetitions(basicData.map(c => ({ ...c, teacher_name: 'Your Teacher' })));
+          return;
+        }
+        throw error;
+      }
+      
       setCompetitions(data.map(c => ({
         ...c,
         teacher_name: (c as any).teachers?.name
@@ -173,12 +189,12 @@ export const StudentCompetitionLobby: React.FC<{
         <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center shadow-xl shadow-emerald-500/20">
           <CheckCircle2 size={48} className="text-white" />
         </div>
-        <h2 className="text-3xl font-black tracking-tighter uppercase">Well Done!</h2>
+        <h2 className="text-3xl font-bold tracking-tighter uppercase">Well Done!</h2>
         <div className="space-y-2">
           <p className="text-brand-muted font-bold">Your responses have been sent to your teacher.</p>
           <p className="text-xs text-brand-muted">If some questions were short answer, your final score will be updated after marking.</p>
         </div>
-        <button onClick={onBack} className="w-full bg-brand-accent text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20">
+        <button onClick={onBack} className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold uppercase tracking-wider shadow-lg shadow-brand-accent/20">
           Back to Arena
         </button>
       </div>
@@ -192,7 +208,7 @@ export const StudentCompetitionLobby: React.FC<{
     return (
       <div className="min-h-screen bg-brand-bg flex flex-col p-6">
         <div className="mb-8 space-y-4">
-          <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-brand-muted">
+          <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-brand-muted">
             <span>Question {currentIdx + 1} of {questions.length}</span>
             <span>{Math.round(progress)}% Complete</span>
           </div>
@@ -206,7 +222,7 @@ export const StudentCompetitionLobby: React.FC<{
         </div>
 
         <div className="flex-1 space-y-8">
-          <h3 className="text-2xl font-black tracking-tight leading-tight">{q.question_text}</h3>
+          <h3 className="text-2xl font-bold tracking-tight leading-tight">{q.question_text}</h3>
 
           <div className="space-y-3">
             {q.type === 'mcq' && q.options ? (
@@ -216,7 +232,7 @@ export const StudentCompetitionLobby: React.FC<{
                   onClick={() => submitAnswer(String.fromCharCode(65 + i))}
                   className="w-full p-5 bg-brand-surface border-2 border-brand-border rounded-2xl text-left font-bold hover:border-brand-accent active:scale-95 transition-all flex items-center gap-4"
                 >
-                  <span className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted font-black text-xs uppercase">{String.fromCharCode(65 + i)}</span>
+                  <span className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted font-bold text-xs uppercase">{String.fromCharCode(65 + i)}</span>
                   {opt}
                 </button>
               ))
@@ -232,7 +248,7 @@ export const StudentCompetitionLobby: React.FC<{
                     const el = document.getElementById('short-answer-input') as HTMLTextAreaElement;
                     submitAnswer(el.value);
                   }}
-                  className="w-full py-5 bg-brand-accent text-white rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"
+                  className="w-full py-5 bg-brand-accent text-white rounded-2xl font-bold uppercase tracking-wider shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"
                 >
                   Confirm Answer <Send size={18} />
                 </button>
@@ -251,8 +267,8 @@ export const StudentCompetitionLobby: React.FC<{
           <ChevronRight className="rotate-180" size={20} />
         </button>
         <div>
-          <h2 className="text-xl font-black uppercase tracking-tight">Class Battles</h2>
-          <p className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mt-1">Join the fight started by teachers</p>
+          <h2 className="text-xl font-bold uppercase tracking-tight">Class Battles</h2>
+          <p className="text-[10px] font-semibold text-brand-muted uppercase tracking-wider mt-1">Join the fight started by teachers</p>
         </div>
       </div>
 
@@ -262,7 +278,7 @@ export const StudentCompetitionLobby: React.FC<{
         ) : competitions.length === 0 ? (
           <div className="py-20 text-center bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] space-y-4">
             <Sparkles size={48} className="mx-auto text-brand-muted/20" />
-            <p className="text-brand-muted font-bold text-xs uppercase tracking-widest">No active class battles for {grade}</p>
+            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">No active class battles for {grade}</p>
           </div>
         ) : (
           competitions.map(comp => (
@@ -274,25 +290,25 @@ export const StudentCompetitionLobby: React.FC<{
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full border ${
+                  <span className={`text-[8px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${
                     comp.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-brand-bg text-brand-muted'
                   }`}>
                     {comp.status === 'active' ? 'JOIN NOW' : 'MARKING'}
                   </span>
-                  <span className="text-[9px] font-black text-brand-muted uppercase tracking-widest">{comp.subject}</span>
+                  <span className="text-[9px] font-bold text-brand-muted uppercase tracking-wider">{comp.subject}</span>
                 </div>
                 <Users size={16} className="text-brand-muted/40" />
               </div>
               <div>
-                <h3 className="text-xl font-black tracking-tighter uppercase group-hover:text-brand-accent transition-colors">{comp.title}</h3>
-                <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest mt-1">Host: {comp.teacher_name || 'Your Teacher'}</p>
+                <h3 className="text-xl font-bold tracking-tighter uppercase group-hover:text-brand-accent transition-colors">{comp.title}</h3>
+                <p className="text-[10px] font-semibold text-brand-muted uppercase tracking-wider mt-1">Host: {comp.teacher_name || 'Your Teacher'}</p>
               </div>
               <div className="flex items-center justify-between pt-4 border-t border-brand-border">
                 <div className="flex items-center gap-1.5 text-brand-muted">
                   <Clock size={14} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Live Session</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Live Session</span>
                 </div>
-                <div className="flex items-center gap-2 text-brand-accent font-black text-[10px] uppercase tracking-widest">
+                <div className="flex items-center gap-2 text-brand-accent font-bold text-[10px] uppercase tracking-wider">
                   Battle Now <Play size={12} />
                 </div>
               </div>

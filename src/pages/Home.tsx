@@ -453,15 +453,15 @@ export default function Home({
                   <motion.div 
                     animate={{ rotate: [0, 10, -10, 0] }}
                     transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                    className="w-20 h-20 bg-[#FF6B2C] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#FF6B2C]/30 relative z-10"
+                    className="w-14 h-14 bg-[#FF6B2C] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#FF6B2C]/30 relative z-10"
                     onClick={handleLogoClick}
                   >
-                    <FlaskConical size={40} />
+                    <FlaskConical size={28} />
                   </motion.div>
                   <div className="absolute -inset-4 bg-brand-accent/10 rounded-[3rem] blur-2xl -z-10 animate-pulse" />
                 </div>
 
-                 <div className="w-full space-y-4">
+                 <div className="w-full space-y-3">
                     <div className="flex items-center justify-between px-1">
                       <h2 className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">Select Grade</h2>
                     </div>

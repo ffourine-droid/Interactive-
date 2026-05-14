@@ -200,11 +200,11 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <button onClick={() => setView('list')} className="text-brand-muted hover:text-brand-accent flex items-center gap-2 font-black text-[10px] uppercase tracking-widest">
+          <button onClick={() => setView('list')} className="text-brand-muted hover:text-brand-accent flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider">
             <X size={16} /> Cancel
           </button>
-          <h2 className="text-xl font-black tracking-tight uppercase">New Competition</h2>
-          <button onClick={handleCreate} className="bg-brand-accent text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-brand-accent/20">
+          <h2 className="text-xl font-bold tracking-tight uppercase">New Competition</h2>
+          <button onClick={handleCreate} className="bg-brand-accent text-white px-6 py-2 rounded-xl font-bold text-[10px] uppercase tracking-wider shadow-lg shadow-brand-accent/20">
             {loading ? <Loader2 className="animate-spin" size={14} /> : 'Save as Draft'}
           </button>
         </div>
@@ -295,10 +295,10 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-black tracking-tight uppercase">Class Competitions</h2>
-          <p className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mt-1">Create engaging battles for your classes</p>
+          <h2 className="text-xl font-bold tracking-tight uppercase">Class Competitions</h2>
+          <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mt-1">Create engaging battles for your classes</p>
         </div>
-        <button onClick={() => setView('create')} className="bg-brand-accent text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-brand-accent/20 flex items-center gap-2 active:scale-95 transition-all">
+        <button onClick={() => setView('create')} className="bg-brand-accent text-white px-6 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-wider shadow-xl shadow-brand-accent/20 flex items-center gap-2 active:scale-95 transition-all">
           <Plus size={16} /> New Competition
         </button>
       </div>
@@ -326,7 +326,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded-full border ${
+                  <span className={`text-[8px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${
                     comp.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
                     comp.status === 'marking' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
                     comp.status === 'finished' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
@@ -334,7 +334,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
                   }`}>
                     {comp.status}
                   </span>
-                  <span className="text-[9px] font-black text-brand-muted uppercase tracking-widest">{comp.subject} • {comp.grade}</span>
+                  <span className="text-[9px] font-bold text-brand-muted uppercase tracking-wider">{comp.subject} • {comp.grade}</span>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); deleteCompetition(comp.id); }} className="text-red-500/20 hover:text-red-500 p-2 transition-colors">
                   <Trash2 size={16} />
@@ -342,7 +342,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
               </div>
 
               <div>
-                <h3 className="text-2xl font-black tracking-tight group-hover:text-brand-accent transition-colors">{comp.title}</h3>
+                <h3 className="text-2xl font-bold tracking-tight group-hover:text-brand-accent transition-colors">{comp.title}</h3>
                 <p className="text-xs font-bold text-brand-muted mt-1">{comp.question_count} Questions</p>
               </div>
 
@@ -350,10 +350,10 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1.5 text-brand-muted">
                     <Users size={14} />
-                    <span className="text-xs font-black">0 Joined</span>
+                    <span className="text-xs font-bold">0 Joined</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-brand-accent font-black text-[10px] uppercase tracking-widest">
+                <div className="flex items-center gap-2 text-brand-accent font-bold text-[10px] uppercase tracking-wider">
                   Manage Battle <ChevronRight size={14} />
                 </div>
               </div>
