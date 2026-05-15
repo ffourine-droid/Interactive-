@@ -4,10 +4,11 @@ import {
   Plus, Search, Trophy, Clock, Users, 
   ChevronRight, Trash2, CheckCircle2, AlertCircle,
   Loader2, Play, Pause, ListChecks, MessageSquare,
-  Award, ShieldCheck, HelpCircle, Save, X
+  Award, ShieldCheck, HelpCircle, Save, X, FileJson
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
+import { QuestionRequestForm } from './QuestionRequestForm';
 
 interface Question {
   id?: string;
@@ -44,6 +45,9 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
   const [isCreating, setIsCreating] = useState(false);
   const [selectedComp, setSelectedComp] = useState<Competition | null>(null);
   const [view, setView] = useState<'list' | 'create' | 'manage'>('list');
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [showImportForm, setShowImportForm] = useState(false);
+  const [importJson, setImportJson] = useState('');
 
   // New Comp Form
   const [title, setTitle] = useState('');
@@ -196,6 +200,45 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
     }
   };
 
+  const handleImportJson = () => {
+    try {
+      const data = JSON.parse(importJson);
+      if (!data.questions || !Array.isArray(data.questions)) {
+        throw new Error("Invalid structure. Must have a 'questions' array.");
+      }
+      
+      if (data.title) setTitle(data.title);
+      if (data.subject) setSubject(data.subject);
+      if (data.grade) setGrade(data.grade);
+      
+      const importedQuestions = data.questions.map((q: any) => ({
+        text: q.text || q.question_text || '',
+        type: q.type || (q.options ? 'mcq' : 'short_answer'),
+        options: q.options,
+        correct_answer: q.correct_answer || q.answer || '',
+        points: q.points || 10
+      }));
+      
+      setQuestions(importedQuestions);
+      setShowImportForm(false);
+      setImportJson('');
+      showToast("Questions imported successfully!", "success");
+    } catch (e: any) {
+      showToast("Failed to parse JSON: " + e.message, "error");
+    }
+  };
+
+  if (showRequestForm) {
+    return (
+      <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8">
+        <QuestionRequestForm 
+          teacher={{ id: teacherId, name: 'Teacher', school_name: '' }} 
+          onClose={() => setShowRequestForm(false)} 
+        />
+      </div>
+    );
+  }
+
   if (view === 'create') {
     return (
       <div className="space-y-6">
@@ -204,10 +247,50 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
             <X size={16} /> Cancel
           </button>
           <h2 className="text-xl font-bold tracking-tight uppercase">New Competition</h2>
-          <button onClick={handleCreate} className="bg-brand-accent text-white px-6 py-2 rounded-xl font-bold text-[10px] uppercase tracking-wider shadow-lg shadow-brand-accent/20">
-            {loading ? <Loader2 className="animate-spin" size={14} /> : 'Save as Draft'}
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setShowRequestForm(true)}
+              className="px-4 py-2 bg-brand-surface border border-brand-border rounded-xl text-[9px] font-bold text-brand-muted uppercase tracking-wider hover:border-brand-accent transition-colors flex items-center gap-2"
+            >
+              <MessageSquare size={14} /> Request from Admin
+            </button>
+            <button onClick={handleCreate} className="bg-brand-accent text-white px-6 py-2 rounded-xl font-bold text-[10px] uppercase tracking-wider shadow-lg shadow-brand-accent/20">
+              {loading ? <Loader2 className="animate-spin" size={14} /> : 'Save as Draft'}
+            </button>
+          </div>
         </div>
+
+        <AnimatePresence>
+          {showImportForm && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden bg-brand-bg border border-brand-border rounded-[2rem] p-6 space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                  <FileJson size={16} className="text-brand-accent" />
+                  Import Questions via JSON
+                </h3>
+                <button onClick={() => setShowImportForm(false)} className="text-brand-muted"><X size={16} /></button>
+              </div>
+              <p className="text-[10px] text-brand-muted">Paste the JSON configuration provided by the administrator or exported from another competition.</p>
+              <textarea 
+                value={importJson}
+                onChange={e => setImportJson(e.target.value)}
+                placeholder='{ "questions": [...] }'
+                className="w-full h-32 bg-brand-surface border border-brand-border rounded-xl p-4 font-mono text-xs outline-none focus:border-brand-accent/50"
+              />
+              <button 
+                onClick={handleImportJson}
+                className="w-full bg-brand-accent text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-brand-accent/10"
+              >
+                Parse & Import
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -229,6 +312,12 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-black uppercase tracking-widest">Questions</h3>
               <div className="flex gap-2">
+                <button 
+                  onClick={() => setShowImportForm(!showImportForm)}
+                  className="px-3 py-1.5 bg-brand-accent/10 border border-brand-accent/20 rounded-lg text-[9px] font-black text-brand-accent uppercase tracking-widest hover:bg-brand-accent/20 transition-colors flex items-center gap-1.5"
+                >
+                  <FileJson size={14} /> Import Code
+                </button>
                 <button onClick={() => addQuestion('mcq')} className="px-3 py-1.5 bg-brand-bg border border-brand-border rounded-lg text-[9px] font-black uppercase tracking-widest hover:border-brand-accent transition-colors">Add MCQ</button>
                 <button onClick={() => addQuestion('short_answer')} className="px-3 py-1.5 bg-brand-bg border border-brand-border rounded-lg text-[9px] font-black uppercase tracking-widest hover:border-brand-accent transition-colors">Add Short Answer</button>
               </div>
