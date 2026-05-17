@@ -55,11 +55,14 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [creationMode, setCreationMode] = useState<'manual' | 'json'>('manual');
   const [jsonInput, setJsonInput] = useState('');
+  const [prefillArena, setPrefillArena] = useState<any>(null);
   
   // Target tracking
   const [targetTeacher, setTargetTeacher] = useState('');
+  const [targetTeacherId, setTargetTeacherId] = useState('');
   const [targetSchool, setTargetSchool] = useState('');
-  
+  const [targetRequestId, setTargetRequestId] = useState('');
+
   // Assessment Form
   const [examTitle, setExamTitle] = useState('');
   const [examSubject, setExamSubject] = useState('');
@@ -184,6 +187,8 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
     setLoading(true);
     try {
       const code = generateCode(examSubject);
+      
+      // Save to admin_assignments as master template
       const { error } = await supabase.from('admin_assignments').insert({
         title: examTitle,
         subject: examSubject,
@@ -195,6 +200,26 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
         target_school_name: targetSchool
       });
       if (error) throw error;
+
+      // Automatically save to specific teacher's dashboard if ID is known
+      if (targetTeacherId) {
+        await supabase.from('exams').insert({
+          title: examTitle,
+          subject: examSubject,
+          grade: examGrade,
+          questions,
+          created_by: targetTeacherId,
+          is_published: false,
+          share_code: code,
+          created_by_admin: true
+        });
+
+        // Mark request as completed
+        if (targetRequestId) {
+          await supabase.from('question_requests').update({ status: 'completed' }).eq('id', targetRequestId);
+        }
+      }
+
       showToast(`Assessment published! Code: ${code}`, "success");
       setIsCreating(false);
       resetForms();
@@ -211,6 +236,8 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
     setLoading(true);
     try {
       const code = generateCode(assignSubject);
+      
+      // Save to admin_assignments
       const { error } = await supabase.from('admin_assignments').insert({
         title: assignTitle,
         subject: assignSubject,
@@ -222,6 +249,24 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
         target_school_name: targetSchool
       });
       if (error) throw error;
+
+      // Auto-save to teacher
+      if (targetTeacherId) {
+         await supabase.from('assignments').insert({
+            title: assignTitle,
+            subject: assignSubject,
+            grade: assignGrade,
+            content: assignContent,
+            teacher_id: targetTeacherId,
+            share_code: code,
+            created_by_admin: true
+         });
+
+         if (targetRequestId) {
+          await supabase.from('question_requests').update({ status: 'completed' }).eq('id', targetRequestId);
+        }
+      }
+
       showToast(`Assignment published! Code: ${code}`, "success");
       setIsCreating(false);
       resetForms();
@@ -260,6 +305,37 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
         target_school_name: targetSchool
       });
       if (error) throw error;
+
+      // Auto-save to teacher
+      if (targetTeacherId) {
+        if (subTab === 'assessments') {
+          await supabase.from('exams').insert({
+            title: data.title,
+            subject: data.subject,
+            grade: data.grade,
+            questions: data.questions,
+            created_by: targetTeacherId,
+            is_published: false,
+            share_code: code,
+            created_by_admin: true
+          });
+        } else {
+          await supabase.from('assignments').insert({
+            title: data.title,
+            subject: data.subject,
+            grade: data.grade,
+            content: typeof data.questions[0] === 'string' ? data.questions[0] : (data.questions[0].text || JSON.stringify(data.questions)),
+            teacher_id: targetTeacherId,
+            share_code: code,
+            created_by_admin: true
+          });
+        }
+
+        if (targetRequestId) {
+          await supabase.from('question_requests').update({ status: 'completed' }).eq('id', targetRequestId);
+        }
+      }
+
       showToast(`Master asset published! Code: ${code}`, "success");
       setIsCreating(false);
       resetForms();
@@ -551,7 +627,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
 
         {!loading && activeTab === 'arena' && (
           <div className="space-y-12">
-            <ArenaQuestionCreator />
+            <ArenaQuestionCreator initialData={prefillArena} />
             <QuestionManager />
           </div>
         )}
@@ -593,18 +669,36 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                         <div className="flex items-center gap-2">
                           <button 
                             onClick={() => {
+                              setActiveTab('arena');
+                              setPrefillArena({
+                                subject: req.subject,
+                                grade: req.grade,
+                                topic: req.topic,
+                                teacher_id: req.teacher_id,
+                                teacher_name: req.teacher_name,
+                                request_id: req.id
+                              });
+                            }}
+                            className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+                          >
+                            Arena Question
+                          </button>
+                          <button 
+                            onClick={() => {
                               setActiveTab('shared');
                               setCreationMode('json');
                               setIsCreating(true);
                               setTargetTeacher(req.teacher_name);
+                              setTargetTeacherId(req.teacher_id);
                               setTargetSchool(req.school_name);
+                              setTargetRequestId(req.id);
                               setExamSubject(req.subject);
                               setExamGrade(req.grade);
                               setExamTitle(`${req.topic} - For ${req.teacher_name}`);
                             }}
                             className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
                           >
-                            Create for Teacher
+                            Shared Work
                           </button>
                         </div>
                       </div>

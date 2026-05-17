@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   PlusCircle, FileJson, CheckCircle2, ChevronDown, 
   Loader2, AlertCircle, Check, XCircle, Trash2,
-  ListRestart
+  ListRestart, Trophy
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -144,14 +144,39 @@ const TextField: React.FC<{
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const ArenaQuestionCreator: React.FC = () => {
+interface ArenaQuestionCreatorProps {
+  initialData?: Partial<ArenaQuestion> & {
+    teacher_id?: string;
+    teacher_name?: string;
+    request_id?: string;
+  };
+}
+
+export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ initialData }) => {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
   
   // Manual Form State
-  const [form, setForm] = useState<ArenaQuestion>({ ...EMPTY_QUESTION });
+  const [form, setForm] = useState<ArenaQuestion>({ 
+    ...EMPTY_QUESTION,
+    grade: typeof initialData?.grade === 'string' ? parseInt((initialData.grade as string).replace(/\D/g, '')) || 7 : initialData?.grade || 7,
+    subject: initialData?.subject || 'Mathematics',
+    topic: initialData?.topic || '',
+  });
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
+  const [sessionQuestions, setSessionQuestions] = useState<ArenaQuestion[]>([]);
+
+  useEffect(() => {
+    if (initialData) {
+      setForm(prev => ({
+        ...prev,
+        grade: typeof initialData.grade === 'string' ? parseInt((initialData.grade as string).replace(/\D/g, '')) || 7 : initialData.grade || 7,
+        subject: initialData.subject || 'Mathematics',
+        topic: initialData.topic || '',
+      }));
+    }
+  }, [initialData]);
 
   // Import State
   const [rawJson, setRawJson] = useState('');
@@ -165,11 +190,63 @@ export const ArenaQuestionCreator: React.FC = () => {
     setSaving(true);
     try {
       await saveQuestions([form]);
+      setSessionQuestions(prev => [...prev, form]);
       setSavedCount(c => c + 1);
       showToast('Question added to bank!', 'success');
       setForm({ ...EMPTY_QUESTION, grade: form.grade, subject: form.subject, topic: form.topic });
     } catch (e: any) {
       showToast(e.message || 'Failed to save', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateAutoCompetition = async () => {
+    const target = initialData as any;
+    if (!target?.teacher_id || sessionQuestions.length === 0) return;
+    
+    setSaving(true);
+    try {
+      // 1. Create teacher competition
+      const { data: comp, error: compErr } = await supabase
+        .from('teacher_competitions')
+        .insert([{
+          teacher_id: target.teacher_id,
+          title: `${form.topic || 'New Arena'} Battle`,
+          subject: form.subject,
+          grade: form.grade.toString(),
+          status: 'draft'
+        }])
+        .select()
+        .single();
+
+      if (compErr) throw compErr;
+
+      // 2. Add questions
+      const questionsToInsert = sessionQuestions.map(q => ({
+        competition_id: comp.id,
+        question_text: q.question,
+        type: 'mcq',
+        options: [q.option_a, q.option_b, q.option_c, q.option_d],
+        correct_answer: q.correct_answer,
+        points: q.difficulty === 'easy' ? 5 : (q.difficulty === 'hard' ? 15 : 10)
+      }));
+
+      const { error: qErr } = await supabase
+        .from('teacher_competition_questions')
+        .insert(questionsToInsert);
+
+      if (qErr) throw qErr;
+
+      // 3. Mark request as completed
+      if (target.request_id) {
+        await supabase.from('question_requests').update({ status: 'completed' }).eq('id', target.request_id);
+      }
+
+      showToast(`Competition created for ${target.teacher_name || 'Teacher'}!`, "success");
+      setSessionQuestions([]);
+    } catch (e: any) {
+      showToast(e.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -290,14 +367,38 @@ export const ArenaQuestionCreator: React.FC = () => {
 
             <TextField label="Explanation (shown after round)" value={form.explanation || ''} onChange={v => setForm({ ...form, explanation: v })} multiline placeholder="Hint: Explaining why can help students learn faster!" />
 
-            <button 
-              onClick={handleManualSave}
-              disabled={saving}
-              className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="animate-spin" /> : <Save size={18} />}
-              Save Question to Arena
-            </button>
+            <div className="flex gap-4">
+              <button 
+                onClick={handleManualSave}
+                disabled={saving}
+                className="flex-1 bg-brand-bg border-2 border-brand-accent text-brand-accent py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-brand-accent hover:text-white transition-all disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="animate-spin" /> : <PlusCircle size={18} />}
+                Add More Questions
+              </button>
+              
+              {(initialData as any)?.teacher_id && (
+                <button 
+                  onClick={handleCreateAutoCompetition}
+                  disabled={saving || sessionQuestions.length === 0}
+                  className="flex-1 bg-emerald-500 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="animate-spin" /> : <Trophy size={18} />}
+                  Finish & Create for Teacher ({sessionQuestions.length})
+                </button>
+              )}
+
+              {!(initialData as any)?.teacher_id && (
+                <button 
+                  onClick={handleManualSave}
+                  disabled={saving}
+                  className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+                  Save Question to Arena
+                </button>
+              )}
+            </div>
           </motion.div>
         ) : (
           <motion.div

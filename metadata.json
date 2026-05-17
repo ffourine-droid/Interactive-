@@ -1,5 +1,6 @@
 {
   "name": "AziLearn",
-  "description": "Subscription-based study materials platform with M-Pesa payment integration and locked content previews.",
-  "requestFramePermissions": []
+  "description": "Educational platform with teacher dashboards, admin material requests, and gamified arena competitions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
