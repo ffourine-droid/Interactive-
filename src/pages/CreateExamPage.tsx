@@ -326,7 +326,7 @@ export default function CreateExamPage({ onBack, initialData, preSelectedClassId
                   <div className="relative group/input">
                     <input 
                       type="number"
-                      value={formData.duration}
+                      value={isNaN(formData.duration) ? '' : formData.duration}
                       onChange={e => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
                       className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3.5 text-sm font-bold focus:border-brand-accent outline-none transition-all pl-12"
                     />
@@ -494,7 +494,7 @@ export default function CreateExamPage({ onBack, initialData, preSelectedClassId
                                   <span className="text-[10px] font-black text-brand-muted uppercase tracking-widest opacity-60">Value:</span>
                                   <input 
                                     type="number"
-                                    value={q.marks}
+                                    value={isNaN(q.marks) ? '' : q.marks}
                                     onChange={e => updateQuestion(idx, { marks: parseInt(e.target.value) || 0 })}
                                     className="w-12 bg-transparent font-black text-sm text-brand-accent focus:ring-0 text-center p-0 outline-none"
                                   />

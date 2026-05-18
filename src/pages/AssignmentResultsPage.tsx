@@ -54,7 +54,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       setFeedback(selectedSubmission.teacher_comment || '');
       setParentFeedback(selectedSubmission.parent_feedback || '');
       setTeacherReply(selectedSubmission.teacher_reply || '');
-      setScore(selectedSubmission.score || '');
+      setScore((selectedSubmission.score === null || isNaN(selectedSubmission.score)) ? '' : selectedSubmission.score);
     }
   }, [selectedSubmission]);
 

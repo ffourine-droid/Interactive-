@@ -161,7 +161,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
   const openSubmissionDetails = (submission: Submission) => {
     setSelectedSubmission(submission);
-    setGradeInput(submission.score?.toString() || '');
+    setGradeInput((submission.score === null || isNaN(submission.score as number)) ? '' : submission.score.toString());
     setFeedbackInput(submission.teacher_comment || '');
     setReplyInput((submission as any).teacher_reply || '');
   };
@@ -444,7 +444,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                                       <button 
                                         onClick={() => {
                                           setSelectedExamAttempt(attempt);
-                                          setGradeInput(attempt.score?.toString() || '');
+                                          setGradeInput((attempt.score === null || isNaN(attempt.score)) ? '' : attempt.score.toString());
                                           setFeedbackInput(attempt.teacher_feedback || '');
                                           setReplyInput(attempt.teacher_reply || '');
                                         }}

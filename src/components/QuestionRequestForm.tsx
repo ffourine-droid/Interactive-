@@ -147,8 +147,8 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
           </label>
           <input 
             type="number"
-            value={numQuestions} 
-            onChange={e => setNumQuestions(parseInt(e.target.value))}
+            value={isNaN(numQuestions) ? '' : numQuestions} 
+            onChange={e => setNumQuestions(parseInt(e.target.value) || 0)}
             min={1}
             max={50}
             className="w-full bg-brand-bg border border-brand-border rounded-xl p-4 font-bold outline-none focus:border-brand-accent/50" 

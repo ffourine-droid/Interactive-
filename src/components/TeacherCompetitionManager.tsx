@@ -352,7 +352,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
                     </div>
                     <div className="w-24">
                       <label className="text-[8px] font-black uppercase tracking-widest text-brand-muted px-1">Points</label>
-                      <input type="number" value={q.points} onChange={e => updateQuestion(qIdx, { points: parseInt(e.target.value) })} className="w-full bg-brand-surface border border-brand-border rounded-xl p-2 text-xs font-bold" />
+                      <input type="number" value={isNaN(q.points) ? '' : q.points} onChange={e => updateQuestion(qIdx, { points: parseInt(e.target.value) || 0 })} className="w-full bg-brand-surface border border-brand-border rounded-xl p-2 text-xs font-bold" />
                     </div>
                   </div>
                 </div>
