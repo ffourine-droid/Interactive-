@@ -217,11 +217,24 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
   };
 
   const handleCreateAutoCompetition = async () => {
-    if (!targetId || sessionQuestions.length === 0) return;
+    // Collect all valid questions: session questions + current form (if valid)
+    let finalQuestions = [...sessionQuestions];
+    const currentErrors = validate(form);
+    if (currentErrors.length === 0) {
+      // Check if current form is already in sessionQuestions (simple check by question text)
+      if (!sessionQuestions.find(sq => sq.question === form.question)) {
+        finalQuestions.push(form);
+      }
+    }
+
+    if (!targetId || finalQuestions.length === 0) {
+      if (finalQuestions.length === 0) showToast("Add at least one question first", "error");
+      return;
+    }
     
     setSaving(true);
     try {
-      // 1. Create teacher competition
+      // 1. Create teacher competition - set to active so it shows for students
       const { data: comp, error: compErr } = await supabase
         .from('teacher_competitions')
         .insert([{
@@ -229,7 +242,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
           title: `${form.topic || 'New Arena'} Battle`,
           subject: form.subject,
           grade: form.grade.toString(),
-          status: 'draft'
+          status: 'active'
         }])
         .select()
         .single();
@@ -237,7 +250,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
       if (compErr) throw compErr;
 
       // 2. Add questions
-      const questionsToInsert = sessionQuestions.map(q => ({
+      const questionsToInsert = finalQuestions.map(q => ({
         competition_id: comp.id,
         question_text: q.question,
         type: 'mcq',
@@ -257,8 +270,9 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
         await supabase.from('question_requests').update({ status: 'completed' }).eq('id', initialData.request_id);
       }
 
-      showToast(`Competition created for ${targetName || 'Teacher'}!`, "success");
+      showToast(`Competition live for ${targetName || 'Teacher'}!`, "success");
       setSessionQuestions([]);
+      setSavedCount(0);
     } catch (e: any) {
       console.error('Error creating competition:', e);
       showToast(e.message || 'Failed to create competition', 'error');
@@ -271,13 +285,35 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
     try {
       const data = JSON.parse(rawJson);
       const items = Array.isArray(data) ? data : [data];
-      setParsed(items.map((item, i) => ({
-        ...EMPTY_QUESTION,
-        ...item,
-        _id: i,
-        _valid: validate(item as ArenaQuestion).length === 0,
-        _selected: validate(item as ArenaQuestion).length === 0
-      })));
+      setParsed(items.map((item, i) => {
+        // Handle various field name conventions
+        const questionText = item.question || item.question_text || item.text || '';
+        const optA = item.option_a || (item.options && item.options[0]) || '';
+        const optB = item.option_b || (item.options && item.options[1]) || '';
+        const optC = item.option_c || (item.options && item.options[2]) || '';
+        const optD = item.option_d || (item.options && item.options[3]) || '';
+        
+        const normalizedItem = {
+          ...EMPTY_QUESTION,
+          grade: item.grade || form.grade,
+          subject: item.subject || form.subject,
+          topic: item.topic || form.topic,
+          question: questionText,
+          option_a: optA,
+          option_b: optB,
+          option_c: optC,
+          option_d: optD,
+          correct_answer: item.correct_answer || item.answer || 'A',
+          difficulty: item.difficulty || 'medium',
+        };
+
+        return {
+          ...normalizedItem,
+          _id: i,
+          _valid: validate(normalizedItem).length === 0,
+          _selected: validate(normalizedItem).length === 0
+        };
+      }));
       setIsReviewing(true);
     } catch {
       showToast('Invalid JSON format', 'error');
@@ -308,7 +344,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
             title: `${mainTopic} Battle`,
             subject: mainSubject,
             grade: mainGrade,
-            status: 'draft'
+            status: 'active'
           }])
           .select()
           .single();
@@ -449,20 +485,20 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
             <div className="pt-4 border-t border-brand-border space-y-3">
               <p className="text-[9px] font-bold text-brand-muted uppercase">Or Input Manually</p>
               <div className="grid grid-cols-2 gap-3">
-                <input 
-                  placeholder="Teacher Name" 
+                <TextField 
+                  label="Teacher Name" 
                   value={targetName} 
-                  onChange={e => setTargetName(e.target.value)}
-                  className="bg-brand-surface border border-brand-border p-3 rounded-xl text-xs"
+                  onChange={v => setTargetName(v)}
+                  placeholder="Direct Name"
                 />
-                <input 
-                  placeholder="School Name" 
+                <TextField 
+                  label="School Name" 
                   value={targetSchool} 
-                  onChange={e => setTargetSchool(e.target.value)}
-                  className="bg-brand-surface border border-brand-border p-3 rounded-xl text-xs"
+                  onChange={v => setTargetSchool(v)}
+                  placeholder="Direct School"
                 />
               </div>
-              <p className="text-[8px] text-brand-muted italic">Note: Manual input requires finding a teacher UUID to work correctly in the dashboard.</p>
+              <p className="text-[8px] text-brand-muted italic">Note: If you don't select a teacher from the list, you can still input details for a custom assignment.</p>
             </div>
           </motion.div>
         )}
@@ -531,11 +567,11 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
               {targetId && (
                 <button 
                   onClick={handleCreateAutoCompetition}
-                  disabled={saving || sessionQuestions.length === 0}
+                  disabled={saving}
                   className="flex-1 bg-emerald-500 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="animate-spin" /> : <Trophy size={18} />}
-                  Finish & Create for {targetName || 'Teacher'} ({sessionQuestions.length})
+                  Finish & Create for {targetName || 'Teacher'} ({sessionQuestions.length + (validate(form).length === 0 && !sessionQuestions.find(sq => sq.question === form.question) ? 1 : 0)})
                 </button>
               )}
 

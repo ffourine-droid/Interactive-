@@ -41,10 +41,13 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          const clonedResponse = response.clone();
-          caches.open('api-cache').then((cache) => {
-            cache.put(event.request, clonedResponse);
-          });
+          // Only cache successful GET requests
+          if (event.request.method === 'GET' && response.status === 200) {
+            const clonedResponse = response.clone();
+            caches.open('api-cache').then((cache) => {
+              cache.put(event.request, clonedResponse);
+            });
+          }
           return response;
         })
         .catch(() => caches.match(event.request))

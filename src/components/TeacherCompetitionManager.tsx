@@ -38,7 +38,7 @@ interface Participant {
   submitted_at: string;
 }
 
-export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ teacherId }) => {
+export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: string, grade?: string }> = ({ teacherId, classId, grade: propGrade }) => {
   const { showToast } = useToast();
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,28 +52,35 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
   // New Comp Form
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
-  const [grade, setGrade] = useState('');
+  const [grade, setGrade] = useState(propGrade || '');
   const [questions, setQuestions] = useState<Question[]>([]);
 
   useEffect(() => {
     fetchCompetitions();
-  }, [teacherId]);
+  }, [teacherId, classId]);
 
   const fetchCompetitions = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('teacher_competitions')
         .select(`
           *,
-          teacher_competition_questions(count)
+          teacher_competition_questions!competition_id(id)
         `)
-        .eq('teacher_id', teacherId)
-        .order('created_at', { ascending: false });
+        .eq('teacher_id', teacherId);
+
+      if (classId) {
+        // If we want to strictly filter by class, we might need a class_id column.
+        // Assuming for now competitions are grade-based but we can filter by grade if classId is provided.
+        if (propGrade) query = query.eq('grade', propGrade);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) {
         // Fallback for missing relationship or schema cache issues
-        if (error.message?.includes('relationship') || error.code === 'PGRST200') {
+        if (error.message?.includes('relationship') || error.message?.includes('not found') || error.code?.startsWith('PGRST')) {
           const { data: basicData, error: basicErr } = await supabase
             .from('teacher_competitions')
             .select('*')
@@ -88,7 +95,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
 
       setCompetitions(data.map(c => ({
         ...c,
-        question_count: (c as any).teacher_competition_questions?.[0]?.count || 0
+        question_count: (c as any).teacher_competition_questions?.length || 0
       })));
     } catch (e: any) {
       showToast(e.message, 'error');
@@ -304,7 +311,15 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string }> = ({ tea
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Grade</label>
-              <input value={grade} onChange={e => setGrade(e.target.value)} placeholder="e.g. Grade 7" className="w-full bg-brand-bg border border-brand-border rounded-xl p-4 font-bold outline-none focus:border-brand-accent/50" />
+              <select 
+                value={grade || 'Grade 7'} 
+                onChange={e => setGrade(e.target.value)} 
+                className="w-full bg-brand-bg border border-brand-border rounded-xl p-4 font-bold outline-none focus:border-brand-accent/50 appearance-none"
+              >
+                {['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -618,7 +633,9 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
                   </div>
                   <div className="flex-1">
                     <p className="font-black text-brand-text">{p.student_name}</p>
-                    <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Accuracy: {Math.round((p.score / (p.total_questions * 10)) * 100)}%</p>
+                    <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">
+                      Accuracy: {p.total_questions > 0 ? Math.round((p.score / (p.total_questions * 10)) * 100) : 0}%
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-black text-brand-text tabular-nums leading-none">{p.score}</p>
@@ -649,10 +666,10 @@ const MarkingInterface: React.FC<{ competitionId: string }> = ({ competitionId }
         .from('teacher_competition_responses')
         .select(`
           *,
-          teacher_competition_questions(question_text, correct_answer, points)
+          teacher_competition_questions!question_id(question_text, correct_answer, points)
         `)
         .eq('competition_id', competitionId)
-        .eq('is_correct', null) // Only un-marked
+        .is('is_correct', null) // Only un-marked
         .order('submitted_at', { ascending: true });
 
       if (error) throw error;
@@ -669,12 +686,14 @@ const MarkingInterface: React.FC<{ competitionId: string }> = ({ competitionId }
 
   const markResponse = async (responseId: string, isCorrect: boolean, studentId: string, points: number) => {
     try {
-      // 1. Update response
+      // 1. Update response - ensure isCorrect is explicitly a boolean or null
+      const safeIsCorrect = isCorrect === true ? true : (isCorrect === false ? false : null);
+      
       const { error: resErr } = await supabase
         .from('teacher_competition_responses')
         .update({ 
-          is_correct: isCorrect, 
-          points_awarded: isCorrect ? points : 0,
+          is_correct: safeIsCorrect, 
+          points_awarded: safeIsCorrect === true ? points : 0,
           graded_at: new Date().toISOString()
         })
         .eq('id', responseId);

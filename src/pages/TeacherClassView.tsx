@@ -15,12 +15,14 @@ import {
   ShieldCheck,
   Settings,
   ListTodo,
-  Save
+  Save,
+  Swords
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { ParentCodeTable } from '../components/ParentCodeTable';
 import { StudentManager } from '../components/StudentManager';
+import { TeacherCompetitionManager } from '../components/TeacherCompetitionManager';
 
 interface Assignment {
   id: string;
@@ -83,7 +85,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [exams, setExams] = useState<any[]>([]);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams'>('assignments');
+  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'arena'>('assignments');
   const [selectedExamAttempt, setSelectedExamAttempt] = useState<any | null>(null);
   const [gradingExam, setGradingExam] = useState(false);
   const [showParentCodes, setShowParentCodes] = useState(false);
@@ -300,6 +302,13 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               Timed Assessments
             </button>
             <button 
+              onClick={() => setViewMode('arena')}
+              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'arena' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+            >
+              <Swords size={14} />
+              Arena
+            </button>
+            <button 
               onClick={() => setViewMode('students')}
               className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'students' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
             >
@@ -380,6 +389,14 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               )}
             </AnimatePresence>
           </section>
+        ) : viewMode === 'arena' ? (
+          <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-sm">
+            <TeacherCompetitionManager 
+              teacherId={teacher?.id || ''} 
+              classId={classId} 
+              grade={assignments[0]?.grade || students[0]?.grade || 'Grade 7'}
+            />
+          </div>
         ) : viewMode === 'exams' ? (
           <div className="space-y-6">
             <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2 px-2">

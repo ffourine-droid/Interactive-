@@ -477,7 +477,7 @@ export default function ExamResultsPage({ examId, onBack }: ExamResultsPageProps
                                      <span className="text-[10px] font-black text-brand-muted uppercase px-2">Marks:</span>
                                      <input 
                                       type="number"
-                                      defaultValue={selectedAttempt.grading?.[idx] || 0}
+                                      value={gradingMarks[idx] ?? selectedAttempt.grading?.[idx] ?? 0}
                                       onChange={(e) => handleGradeChange(idx, parseInt(e.target.value) || 0)}
                                       className="w-16 bg-brand-bg border-none rounded-lg p-1.5 text-center font-black text-xs text-brand-accent focus:ring-1 focus:ring-brand-accent/30 outline-none"
                                      />
