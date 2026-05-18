@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   PlusCircle, FileJson, CheckCircle2, ChevronDown, 
   Loader2, AlertCircle, Check, XCircle, Trash2,
-  ListRestart, Trophy
+  ListRestart, Trophy, Users
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -182,6 +182,21 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
   const [rawJson, setRawJson] = useState('');
   const [parsed, setParsed] = useState<any[]>([]);
   const [isReviewing, setIsReviewing] = useState(false);
+  const [targetId, setTargetId] = useState(initialData?.teacher_id || '');
+  const [targetName, setTargetName] = useState(initialData?.teacher_name || '');
+  const [targetSchool, setTargetSchool] = useState('');
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [showTeacherSearch, setShowTeacherSearch] = useState(false);
+
+  useEffect(() => {
+    if (initialData?.teacher_id) setTargetId(initialData.teacher_id);
+    if (initialData?.teacher_name) setTargetName(initialData.teacher_name);
+  }, [initialData]);
+
+  const fetchTeachers = async () => {
+    const { data } = await supabase.from('profiles').select('id, username, school_name').order('username');
+    setTeachers(data || []);
+  };
 
   const handleManualSave = async () => {
     const errors = validate(form);
@@ -202,8 +217,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
   };
 
   const handleCreateAutoCompetition = async () => {
-    const target = initialData as any;
-    if (!target?.teacher_id || sessionQuestions.length === 0) return;
+    if (!targetId || sessionQuestions.length === 0) return;
     
     setSaving(true);
     try {
@@ -211,7 +225,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
       const { data: comp, error: compErr } = await supabase
         .from('teacher_competitions')
         .insert([{
-          teacher_id: target.teacher_id,
+          teacher_id: targetId,
           title: `${form.topic || 'New Arena'} Battle`,
           subject: form.subject,
           grade: form.grade.toString(),
@@ -239,14 +253,15 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
       if (qErr) throw qErr;
 
       // 3. Mark request as completed
-      if (target.request_id) {
-        await supabase.from('question_requests').update({ status: 'completed' }).eq('id', target.request_id);
+      if (initialData?.request_id) {
+        await supabase.from('question_requests').update({ status: 'completed' }).eq('id', initialData.request_id);
       }
 
-      showToast(`Competition created for ${target.teacher_name || 'Teacher'}!`, "success");
+      showToast(`Competition created for ${targetName || 'Teacher'}!`, "success");
       setSessionQuestions([]);
     } catch (e: any) {
-      showToast(e.message, 'error');
+      console.error('Error creating competition:', e);
+      showToast(e.message || 'Failed to create competition', 'error');
     } finally {
       setSaving(false);
     }
@@ -275,14 +290,60 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
 
     setSaving(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // 1. Save to global bank
       const clean = selected.map(({ _id, _valid, _selected, ...q }) => q);
       await saveQuestions(clean);
-      showToast(`Successfully imported ${selected.length} questions`, 'success');
+
+      // 2. If target teacher is set, create a competition
+      if (targetId) {
+        // Find the most common subject/grade in the batch for the competition header
+        const mainSubject = clean[0].subject;
+        const mainGrade = clean[0].grade.toString();
+        const mainTopic = clean[0].topic || 'Imported Arena';
+
+        const { data: comp, error: compErr } = await supabase
+          .from('teacher_competitions')
+          .insert([{
+            teacher_id: targetId,
+            title: `${mainTopic} Battle`,
+            subject: mainSubject,
+            grade: mainGrade,
+            status: 'draft'
+          }])
+          .select()
+          .single();
+
+        if (compErr) throw compErr;
+
+        const questionsToInsert = clean.map(q => ({
+          competition_id: comp.id,
+          question_text: q.question,
+          type: 'mcq',
+          options: [q.option_a, q.option_b, q.option_c, q.option_d],
+          correct_answer: q.correct_answer,
+          points: q.difficulty === 'easy' ? 5 : (q.difficulty === 'hard' ? 15 : 10)
+        }));
+
+        const { error: qErr } = await supabase
+          .from('teacher_competition_questions')
+          .insert(questionsToInsert);
+
+        if (qErr) throw qErr;
+
+        if (initialData?.request_id) {
+          await supabase.from('question_requests').update({ status: 'completed' }).eq('id', initialData.request_id);
+        }
+
+        showToast(`Imported ${selected.length} questions and created competition for ${targetName}`, 'success');
+      } else {
+        showToast(`Successfully imported ${selected.length} questions to bank`, 'success');
+      }
+
       setRawJson('');
       setIsReviewing(false);
       setParsed([]);
     } catch (e: any) {
+      console.error('Import error:', e);
       showToast(e.message || 'Import failed', 'error');
     } finally {
       setSaving(false);
@@ -316,6 +377,96 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
           </button>
         </div>
       </div>
+
+      {/* Target Teacher Toolbar */}
+      <div className="bg-brand-bg border border-brand-border rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-brand-accent/10 flex items-center justify-center text-brand-accent">
+            <Users size={16} />
+          </div>
+          <div>
+            <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Target Recipient</p>
+            <p className="text-xs font-bold text-brand-text">
+              {targetName ? `${targetName} (${targetSchool || 'Manual Info'})` : 'Global Bank (Not sent to teacher)'}
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex gap-2 w-full sm:w-auto">
+          {targetId ? (
+            <button 
+              onClick={() => { setTargetId(''); setTargetName(''); setTargetSchool(''); }}
+              className="px-4 py-2 bg-brand-surface border border-brand-border rounded-xl text-[9px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
+            >
+              Clear Target
+            </button>
+          ) : (
+            <div className="flex gap-2 w-full">
+              <button 
+                onClick={() => { fetchTeachers(); setShowTeacherSearch(true); }}
+                className="flex-1 px-4 py-2 bg-brand-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/10"
+              >
+                Select Teacher
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Teacher Search Modal/Dropdown */}
+      <AnimatePresence>
+        {showTeacherSearch && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-brand-bg border border-brand-border rounded-2xl p-4 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-[10px] font-black uppercase tracking-widest">Teacher Profiles</h3>
+              <button onClick={() => setShowTeacherSearch(false)}><XCircle size={16} className="text-brand-muted" /></button>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+              {teachers.map(t => (
+                <button 
+                  key={t.id}
+                  onClick={() => {
+                    setTargetId(t.id);
+                    setTargetName(t.username);
+                    setTargetSchool(t.school_name || '');
+                    setShowTeacherSearch(false);
+                  }}
+                  className="w-full p-3 bg-brand-surface border border-brand-border rounded-xl text-left hover:border-brand-accent transition-all flex items-center justify-between"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-brand-text">{t.username}</span>
+                    <span className="text-[9px] text-brand-muted uppercase tracking-widest">{t.school_name || 'No School'}</span>
+                  </div>
+                  <PlusCircle size={14} className="text-brand-accent" />
+                </button>
+              ))}
+            </div>
+            <div className="pt-4 border-t border-brand-border space-y-3">
+              <p className="text-[9px] font-bold text-brand-muted uppercase">Or Input Manually</p>
+              <div className="grid grid-cols-2 gap-3">
+                <input 
+                  placeholder="Teacher Name" 
+                  value={targetName} 
+                  onChange={e => setTargetName(e.target.value)}
+                  className="bg-brand-surface border border-brand-border p-3 rounded-xl text-xs"
+                />
+                <input 
+                  placeholder="School Name" 
+                  value={targetSchool} 
+                  onChange={e => setTargetSchool(e.target.value)}
+                  className="bg-brand-surface border border-brand-border p-3 rounded-xl text-xs"
+                />
+              </div>
+              <p className="text-[8px] text-brand-muted italic">Note: Manual input requires finding a teacher UUID to work correctly in the dashboard.</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence mode="wait">
         {activeTab === 'manual' ? (
@@ -377,18 +528,18 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
                 Add More Questions
               </button>
               
-              {(initialData as any)?.teacher_id && (
+              {targetId && (
                 <button 
                   onClick={handleCreateAutoCompetition}
                   disabled={saving || sessionQuestions.length === 0}
                   className="flex-1 bg-emerald-500 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="animate-spin" /> : <Trophy size={18} />}
-                  Finish & Create for Teacher ({sessionQuestions.length})
+                  Finish & Create for {targetName || 'Teacher'} ({sessionQuestions.length})
                 </button>
               )}
 
-              {!(initialData as any)?.teacher_id && (
+              {!targetId && (
                 <button 
                   onClick={handleManualSave}
                   disabled={saving}

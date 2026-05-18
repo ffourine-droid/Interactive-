@@ -693,8 +693,11 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                               setTargetSchool(req.school_name);
                               setTargetRequestId(req.id);
                               setExamSubject(req.subject);
+                              setAssignSubject(req.subject);
                               setExamGrade(req.grade);
+                              setAssignGrade(req.grade);
                               setExamTitle(`${req.topic} - For ${req.teacher_name}`);
+                              setAssignTitle(`${req.topic} - For ${req.teacher_name}`);
                             }}
                             className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
                           >

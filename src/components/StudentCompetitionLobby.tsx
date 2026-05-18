@@ -47,13 +47,19 @@ export const StudentCompetitionLobby: React.FC<{
   const fetchCompetitions = async () => {
     try {
       setLoading(true);
+      
+      // Normalize grade: "Grade 7" -> "7"
+      const numericGrade = grade.replace(/\D/g, '');
+      const gradesToSearch = [grade];
+      if (numericGrade) gradesToSearch.push(numericGrade);
+
       const { data, error } = await supabase
         .from('teacher_competitions')
         .select(`
           *,
           teachers(name)
         `)
-        .eq('grade', grade)
+        .in('grade', gradesToSearch)
         .in('status', ['active', 'marking', 'finished'])
         .order('created_at', { ascending: false });
 
@@ -63,7 +69,7 @@ export const StudentCompetitionLobby: React.FC<{
           const { data: basicData, error: basicErr } = await supabase
             .from('teacher_competitions')
             .select('*')
-            .eq('grade', grade)
+            .in('grade', gradesToSearch)
             .in('status', ['active', 'marking', 'finished'])
             .order('created_at', { ascending: false });
           
@@ -291,9 +297,11 @@ export const StudentCompetitionLobby: React.FC<{
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={`text-[8px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${
-                    comp.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-brand-bg text-brand-muted'
+                    comp.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 
+                    comp.status === 'marking' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                    'bg-brand-bg text-brand-muted border-brand-border'
                   }`}>
-                    {comp.status === 'active' ? 'JOIN NOW' : 'MARKING'}
+                    {comp.status === 'active' ? 'JOIN NOW' : comp.status === 'marking' ? 'MARKING' : 'FINISHED'}
                   </span>
                   <span className="text-[9px] font-bold text-brand-muted uppercase tracking-wider">{comp.subject}</span>
                 </div>
@@ -306,10 +314,16 @@ export const StudentCompetitionLobby: React.FC<{
               <div className="flex items-center justify-between pt-4 border-t border-brand-border">
                 <div className="flex items-center gap-1.5 text-brand-muted">
                   <Clock size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Live Session</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider">
+                    {comp.status === 'finished' ? 'Session Over' : 'Live Session'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-brand-accent font-bold text-[10px] uppercase tracking-wider">
-                  Battle Now <Play size={12} />
+                  {comp.status === 'active' ? (
+                    <>Battle Now <Play size={12} /></>
+                  ) : (
+                    <>View Result <Trophy size={12} /></>
+                  )}
                 </div>
               </div>
             </motion.div>
