@@ -60,8 +60,27 @@ export const StudentCompetitionLobby: React.FC<{
   useEffect(() => {
     if (currentUser) {
       fetchCompetitions();
+
+      // Subscribe to all competition changes for instant updates
+      // This is especially useful for status changes (active -> marking -> finished)
+      // and when new competitions are created.
+      const competitionsChannel = supabase
+        .channel('competitions-global')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'teacher_competitions'
+        }, () => {
+          // Re-fetch to apply all filters correctly
+          fetchCompetitions();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(competitionsChannel);
+      };
     }
-  }, []);
+  }, [currentUser, searchGrade]); // Re-subscribe if grade changes to keep filters accurate
 
   const fetchCompetitions = async () => {
     try {
@@ -258,7 +277,7 @@ export const StudentCompetitionLobby: React.FC<{
           <p className="text-xs text-brand-muted">If some questions were short answer, your final score will be updated after marking.</p>
         </div>
         <button onClick={onBack} className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold uppercase tracking-wider shadow-lg shadow-brand-accent/20">
-          Back to Arena
+          Back to My Work
         </button>
       </div>
     );
@@ -331,8 +350,8 @@ export const StudentCompetitionLobby: React.FC<{
           <ChevronRight className="rotate-180" size={20} />
         </button>
         <div>
-          <h2 className="text-xl font-bold uppercase tracking-tight">Class Battles</h2>
-          <p className="text-[10px] font-semibold text-brand-muted uppercase tracking-wider mt-1">Join teacher-created arenas</p>
+          <h2 className="text-xl font-bold uppercase tracking-tight">My Work</h2>
+          <p className="text-[10px] font-semibold text-brand-muted uppercase tracking-wider mt-1">View your assigned tasks and projects</p>
         </div>
       </div>
 
@@ -383,8 +402,8 @@ export const StudentCompetitionLobby: React.FC<{
           disabled={loading}
           className="w-full bg-brand-text text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
         >
-          {loading ? <Loader2 className="animate-spin" size={18} /> : <Swords size={18} />}
-          Find Arena Battles
+          {loading ? <Loader2 className="animate-spin" size={18} /> : <Users size={18} />}
+          Find My Work
         </button>
       </div>
 
@@ -394,12 +413,12 @@ export const StudentCompetitionLobby: React.FC<{
         ) : !hasSearched ? (
           <div className="py-20 text-center bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] space-y-4">
             <Search size={48} className="mx-auto text-brand-muted/20" />
-            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">Search for your teacher's arena</p>
+            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">Search for your teacher's work</p>
           </div>
         ) : competitions.length === 0 ? (
           <div className="py-20 text-center bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] space-y-4">
             <Sparkles size={48} className="mx-auto text-brand-muted/20" />
-            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">No active class battles found</p>
+            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">No active work found</p>
           </div>
         ) : (
           competitions.map(comp => (
@@ -435,12 +454,12 @@ export const StudentCompetitionLobby: React.FC<{
                 <div className="flex items-center gap-1.5 text-brand-muted">
                   <Clock size={14} />
                   <span className="text-[10px] font-bold uppercase tracking-wider tabular-nums">
-                    {comp.status === 'finished' ? 'Session Over' : 'Live Battle'}
+                    {comp.status === 'finished' ? 'Session Over' : 'Live Group Project'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-brand-accent font-black text-[10px] uppercase tracking-wider">
                   {comp.status === 'active' ? (
-                    <>Battle Now <Play size={12} /></>
+                    <>Start Working <ChevronRight size={12} /></>
                   ) : (
                     <>View Score <Trophy size={12} /></>
                   )}

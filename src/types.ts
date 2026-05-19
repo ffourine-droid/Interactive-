@@ -28,7 +28,7 @@ export type Page =
   | 'create-exam'
   | 'admin-dashboard'
   | 'admin-assignment-creator'
-  | 'arena'
+  | 'groupwork'
   | 'exam-results';
 
 export interface Question {

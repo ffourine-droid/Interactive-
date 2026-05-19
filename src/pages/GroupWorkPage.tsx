@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Swords, ChevronLeft } from 'lucide-react';
+import { Zap, Swords, ChevronLeft, Users } from 'lucide-react';
 import SpeedRoundPage from './SpeedRoundPage';
 import ArenaLobby from '../components/ArenaLobby';
 import LiveGame from '../components/LiveGame';
@@ -51,11 +51,11 @@ type ArenaView = 'hub' | 'speed' | 'lobby' | 'live' | 'results' | 'competitions'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
-interface ArenaPageProps {
+interface GroupWorkPageProps {
   onBack: () => void;
 }
 
-export default function ArenaPage({ onBack }: ArenaPageProps) {
+export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
   const [view, setView] = useState<ArenaView>('hub');
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
@@ -73,11 +73,11 @@ export default function ArenaPage({ onBack }: ArenaPageProps) {
           </button>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-brand-accent rounded-xl flex items-center justify-center shadow-lg shadow-brand-accent/20">
-              <Zap size={16} className="text-white" />
+              <Users size={16} className="text-white" />
             </div>
             <div>
-              <h1 className="text-base font-black text-brand-text uppercase tracking-tighter leading-none">Arena</h1>
-              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Compete & Win</p>
+              <h1 className="text-base font-black text-brand-text uppercase tracking-tighter leading-none">My Work</h1>
+              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Tasks & Projects</p>
             </div>
           </div>
           <div className="w-10" />
@@ -138,20 +138,20 @@ export default function ArenaPage({ onBack }: ArenaPageProps) {
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => setView('competitions')}
-            className="w-full bg-brand-surface border border-amber-500/30 rounded-[2rem] p-6 text-left space-y-3 hover:border-amber-500 transition-all group shadow-lg shadow-amber-500/5"
+            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-brand-accent transition-all group shadow-lg shadow-amber-500/5"
           >
             <div className="flex items-center justify-between">
               <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center group-hover:bg-amber-500/20 transition-colors">
-                <Swords size={28} className="text-amber-500" />
+                <Users size={28} className="text-amber-500" />
               </div>
-              <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest px-2 py-1 bg-amber-500/10 rounded-full">School</span>
+              <span className="text-[9px] font-black text-brand-accent uppercase tracking-widest px-2 py-1 bg-brand-accent/10 rounded-full">School</span>
             </div>
             <div>
-              <h2 className="text-lg font-black text-brand-text tracking-tighter">Class Battles</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">Teacher-led battles · limited time · special trophies</p>
+              <h2 className="text-lg font-black text-brand-text tracking-tighter">Group Projects</h2>
+              <p className="text-xs font-bold text-brand-muted mt-0.5">Teacher-led collaborative work · real-time teaming</p>
             </div>
             <div className="flex gap-2">
-              {['MCQ', 'Text', 'Prizes'].map(tag => (
+              {['Project', 'Collab', 'Trophies'].map(tag => (
                 <span key={tag} className="text-[9px] font-black text-brand-muted px-2 py-1 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
               ))}
             </div>

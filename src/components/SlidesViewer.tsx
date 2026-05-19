@@ -152,7 +152,7 @@ export const SlidesViewer: React.FC<SlidesViewerProps> = ({ slides, audioUrl }) 
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-full bg-black flex flex-col items-center justify-center overflow-hidden select-none ${isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}
+      className={`relative w-full h-full bg-brand-bg flex flex-col items-center justify-center overflow-hidden select-none ${isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

@@ -424,163 +424,121 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   return (
     <div className="min-h-screen bg-brand-bg pb-20">
-      <header className="bg-brand-surface border-b border-brand-border sticky top-0 z-50 px-4 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button 
+      <header className="bg-brand-surface border-b border-brand-border sticky top-0 z-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
               onClick={onBack}
-              className="w-10 h-10 rounded-xl bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-accent transition-colors"
+              className="w-8 h-8 rounded-xl bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted active:text-brand-accent transition-colors shrink-0"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} />
             </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent shrink-0">
                 <UserPersona initial={teacher?.name?.charAt(0) || 'T'} />
               </div>
-              <div className="hidden sm:block">
-                <h1 className="text-lg font-bold tracking-tight leading-none uppercase">HEY {teacher?.name?.split(' ')[0]}</h1>
-                <div className="flex items-center gap-2 text-brand-muted text-[8px] font-semibold uppercase tracking-wider mt-0.5">
+              <div className="min-w-0">
+                <h1 className="text-sm font-black tracking-tight leading-none uppercase truncate">
+                  {teacher?.name?.split(' ')[0]}
+                </h1>
+                <div className="flex items-center gap-1 text-brand-muted text-[8px] font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap">
                   <School size={8} />
-                  {teacher?.school_name}
+                  <span className="truncate max-w-[120px]">{teacher?.school_name}</span>
                 </div>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-500/5 text-red-500 rounded-xl hover:bg-red-500/10 transition-colors text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-            >
-              <LogOut size={14} />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="px-3 py-1.5 bg-red-500/5 text-red-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0"
+          >
+            <LogOut size={12} />
+            Logout
+          </button>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4 py-8 space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
-           <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setActiveView('classes')}
-                className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors ${activeView === 'classes' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
-              >
-                <BookOpen size={14} />
-                My Classes
-              </button>
-              <button 
-                onClick={() => setActiveView('exams')}
-                className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors ${activeView === 'exams' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
-              >
-                <Clock size={14} />
-                Timed Assessments
-              </button>
-              <button 
-                onClick={() => setActiveView('competitions')}
-                className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors ${activeView === 'competitions' ? 'text-brand-accent' : 'text-brand-muted hover:text-brand-accent'}`}
-              >
-                <Trophy size={14} />
-                Arena
-              </button>
-           </div>
-          <div className="flex flex-wrap gap-2">
+      <main className="px-4 py-4 space-y-4">
+        <div className="space-y-3">
+          {/* View toggle */}
+          <div className="flex items-center gap-4 overflow-x-auto no-scrollbar whitespace-nowrap border-b border-brand-border">
+            <button
+              onClick={() => setActiveView('classes')}
+              className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 pb-2 transition-all relative shrink-0 ${
+                activeView === 'classes' ? 'text-brand-accent' : 'text-brand-muted'
+              }`}
+            >
+              <BookOpen size={12} /> Classes
+              {activeView === 'classes' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
+            </button>
+            <button
+              onClick={() => setActiveView('exams')}
+              className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 pb-2 transition-all relative shrink-0 ${
+                activeView === 'exams' ? 'text-brand-accent' : 'text-brand-muted'
+              }`}
+            >
+              <Clock size={12} /> Assessments
+              {activeView === 'exams' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
+            </button>
+            <button
+              onClick={() => setActiveView('competitions')}
+              className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 pb-2 transition-all relative shrink-0 ${
+                activeView === 'competitions' ? 'text-brand-accent' : 'text-brand-muted'
+              }`}
+            >
+              <Trophy size={12} /> Groups
+              {activeView === 'competitions' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
+            </button>
+          </div>
+
+          {/* Action buttons — scroll horizontally, never wrap */}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
             {activeView === 'classes' ? (
               <>
-                <button 
-                  onClick={() => setIsAddingClass(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-brand-accent/10 text-brand-accent border border-brand-accent/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
-                >
-                  <Plus size={14} />
-                  Add New Class
-                </button>
-                <button 
-                  onClick={() => onCreateAssignment()}
-                  className="flex items-center gap-2 px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
-                >
-                  <Plus size={14} />
-                  New Assignment
-                </button>
-                <button 
-                  onClick={onExamsClick}
-                  className="flex items-center gap-2 px-4 py-2 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
-                >
-                  <Plus size={14} />
-                  New Assessment
-                </button>
-                <button 
-                  onClick={() => setShowImportModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
-                >
-                  <Download size={14} />
-                  Import Code
-                </button>
-                <button 
-                  onClick={() => setShowRequestModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
-                >
-                  <MessageCircle size={14} />
-                  Request Admin
-                </button>
+                <ActionBtn onClick={() => setIsAddingClass(true)} icon={<Plus size={12} />} label="New Class" />
+                <ActionBtn onClick={() => onCreateAssignment()} icon={<Plus size={12} />} label="Assignment" accent />
+                <ActionBtn onClick={onExamsClick} icon={<Plus size={12} />} label="Assessment" />
+                <ActionBtn onClick={() => setShowImportModal(true)} icon={<Download size={12} />} label="Import" />
+                <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
               </>
             ) : activeView === 'exams' ? (
               <>
-                <button 
-                  onClick={onExamsClick}
-                  className="flex items-center gap-2 px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
-                >
-                  <Plus size={14} />
-                  Create Assessment
-                </button>
-                <button 
-                  onClick={() => setShowImportModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
-                >
-                  <Download size={14} />
-                  Import Code
-                </button>
-                <button 
-                  onClick={() => setShowRequestModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
-                >
-                  <MessageCircle size={14} />
-                  Request Admin
-                </button>
+                <ActionBtn onClick={onExamsClick} icon={<Plus size={12} />} label="New Assessment" accent />
+                <ActionBtn onClick={() => setShowImportModal(true)} icon={<Download size={12} />} label="Import" />
+                <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
               </>
             ) : (
-                <button 
-                  onClick={() => setShowRequestModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
-                >
-                  <MessageCircle size={14} />
-                  Request Admin
-                </button>
+              <>
+                <ActionBtn onClick={() => {}} icon={<Plus size={12} />} label="New Group" accent />
+                <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
+              </>
             )}
           </div>
         </div>
 
         {recentActivity.length > 0 && (
-          <div className="bg-brand-surface border border-brand-accent/20 p-6 rounded-[2rem] shadow-lg shadow-brand-accent/5">
-             <h3 className="text-[10px] font-bold text-brand-accent uppercase tracking-wider mb-4 flex items-center gap-2">
+          <div className="bg-brand-surface border border-brand-border p-5 rounded-[2rem] shadow-lg shadow-brand-accent/5">
+             <h3 className="text-[10px] font-black text-brand-accent uppercase tracking-wider mb-4 flex items-center gap-2 whitespace-nowrap">
                <Clock size={12} />
                Live Activity Feed
              </h3>
-             <div className="space-y-3">
+             <div className="space-y-2">
                {recentActivity.map((act, i) => (
                  <motion.div 
                    key={act.id || i}
                    initial={{ x: -20, opacity: 0 }}
                    animate={{ x: 0, opacity: 1 }}
-                   className="flex items-center gap-3 bg-brand-bg/50 p-3 rounded-2xl border border-brand-border"
+                   className="flex items-center gap-3 bg-brand-bg/50 p-2.5 rounded-2xl border border-brand-border"
                  >
-                   <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+                   <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 shrink-0">
                      {act.student_name ? <Check size={14} /> : <Clock size={14} />}
                    </div>
-                   <div className="flex-1">
-                      <p className="text-xs font-bold text-brand-text">
-                        <span className="font-bold text-brand-accent">{act.student_name || 'A student'}</span> 
-                        {act.student_name ? ' submitted an assignment' : ' started an assessment attempt'}
+                   <div className="min-w-0">
+                      <p className="text-xs font-bold text-brand-text truncate">
+                        <span className="font-black text-brand-accent">{act.student_name || 'A student'}</span> 
+                        {act.student_name ? ' submitted' : ' started attempt'}
                       </p>
-                      <p className="text-[8px] font-bold text-brand-muted uppercase tracking-wider">
+                      <p className="text-[8px] font-black text-brand-muted uppercase tracking-wider">
                         {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                    </div>
@@ -612,7 +570,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Class Name</label>
+                      <label className="text-[11px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Class Name</label>
                         <input 
                           type="text"
                           placeholder="e.g. 9 North"
@@ -622,7 +580,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Grade Level</label>
+                      <label className="text-[11px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Grade Level</label>
                         <select 
                           className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 appearance-none"
                           value={selectedGrade}
@@ -636,7 +594,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Students (One per line: Name, Index)</label>
+                      <label className="text-[11px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Students (One per line: Name, Index)</label>
                       <textarea 
                         placeholder="John Doe, 0001&#10;Jane Smith, 0002&#10;Ali Omar (auto-indexes)..."
                         className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 min-h-[100px]"
@@ -677,20 +635,20 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: index * 0.05 }}
-                      className={`p-6 rounded-[2rem] border border-brand-border bg-brand-surface shadow-sm hover:border-brand-accent group cursor-pointer transition-all active:scale-[0.98]`}
+                      className={`p-4 rounded-2xl border border-brand-border bg-brand-surface shadow-sm hover:border-brand-accent group cursor-pointer transition-all active:scale-[0.98]`}
                       onClick={() => onViewClass(cls.id, cls.name)}
                     >
                       <div className="flex justify-between items-start mb-4">
                         <div className={`p-3 rounded-2xl ${index % 3 === 0 ? 'bg-blue-500/10 text-blue-500' : index % 3 === 1 ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'} group-hover:scale-110 transition-transform`}>
                           <Users size={24} />
                         </div>
-                        <div className="bg-brand-bg border border-brand-border px-3 py-1.5 rounded-xl">
-                          <span className="text-[10px] font-bold tracking-wider text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
+                        <div className="bg-brand-bg border border-brand-border px-3 py-1.5 rounded-xl whitespace-nowrap">
+                          <span className="text-[10px] font-black tracking-wider text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
                         </div>
                       </div>
-                      <h3 className="text-2xl font-bold tracking-tight mb-6">{cls.name}</h3>
+                      <h3 className="text-lg font-black tracking-tight mb-4 truncate text-brand-text">{cls.name}</h3>
                       <div className="flex items-center justify-between text-brand-muted">
-                        <div className="flex items-center gap-2 text-[10px] font-bold tracking-wider uppercase">
+                        <div className="flex items-center gap-2 text-[10px] font-black tracking-wider uppercase whitespace-nowrap">
                           View Class
                         </div>
                         <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center group-hover:bg-brand-accent group-hover:text-white transition-colors">
@@ -729,18 +687,18 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <div className="p-3 rounded-2xl bg-brand-accent/10 text-brand-accent group-hover:scale-110 transition-transform">
                       <Clock size={24} />
                     </div>
-                    <div className={`px-3 py-1.5 rounded-xl border border-brand-accent/5 ${exam.is_published ? 'bg-green-500/10 text-green-500' : 'bg-brand-bg text-brand-muted'}`}>
-                      <span className="text-[10px] font-black tracking-widest uppercase">{exam.is_published ? 'Published' : 'Draft'}</span>
+                    <div className={`px-3 py-1.5 rounded-xl border border-brand-accent/5 whitespace-nowrap ${exam.is_published ? 'bg-green-500/10 text-green-500' : 'bg-brand-bg text-brand-muted'}`}>
+                      <span className="text-[10px] font-black tracking-wider uppercase">{exam.is_published ? 'Published' : 'Draft'}</span>
                     </div>
                   </div>
                   <h3 className="text-xl font-black tracking-tight mb-2 truncate">{exam.title}</h3>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-4">{exam.subject} • {exam.grade}</p>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-brand-muted mb-4 truncate">{exam.subject} • {exam.grade}</p>
                   
                   {exam.is_published && exam.share_code && (
                     <div className="mb-6 p-3 bg-brand-accent/5 rounded-2xl border border-brand-accent/10 flex items-center justify-between group/code hover:border-brand-accent transition-all"
                          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(exam.share_code); showToast("Code copied!", "success"); }}>
                       <div className="flex flex-col">
-                        <span className="text-[7px] font-black uppercase tracking-widest text-brand-muted mb-0.5">Share Code</span>
+                        <span className="text-[7px] font-black uppercase tracking-wider text-brand-muted mb-0.5 whitespace-nowrap">Share Code</span>
                         <span className="text-xs font-black tracking-[0.2em] text-brand-accent">{exam.share_code}</span>
                       </div>
                       <Plus size={14} className="text-brand-accent/40 group-hover/code:text-brand-accent transition-colors" />
@@ -748,7 +706,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   )}
 
                   <div className="flex items-center justify-between text-brand-muted">
-                    <div className="flex items-center gap-2 text-[10px] font-black tracking-widest uppercase">
+                    <div className="flex items-center gap-2 text-[10px] font-black tracking-wider uppercase whitespace-nowrap">
                       {exam.is_published ? 'View Results' : 'Complete Draft'}
                     </div>
                     <div className="flex gap-2">
@@ -808,12 +766,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <motion.div 
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="relative w-full max-w-md bg-brand-surface border-2 border-brand-accent/20 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md bg-brand-surface border-2 border-brand-accent/20 rounded-[2.5rem] p-5 shadow-2xl overflow-hidden"
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-brand-accent" />
             <div className="flex justify-between items-start mb-8">
               <div>
-                <h2 className="text-2xl font-black tracking-tight uppercase leading-none">Import Shared Work</h2>
+                <h2 className="text-xl font-black tracking-tight uppercase leading-none">Import Shared Work</h2>
                 <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-2">Enter the code provided by admin</p>
               </div>
               <button 
@@ -832,7 +790,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   value={importCode}
                   onChange={(e) => setImportCode(e.target.value.toUpperCase())}
                   placeholder="E.G. AZ-9X2V-KL"
-                  className="w-full bg-brand-bg border-2 border-brand-border rounded-2xl px-6 py-4 font-black tracking-widest text-center text-brand-text outline-none focus:border-brand-accent transition-colors"
+                  className="w-full bg-brand-bg border-2 border-brand-border rounded-2xl px-4 py-3 font-black tracking-widest text-center text-brand-text outline-none focus:border-brand-accent transition-colors"
                 />
               </div>
 
@@ -861,6 +819,26 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   );
 };
 
+const ActionBtn = ({
+  onClick, icon, label, accent, green
+}: {
+  onClick: () => void; icon: React.ReactNode; label: string;
+  accent?: boolean; green?: boolean;
+}) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-1.5 px-3 h-8 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap shrink-0 active:scale-95 transition-all border
+      ${accent
+        ? 'bg-brand-accent text-white border-brand-accent shadow-sm shadow-brand-accent/20'
+        : green
+          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+          : 'bg-brand-surface border-brand-border text-brand-muted'
+      }`}
+  >
+    {icon}{label}
+  </button>
+);
+
 const UserPersona = ({ initial }: { initial: string }) => (
   <div className="w-full h-full rounded-2xl bg-gradient-to-br from-brand-accent to-brand-accent/50 flex items-center justify-center text-white font-black text-xl">
     {initial}
@@ -868,7 +846,3 @@ const UserPersona = ({ initial }: { initial: string }) => (
 );
 
 export default TeacherDashboard;
-
-const ArrowLeftIcon = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-);

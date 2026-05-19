@@ -48,6 +48,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showImportForm, setShowImportForm] = useState(false);
   const [importJson, setImportJson] = useState('');
+  const [students, setStudents] = useState<any[]>([]);
 
   // New Comp Form
   const [title, setTitle] = useState('');
@@ -57,7 +58,13 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
 
   useEffect(() => {
     fetchCompetitions();
+    if (classId) fetchStudents();
   }, [teacherId, classId]);
+
+  const fetchStudents = async () => {
+    const { data } = await supabase.from('students').select('*').eq('class_id', classId);
+    setStudents(data || []);
+  };
 
   const fetchCompetitions = async () => {
     try {
@@ -65,7 +72,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
       let query = supabase
         .from('teacher_competitions')
         .select(`
-          *,
+          id, title, subject, grade, status, created_at,
           teacher_competition_questions!competition_id(id)
         `)
         .eq('teacher_id', teacherId);
@@ -250,19 +257,19 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <button onClick={() => setView('list')} className="text-brand-muted hover:text-brand-accent flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider">
-            <X size={16} /> Cancel
-          </button>
-          <h2 className="text-xl font-bold tracking-tight uppercase">New Competition</h2>
+            <button onClick={() => setView('list')} className="text-brand-muted hover:text-brand-accent flex items-center gap-2 font-black text-[10px] uppercase tracking-wider whitespace-nowrap">
+              <X size={16} /> Cancel
+            </button>
+          <h2 className="text-xl font-bold tracking-tight uppercase">New Group Project</h2>
           <div className="flex gap-2">
             <button 
               onClick={() => setShowRequestForm(true)}
-              className="px-4 py-2 bg-brand-surface border border-brand-border rounded-xl text-[9px] font-bold text-brand-muted uppercase tracking-wider hover:border-brand-accent transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-brand-surface border border-brand-border rounded-xl text-[9px] font-black text-brand-muted uppercase tracking-wider hover:border-brand-accent transition-all flex items-center gap-2 whitespace-nowrap"
             >
               <MessageSquare size={14} /> Request from Admin
             </button>
-            <button onClick={handleCreate} className="bg-brand-accent text-white px-6 py-2 rounded-xl font-bold text-[10px] uppercase tracking-wider shadow-lg shadow-brand-accent/20">
-              {loading ? <Loader2 className="animate-spin" size={14} /> : 'Save as Draft'}
+            <button onClick={handleCreate} className="bg-brand-accent text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider shadow-lg shadow-brand-accent/20 whitespace-nowrap shrink-0">
+              {loading ? <Loader2 className="animate-spin" size={14} /> : 'Publish Project'}
             </button>
           </div>
         </div>
@@ -302,15 +309,15 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
         <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Title</label>
+              <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Title</label>
               <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Science Bowl" className="w-full bg-brand-bg border border-brand-border rounded-xl p-4 font-bold outline-none focus:border-brand-accent/50" />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Subject</label>
+              <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Subject</label>
               <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. Science" className="w-full bg-brand-bg border border-brand-border rounded-xl p-4 font-bold outline-none focus:border-brand-accent/50" />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">Grade</label>
+              <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Grade</label>
               <select 
                 value={grade || 'Grade 7'} 
                 onChange={e => setGrade(e.target.value)} 
@@ -399,11 +406,11 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold tracking-tight uppercase">Class Competitions</h2>
-          <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mt-1">Create engaging battles for your classes</p>
+          <h2 className="text-xl font-bold tracking-tight uppercase">Group Work Manager</h2>
+          <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mt-1">Design collaborative and competitive class projects</p>
         </div>
-        <button onClick={() => setView('create')} className="bg-brand-accent text-white px-6 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-wider shadow-xl shadow-brand-accent/20 flex items-center gap-2 active:scale-95 transition-all">
-          <Plus size={16} /> New Competition
+        <button onClick={() => setView('create')} className="bg-brand-accent text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-wider shadow-xl shadow-brand-accent/20 flex items-center gap-2 active:scale-95 transition-all whitespace-nowrap shrink-0">
+          <Plus size={16} /> New Group Work
         </button>
       </div>
 
@@ -458,7 +465,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-brand-accent font-bold text-[10px] uppercase tracking-wider">
-                  Manage Battle <ChevronRight size={14} />
+                  Manage Project <ChevronRight size={14} />
                 </div>
               </div>
             </motion.div>
@@ -473,28 +480,109 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
   const { showToast } = useToast();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'marking' | 'leaderboard'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'marking' | 'leaderboard'>('overview');
+  const [responsesCount, setResponsesCount] = useState(0);
+  const [groups, setGroups] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem(`groups_${competition.id}`);
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [availableStudents, setAvailableStudents] = useState<any[]>([]);
 
   useEffect(() => {
     fetchParticipants();
-    const interval = setInterval(fetchParticipants, 5000);
-    return () => clearInterval(interval);
+    fetchAvailableStudents();
+    fetchResponsesCount();
+
+    // Subscribe to changes in participants and responses
+    const participantsChannel = supabase
+      .channel(`participants_${competition.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'teacher_competition_participants',
+        filter: `competition_id=eq.${competition.id}`
+      }, () => {
+        fetchParticipants();
+      })
+      .subscribe();
+
+    const responsesChannel = supabase
+      .channel(`responses_${competition.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'teacher_competition_responses',
+        filter: `competition_id=eq.${competition.id}`
+      }, () => {
+        fetchResponsesCount();
+        fetchParticipants(); // Score might have changed after marking
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(participantsChannel);
+      supabase.removeChannel(responsesChannel);
+    };
   }, [competition.id]);
+
+  const fetchResponsesCount = async () => {
+    const { count } = await supabase
+      .from('teacher_competition_responses')
+      .select('*', { count: 'exact', head: true })
+      .eq('competition_id', competition.id)
+      .is('is_correct', null);
+    setResponsesCount(count || 0);
+  };
+
+  const fetchAvailableStudents = async () => {
+    const { data: compData } = await supabase.from('teacher_competitions').select('grade').eq('id', competition.id).single();
+    const { data } = await supabase.from('students').select('*').eq('grade', compData?.grade);
+    setAvailableStudents(data || []);
+  };
 
   const fetchParticipants = async () => {
     try {
       const { data, error } = await supabase
         .from('teacher_competition_participants')
-        .select('*')
+        .select('student_id, student_name, score, total_questions, is_finished, submitted_at, group_name')
         .eq('competition_id', competition.id)
         .order('score', { ascending: false });
 
       if (error) throw error;
       setParticipants(data);
+
+      // Sync groups state from DB data
+      if (data) {
+        const newGroups: Record<string, string> = {};
+        data.forEach(p => {
+          if (p.group_name) newGroups[p.student_id] = p.group_name;
+        });
+        setGroups(prev => ({ ...prev, ...newGroups }));
+      }
     } catch (e: any) {
       console.error(e.message);
     } finally {
-      setLoading(false);
+      if (loading) setLoading(false);
+    }
+  };
+
+  const updateStudentGroup = async (studentId: string, groupName: string | null) => {
+    // Optimistic update
+    setGroups(prev => {
+      const next = { ...prev };
+      if (groupName) next[studentId] = groupName;
+      else delete next[studentId];
+      return next;
+    });
+
+    try {
+      await supabase
+        .from('teacher_competition_participants')
+        .update({ group_name: groupName })
+        .eq('competition_id', competition.id)
+        .eq('student_id', studentId);
+    } catch (e) {
+      console.error("Failed to update group in DB:", e);
     }
   };
 
@@ -547,33 +635,34 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
           </div>
           <div className="flex items-center gap-6 px-6 py-4 bg-brand-bg border border-brand-border rounded-2xl">
             <div className="text-center">
-              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Participants</p>
+              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Students</p>
               <p className="text-xl font-black text-brand-text">{participants.length}</p>
             </div>
             <div className="w-px h-8 bg-brand-border" />
             <div className="text-center">
-              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Avg Score</p>
+              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Avg Progress</p>
               <p className="text-xl font-black text-brand-text">
-                {participants.length > 0 ? Math.round(participants.reduce((acc, p) => acc + p.score, 0) / participants.length) : 0}
+                {participants.length > 0 ? Math.round(participants.reduce((acc, p) => acc + (p.score / (p.total_questions * 10 || 1)) * 100, 0) / participants.length) : 0}%
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex gap-4 border-b border-brand-border pb-px">
+        <div className="flex gap-4 border-b border-brand-border pb-px overflow-x-auto">
           {[
-            { id: 'overview', label: 'Participants', icon: Users },
-            { id: 'marking', label: 'Manual Marking', icon: ListChecks },
-            { id: 'leaderboard', label: 'Leaderboard', icon: Trophy }
+            { id: 'overview', label: 'Students', icon: Users },
+            { id: 'groups', label: 'Group Manager', icon: ListChecks },
+            { id: 'marking', label: 'Review Work', icon: ListChecks },
+            { id: 'leaderboard', label: 'Group Standings', icon: Trophy }
           ].map(tab => (
             <button 
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`pb-4 px-2 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border-b-2 relative ${activeTab === tab.id ? 'border-brand-accent text-brand-accent' : 'border-transparent text-brand-muted hover:text-brand-accent'}`}
+              className={`pb-4 px-2 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border-b-2 relative shrink-0 ${activeTab === tab.id ? 'border-brand-accent text-brand-accent' : 'border-transparent text-brand-muted hover:text-brand-accent'}`}
             >
               <tab.icon size={14} />
               {tab.label}
-              {tab.id === 'marking' && (
+              {tab.id === 'marking' && responsesCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
               )}
             </button>
@@ -588,8 +677,8 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
                   <Users size={32} className="mx-auto mb-2 opacity-20" />
                   <p className="text-[10px] font-black uppercase tracking-widest">Waiting for students to join...</p>
                   <div className="mt-4 p-4 bg-brand-accent/5 rounded-2xl border border-brand-accent/20 max-w-sm mx-auto">
-                    <p className="text-[8px] font-black uppercase tracking-widest text-brand-accent mb-1">Competition Mode</p>
-                    <p className="text-xs font-bold leading-none">Tell students to look for "{competition.title}" in their competition hub.</p>
+                    <p className="text-[8px] font-black uppercase tracking-widest text-brand-accent mb-1">Collaborative Work</p>
+                    <p className="text-xs font-bold leading-none">Tell students to join "{competition.title}" in their dashboard.</p>
                   </div>
                 </div>
               ) : (
@@ -602,9 +691,16 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
                         </div>
                         <div>
                           <p className="font-black text-brand-text">{p.student_name}</p>
-                          <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">
-                            {p.is_finished ? 'Finished' : 'In Progress'} • {p.score} pts
-                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[9px] font-black text-brand-muted uppercase tracking-widest">
+                              {p.is_finished ? 'Submitted' : 'Drafting'}
+                            </span>
+                            {groups[p.student_id] && (
+                              <span className="text-[8px] font-black bg-brand-accent text-white px-2 rounded-full uppercase">
+                                {groups[p.student_id]}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
@@ -617,6 +713,144 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'groups' && (
+            <div className="space-y-6">
+              <div className="bg-brand-accent/5 border border-brand-accent/20 rounded-2xl p-4 flex items-center gap-4">
+                <Users className="text-brand-accent" size={20} />
+                <div>
+                  <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest leading-none mb-1">Collaborative Strategy</p>
+                  <p className="text-xs font-bold">Assign students to groups. Their scores will be aggregated in Group Standings.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2 px-2">
+                    <Users size={14} className="text-brand-muted" /> Unassigned Students
+                  </h3>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    {availableStudents.filter(s => !groups[s.id]).length === 0 ? (
+                      <p className="text-xs text-brand-muted p-4 text-center border-2 border-dashed border-brand-border rounded-2xl italic">No unassigned students</p>
+                    ) : (
+                      availableStudents.filter(s => !groups[s.id]).map(s => (
+                        <div key={s.id} className="bg-brand-bg border border-brand-border rounded-xl p-3 flex items-center justify-between group">
+                          <span className="text-sm font-bold">{s.name}</span>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {['A', 'B', 'C', 'D'].map(g => (
+                              <button 
+                                key={g}
+                                onClick={() => updateStudentGroup(s.id, `Group ${g}`)}
+                                className="w-6 h-6 bg-brand-surface border border-brand-border rounded-md text-[10px] font-black hover:border-brand-accent hover:text-brand-accent"
+                              >
+                                {g}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {['Group A', 'Group B', 'Group C', 'Group D'].map(groupName => {
+                    const members = availableStudents.filter(s => groups[s.id] === groupName);
+                    return (
+                      <div key={groupName} className="space-y-2">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-2 flex justify-between">
+                          {groupName} <span>{members.length} Members</span>
+                        </h4>
+                        <div className="bg-brand-bg border border-brand-border rounded-2xl p-2 min-h-[60px] flex flex-wrap gap-2">
+                          {members.map(s => (
+                            <button 
+                              key={s.id}
+                              onClick={() => updateStudentGroup(s.id, null)}
+                              className="px-3 py-1 bg-brand-accent text-white rounded-lg text-[10px] font-black uppercase flex items-center gap-2 hover:brightness-110"
+                            >
+                              {s.name} <Trash2 size={10} />
+                            </button>
+                          ))}
+                          {members.length === 0 && <p className="text-[9px] text-brand-muted/40 p-2 italic">Select students above...</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'marking' && (
+            <MarkingInterface competitionId={competition.id} />
+          )}
+
+          {activeTab === 'leaderboard' && (
+            <div className="space-y-6">
+              <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 space-y-6">
+                <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3">
+                  <Trophy className="text-amber-500" /> Group Leaderboard
+                </h3>
+                
+                <div className="space-y-4">
+                  {['Group A', 'Group B', 'Group C', 'Group D'].map((groupName, idx) => {
+                    const groupMembers = participants.filter(p => groups[p.student_id] === groupName);
+                    const totalScore = groupMembers.reduce((acc, p) => acc + p.score, 0);
+                    const avgScore = groupMembers.length > 0 ? Math.round(totalScore / groupMembers.length) : 0;
+                    
+                    if (groupMembers.length === 0) return null;
+
+                    return (
+                      <div key={groupName} className={`flex items-center gap-6 p-6 rounded-[2.5rem] border transition-all ${idx === 0 ? 'bg-amber-500/5 border-amber-500/20' : 'bg-brand-bg border-brand-border'}`}>
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg ${idx === 0 ? 'bg-amber-500 text-white shadow-xl shadow-amber-500/20' : 'bg-brand-surface text-brand-muted border border-brand-border'}`}>
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-xl font-black tracking-tight">{groupName}</h4>
+                          <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest mt-1">
+                            {groupMembers.length} Collaborative Members • {avgScore} Avg Pts
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-black text-brand-text tabular-nums leading-none">{totalScore}</p>
+                          <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest mt-1">Total Score</p>
+                        </div>
+                      </div>
+                    );
+                  }).filter(Boolean)}
+
+                  {Object.values(groups).length === 0 && (
+                    <div className="py-20 text-center text-brand-muted">
+                      <Users size={48} className="mx-auto mb-4 opacity-10" />
+                      <p className="text-sm font-bold">Groups have not been assigned yet.</p>
+                      <button onClick={() => setActiveTab('groups')} className="mt-4 text-brand-accent font-black text-[10px] uppercase tracking-widest underline underline-offset-4">Assign Groups Now</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-widest text-brand-muted px-2">Individual Contributions</h3>
+                {participants.map((p, idx) => (
+                  <div key={p.student_id} className={`flex items-center gap-4 p-4 rounded-2xl border bg-brand-bg border-brand-border`}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm bg-brand-surface text-brand-muted border border-brand-border">
+                      {idx + 1}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-black text-brand-text">{p.student_name}</p>
+                      <p className="text-[9px] font-black text-brand-accent uppercase tracking-widest">
+                        {groups[p.student_id] || 'Individual'} • Accuracy: {p.total_questions > 0 ? Math.round((p.score / (p.total_questions * 10)) * 100) : 0}%
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-black text-brand-text tabular-nums leading-none">{p.score}</p>
+                      <p className="text-[8px] font-black text-brand-muted uppercase tracking-widest mt-1">Pts</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

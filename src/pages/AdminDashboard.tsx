@@ -104,7 +104,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
     try {
       const { data, error } = await supabase
         .from('admin_assignments')
-        .select('*')
+        .select('id, title, subject, grade, type, share_code, created_at, target_teacher_name, target_school_name')
         .eq('type', subTab === 'assessments' ? 'assessment' : 'assignment')
         .order('created_at', { ascending: false });
 

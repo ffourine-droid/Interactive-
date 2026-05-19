@@ -38,7 +38,7 @@ export const MaterialManager: React.FC = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('experiments')
-        .select('*')
+        .select('id, title, subject, grade, html_content, slides, created_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;

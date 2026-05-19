@@ -239,7 +239,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
         .from('teacher_competitions')
         .insert([{
           teacher_id: targetId,
-          title: `${form.topic || 'New Arena'} Battle`,
+          title: `${form.topic || 'New Project'} Group Work`,
           subject: form.subject,
           grade: form.grade.toString(),
           status: 'active'
@@ -270,7 +270,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
         await supabase.from('question_requests').update({ status: 'completed' }).eq('id', initialData.request_id);
       }
 
-      showToast(`Competition live for ${targetName || 'Teacher'}!`, "success");
+      showToast(`Group project live for ${targetName || 'Teacher'}!`, "success");
       setSessionQuestions([]);
       setSavedCount(0);
     } catch (e: any) {
@@ -394,8 +394,8 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
             <PlusCircle size={28} />
           </div>
           <div>
-            <h2 className="text-xl font-black tracking-tight uppercase">Arena Question Bank</h2>
-            <p className="text-xs font-bold text-brand-muted uppercase tracking-widest">Populate the speed round arena</p>
+            <h2 className="text-xl font-black tracking-tight uppercase">Group Work Generator</h2>
+            <p className="text-xs font-bold text-brand-muted uppercase tracking-widest">Create collaborative projects for the class</p>
           </div>
         </div>
         <div className="flex gap-2">

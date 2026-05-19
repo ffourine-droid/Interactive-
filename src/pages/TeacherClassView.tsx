@@ -85,7 +85,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [exams, setExams] = useState<any[]>([]);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'arena'>('assignments');
+  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'groupwork'>('assignments');
   const [selectedExamAttempt, setSelectedExamAttempt] = useState<any | null>(null);
   const [gradingExam, setGradingExam] = useState(false);
   const [showParentCodes, setShowParentCodes] = useState(false);
@@ -271,71 +271,71 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     <div className="min-h-screen bg-brand-bg pb-20 p-4">
       <header className="max-w-4xl mx-auto py-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={onBack}
-              className="p-3 bg-brand-surface border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-colors"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <div>
-              <h1 className="text-4xl font-black tracking-tight">{className}</h1>
-              <p className="text-brand-muted text-sm font-bold uppercase tracking-widest mt-1">
-                {viewMode === 'assignments' ? 'Class Overview & Assessments' : viewMode === 'exams' ? 'Timed Assessment Results & Management' : 'Manage Students & Index Nos'}
-              </p>
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={onBack}
+                className="p-2.5 bg-brand-surface border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-colors"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight">{className}</h1>
+                <p className="text-brand-muted text-[10px] font-black uppercase tracking-wider mt-1 whitespace-nowrap">
+                  Class Profile & Results
+                </p>
+              </div>
+            </div>
+
+            <div className="flex bg-brand-surface border border-brand-border p-1 rounded-2xl overflow-x-auto no-scrollbar whitespace-nowrap">
+              <button 
+                onClick={() => setViewMode('assignments')}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 whitespace-nowrap ${viewMode === 'assignments' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <ListTodo size={14} />
+                Work
+              </button>
+              <button 
+                onClick={() => setViewMode('exams')}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 whitespace-nowrap ${viewMode === 'exams' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <Award size={14} />
+                Assessments
+              </button>
+              <button 
+                onClick={() => setViewMode('groupwork')}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 whitespace-nowrap ${viewMode === 'groupwork' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <Users size={14} />
+                Groups
+              </button>
+              <button 
+                onClick={() => setViewMode('students')}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 whitespace-nowrap ${viewMode === 'students' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <Users size={14} />
+                Roster
+              </button>
             </div>
           </div>
 
-          <div className="flex bg-brand-surface border border-brand-border p-1 rounded-2xl overflow-x-auto no-scrollbar">
-            <button 
-              onClick={() => setViewMode('assignments')}
-              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'assignments' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
-            >
-              <ListTodo size={14} />
-              Assessments
-            </button>
-            <button 
-              onClick={() => setViewMode('exams')}
-              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'exams' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
-            >
-              <Award size={14} />
-              Timed Assessments
-            </button>
-            <button 
-              onClick={() => setViewMode('arena')}
-              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'arena' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
-            >
-              <Swords size={14} />
-              Arena
-            </button>
-            <button 
-              onClick={() => setViewMode('students')}
-              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'students' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
-            >
-              <Users size={14} />
-              Students
-            </button>
-          </div>
-        </div>
-
-        {viewMode !== 'students' && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 mb-8">
-            <button 
-              onClick={() => onAddAssignment(classId)}
-              className="px-6 py-3 bg-brand-accent text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add Assessment
-            </button>
-            <button 
-              onClick={() => onAddExam(classId)}
-              className="px-6 py-3 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-2xl text-xs font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New Timed Assessment
-            </button>
-          </div>
-        )}
+          {viewMode !== 'students' && (
+            <div className="flex bg-brand-surface border border-brand-border p-2 rounded-2xl justify-end gap-2 overflow-x-auto no-scrollbar">
+              <button 
+                onClick={() => onAddAssignment(classId)}
+                className="px-4 py-2.5 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-2 shrink-0 whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                Assignment
+              </button>
+              <button 
+                onClick={() => onAddExam(classId)}
+                className="px-4 py-2.5 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm transition-all flex items-center gap-2 shrink-0 whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                Assessment
+              </button>
+            </div>
+          )}
       </header>
 
       <main className="max-w-4xl mx-auto space-y-8">
@@ -343,8 +343,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           <section className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-sm">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h2 className="text-2xl font-black tracking-tight">Student Management</h2>
-                <p className="text-brand-muted text-[10px] font-black uppercase tracking-widest mt-1">Register new students or update names</p>
+                <h2 className="text-2xl font-black tracking-tight text-brand-text">Student Management</h2>
+                <p className="text-brand-muted text-[10px] font-black uppercase tracking-wider mt-1 whitespace-nowrap">Register new students or update names</p>
               </div>
               <button 
                 onClick={() => setShowParentCodes(!showParentCodes)}
@@ -389,7 +389,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               )}
             </AnimatePresence>
           </section>
-        ) : viewMode === 'arena' ? (
+        ) : viewMode === 'groupwork' ? (
           <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-sm">
             <TeacherCompetitionManager 
               teacherId={teacher?.id || ''} 
@@ -399,7 +399,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           </div>
         ) : viewMode === 'exams' ? (
           <div className="space-y-6">
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2 px-2">
+            <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted flex items-center gap-2 px-2 whitespace-nowrap">
               <Award size={14} />
               Published Assessments
             </h2>
@@ -421,7 +421,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                         <div>
                           <h3 className="text-xl font-black tracking-tight">{exam.title}</h3>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-1">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-brand-muted mt-1 truncate">
                             {exam.subject} • {exam.duration_minutes} Mins • {attempts.length} Submissions
                           </p>
                         </div>
@@ -488,7 +488,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             {/* Class Members Summary Section */}
             <section className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-4 px-2">
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
+            <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted flex items-center gap-2 whitespace-nowrap">
               <Users size={14} />
               Class Members ({students.length})
             </h2>
@@ -527,15 +527,15 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                 className="flex flex-wrap gap-2"
               >
                 {students.map(student => (
-                  <div key={student.id} className="flex items-center gap-2 px-4 py-2 bg-brand-bg border border-brand-border rounded-xl">
-                    <div className="w-8 h-8 bg-brand-surface border border-brand-border rounded-lg flex items-center justify-center text-[10px] font-black text-brand-accent font-mono">
+                  <div key={student.id} className="flex items-center gap-2 px-3 py-1.5 bg-brand-bg border border-brand-border rounded-xl shrink-0">
+                    <div className="w-7 h-7 bg-brand-surface border border-brand-border rounded-lg flex items-center justify-center text-[10px] font-black text-brand-accent font-mono">
                       {student.parent_code}
                     </div>
-                    <span className="text-sm font-bold text-brand-muted">{student.name}</span>
+                    <span className="text-xs font-bold text-brand-muted whitespace-nowrap">{student.name}</span>
                   </div>
                 ))}
                 {students.length === 0 && (
-                  <p className="text-xs font-bold text-brand-muted/60 italic p-2 px-4">No students added to this class yet. Add some when creating an assignment!</p>
+                  <p className="text-xs font-bold text-brand-muted/60 italic p-2 px-4">No students added to this class yet.</p>
                 )}
               </motion.div>
             )}
@@ -543,7 +543,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         </section>
 
         <div className="space-y-4">
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2 px-2">
+            <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted flex items-center gap-2 px-2 whitespace-nowrap">
             <FileText size={14} />
             Assessments
           </h2>
@@ -581,7 +581,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                     <div>
                       <h3 className="text-xl font-black tracking-tight">{assignment.title}</h3>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-1">{assignment.subject} • Due {new Date(assignment.due_date).toLocaleDateString()}</p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-brand-muted mt-1 truncate">{assignment.subject} • Due {new Date(assignment.due_date).toLocaleDateString()}</p>
                       
                       {assignment.share_code && (
                         <div className="mt-3 p-2 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-center justify-between group/code hover:border-emerald-500 transition-all inline-flex min-w-[120px]"

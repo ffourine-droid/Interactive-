@@ -28,7 +28,7 @@ const TakeExamPage = lazy(() => import('./pages/TakeExamPage'));
 const CreateExamPage = lazy(() => import('./pages/CreateExamPage'));
 const ExamResultsPage = lazy(() => import('./pages/ExamResultsPage'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
-const ArenaPage = lazy(() => import('./pages/ArenaPage'));
+const GroupWorkPage = lazy(() => import('./pages/GroupWorkPage'));
 
 import { examService } from './services/examService';
 
@@ -374,17 +374,17 @@ function AppContent() {
             <AdminDashboard onBack={() => setCurrentPage('home')} />
           </Suspense>
         );
-      case 'arena':
+      case 'groupwork':
         return (
-          <Suspense fallback={<LoadingFallback text="Entering Arena..." />}>
+          <Suspense fallback={<LoadingFallback text="Entering My Work..." />}>
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              key="arena"
+              key="groupwork"
               className="max-w-[360px] mx-auto min-h-screen"
             >
-              <ArenaPage onBack={() => setCurrentPage('home')} />
+              <GroupWorkPage onBack={() => setCurrentPage('home')} />
             </motion.div>
           </Suspense>
         );
@@ -414,7 +414,7 @@ function AppContent() {
                 }}
                 onAssignmentsClick={() => setCurrentPage('assignments')}
                 onExamsClick={() => setCurrentPage('student-exams')}
-                onArenaClick={() => setCurrentPage('arena')}
+                onArenaClick={() => setCurrentPage('groupwork')}
                 onParentClick={() => setCurrentPage('parent')}
                 selectedClass={selectedClass}
                 setSelectedClass={setSelectedClass}

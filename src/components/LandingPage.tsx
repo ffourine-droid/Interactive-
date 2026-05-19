@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ChevronRight, BookOpen, MessageCircle, BarChart3, GraduationCap } from 'lucide-react';
+import { BookOpen, BarChart3, GraduationCap } from 'lucide-react';
 
 interface LandingPageProps {
   onNavigate: (portal: 'student' | 'teacher' | 'parent') => void;
@@ -8,95 +8,107 @@ interface LandingPageProps {
 
 export default function LandingPage({ onNavigate }: LandingPageProps) {
   return (
-    <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center p-6 sm:p-12 overflow-hidden relative transition-colors duration-500">
-      {/* Background Decorative Elements */}
-      <div className="absolute top-[-10%] right-[-10%] w-[40%] aspect-square bg-[#FF6B2C]/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[40%] aspect-square bg-brand-accent/5 rounded-full blur-3xl" />
-      
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+    <div className="min-h-dvh bg-brand-bg flex flex-col items-center justify-center px-4 py-8 overflow-hidden relative transition-colors duration-500">
+      {/* Subtle background blobs — contained, no overflow */}
+      <div className="absolute top-0 right-0 w-48 h-48 bg-[#FF6B2C]/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-48 h-48 bg-brand-accent/5 rounded-full blur-3xl pointer-events-none" />
+
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-4xl w-full flex flex-col items-center text-center space-y-12 relative z-10"
+        transition={{ duration: 0.4 }}
+        className="w-full max-w-sm flex flex-col items-center text-center gap-6 relative z-10"
       >
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div className="w-14 h-14 bg-[#FF6B2C] rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-[#FF6B2C]/20 transform rotate-12">
-            <GraduationCap size={32} />
+        {/* Logo row */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 bg-[#FF6B2C] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#FF6B2C]/25 rotate-12">
+            <GraduationCap size={22} />
           </div>
           <div className="text-left">
-            <h1 className="text-3xl font-bold text-brand-text tracking-tight leading-none">AziLearn</h1>
-            <p className="text-[10px] text-brand-muted font-semibold uppercase tracking-widest mt-1">Study Materials Platform</p>
+            <h1 className="text-xl font-black text-brand-text tracking-tight leading-none">AziLearn</h1>
+            <p className="text-[9px] text-brand-muted font-bold uppercase tracking-widest mt-0.5">Study Materials Platform</p>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <h2 className="text-4xl sm:text-6xl font-bold text-brand-text tracking-tight leading-[1.1]">
-            Welcome to <br />
-            <span className="text-[#FF6B2C]">AziLearn.</span>
+        {/* Headline */}
+        <div className="space-y-2">
+          <h2 className="text-3xl font-black text-brand-text tracking-tight leading-tight">
+            Welcome to <span className="text-[#FF6B2C]">AziLearn.</span>
           </h2>
-          <p className="text-brand-muted font-medium text-lg max-w-md mx-auto">
-            Select your portal to continue your learning journey
+          <p className="text-brand-muted text-sm font-medium">
+            Select your portal to continue
           </p>
         </div>
 
-        {/* Portal Selection Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
-          {/* Teacher Portal */}
-          <motion.button
-            whileHover={{ y: -8, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+        {/* Portal cards — vertical stack on mobile */}
+        <div className="flex flex-col gap-3 w-full">
+          <PortalCard
             onClick={() => onNavigate('teacher')}
-            className="group relative bg-brand-surface p-8 rounded-3xl border border-brand-border shadow-xl shadow-brand-text/5 hover:border-emerald-500/30 transition-all flex flex-col items-center text-center space-y-4"
-          >
-            <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-              <GraduationCap size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-brand-text">Teacher</h3>
-            <p className="text-sm text-brand-muted font-medium">Manage classes, grade work, and track metrics.</p>
-            <div className="pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 px-3 py-1 bg-emerald-500/5 rounded-full">Enter Portal</span>
-            </div>
-          </motion.button>
-
-          {/* Student Portal */}
-          <motion.button
-            whileHover={{ y: -8, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            icon={<GraduationCap size={22} />}
+            iconBg="bg-emerald-500/10 text-emerald-600"
+            iconHoverBg="group-active:bg-emerald-500 group-active:text-white"
+            label="Teacher"
+            sub="Manage classes, grade work, track metrics."
+            badge="Enter Portal"
+            badgeColor="text-emerald-600 bg-emerald-500/8"
+          />
+          <PortalCard
             onClick={() => onNavigate('student')}
-            className="group relative bg-brand-surface p-8 rounded-3xl border border-brand-border shadow-xl shadow-brand-text/5 hover:border-brand-accent/30 transition-all flex flex-col items-center text-center space-y-4"
-          >
-            <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent group-hover:bg-brand-accent group-hover:text-white transition-colors">
-              <BookOpen size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-brand-text">Student</h3>
-            <p className="text-sm text-brand-muted font-medium">Access materials, take quizzes, and view progress.</p>
-            <div className="pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-accent px-3 py-1 bg-brand-accent/5 rounded-full">Start Learning</span>
-            </div>
-          </motion.button>
-
-          {/* Parent Portal */}
-          <motion.button
-            whileHover={{ y: -8, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            icon={<BookOpen size={22} />}
+            iconBg="bg-brand-accent/10 text-brand-accent"
+            iconHoverBg="group-active:bg-brand-accent group-active:text-white"
+            label="Student"
+            sub="Access materials, take assessments, view progress."
+            badge="Start Learning"
+            badgeColor="text-brand-accent bg-brand-accent/8"
+          />
+          <PortalCard
             onClick={() => onNavigate('parent')}
-            className="group relative bg-brand-surface p-8 rounded-3xl border border-brand-border shadow-xl shadow-brand-text/5 hover:border-[#FF6B2C]/30 transition-all flex flex-col items-center text-center space-y-4"
-          >
-            <div className="w-16 h-16 bg-[#FF6B2C]/10 rounded-2xl flex items-center justify-center text-[#FF6B2C] group-hover:bg-[#FF6B2C] group-hover:text-white transition-colors">
-              <BarChart3 size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-brand-text">Parent</h3>
-            <p className="text-sm text-brand-muted font-medium">Monitor grades, view remarks, and acknowledge tasks.</p>
-            <div className="pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#FF6B2C] px-3 py-1 bg-[#FF6B2C]/5 rounded-full">Check Progress</span>
-            </div>
-          </motion.button>
+            icon={<BarChart3 size={22} />}
+            iconBg="bg-[#FF6B2C]/10 text-[#FF6B2C]"
+            iconHoverBg="group-active:bg-[#FF6B2C] group-active:text-white"
+            label="Parent"
+            sub="Monitor grades, view remarks, acknowledge tasks."
+            badge="Check Progress"
+            badgeColor="text-[#FF6B2C] bg-[#FF6B2C]/8"
+          />
         </div>
 
-        <p className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.3em] pt-8">
-          Version 2.0 • Empowering Education
+        <p className="text-[9px] font-bold text-brand-muted uppercase tracking-[0.25em]">
+          Version 2.0 · Empowering Education
         </p>
       </motion.div>
     </div>
+  );
+}
+
+interface PortalCardProps {
+  onClick: () => void;
+  icon: React.ReactNode;
+  iconBg: string;
+  iconHoverBg: string;
+  label: string;
+  sub: string;
+  badge: string;
+  badgeColor: string;
+}
+
+function PortalCard({ onClick, icon, iconBg, iconHoverBg, label, sub, badge, badgeColor }: PortalCardProps) {
+  return (
+    <button
+      onClick={onClick}
+      className="group w-full bg-brand-surface border border-brand-border rounded-2xl px-4 py-4 flex items-center gap-4 text-left shadow-sm active:scale-[0.98] transition-transform"
+    >
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${iconBg} ${iconHoverBg}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="text-sm font-black text-brand-text leading-tight">{label}</h3>
+        <p className="text-[11px] text-brand-muted font-medium leading-tight mt-0.5 truncate-2">{sub}</p>
+      </div>
+      <span className={`shrink-0 text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full ${badgeColor}`}>
+        {badge}
+      </span>
+    </button>
   );
 }
