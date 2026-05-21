@@ -65,6 +65,59 @@ export const StudentCompetitionLobby: React.FC<{
   const [myResponses, setMyResponses] = useState<any[]>([]);
   const [resultsTab, setResultsTab] = useState<'leaderboard' | 'revision'>('leaderboard');
 
+  const [isEditingSquad, setIsEditingSquad] = useState(false);
+  const [customSquadInput, setCustomSquadInput] = useState('');
+  const [selectedSquadPreset, setSelectedSquadPreset] = useState('');
+
+  const handleJoinSquad = async (groupName: string | null) => {
+    if (!activeComp || !currentUser) return;
+    try {
+      const studentId = currentUser.id;
+      const studentName = currentUser.name;
+
+      const { data: existingPart } = await supabase
+        .from('teacher_competition_participants')
+        .select('*')
+        .eq('competition_id', activeComp.id)
+        .eq('student_id', studentId)
+        .maybeSingle();
+
+      if (existingPart) {
+        const { error: pErr } = await supabase
+          .from('teacher_competition_participants')
+          .update({
+            group_name: groupName
+          })
+          .eq('competition_id', activeComp.id)
+          .eq('student_id', studentId);
+
+        if (pErr) throw pErr;
+      } else {
+        const { error: pErr } = await supabase
+          .from('teacher_competition_participants')
+          .insert([{
+            competition_id: activeComp.id,
+            student_id: studentId,
+            student_name: studentName,
+            score: 0,
+            total_questions: questions.length || 0,
+            is_finished: false,
+            group_name: groupName
+          }]);
+
+        if (pErr) throw pErr;
+      }
+
+      showToast(groupName ? `Squad set to: ${groupName}! 🚀` : 'Switched to Solo mode.', 'success');
+      setUserGroup(groupName);
+      setIsEditingSquad(false);
+      setCustomSquadInput('');
+      setSelectedSquadPreset('');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update squad', 'error');
+    }
+  };
+
   useEffect(() => {
     if (!activeComp || !currentUser) return;
 
@@ -933,56 +986,142 @@ export const StudentCompetitionLobby: React.FC<{
               </div>
             </div>
 
-            {userGroup ? (
+            {isEditingSquad ? (
               <div className="space-y-4">
-                <div className="bg-brand-bg border border-brand-border rounded-2xl p-3 text-center space-y-1">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Your Assigned Team</p>
-                  <h5 className="text-xs font-black text-brand-accent tracking-tight truncate" title={userGroup}>
-                    {userGroup}
-                  </h5>
-                  <p className="text-[9px] font-bold text-brand-text/80">
-                    Squad Total: <span className="font-black text-brand-accent">{teammates.reduce((sum, tm) => sum + (tm.score || 0), 0)} pts</span>
-                  </p>
+                <div className="space-y-1">
+                  <span className="block text-[8px] font-black uppercase tracking-widest text-brand-muted">Select Existing Squad:</span>
+                  <select
+                    value={selectedSquadPreset}
+                    onChange={e => {
+                      setSelectedSquadPreset(e.target.value);
+                      setCustomSquadInput('');
+                    }}
+                    className="w-full bg-brand-bg border border-brand-border rounded-xl p-2.5 text-xs font-bold text-brand-text focus:border-brand-accent outline-none"
+                  >
+                    <option value="">-- Choose Existing Squad --</option>
+                    {Array.from(new Set([
+                      ...allParticipants.map(p => p.group_name).filter(Boolean),
+                      'Group A', 'Group B', 'Group C', 'Group D'
+                    ])).map((gName) => (
+                      <option key={gName} value={gName}>{gName}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">📜 Team Slogan / Quest:</p>
-                  <p className="text-[10px] font-medium leading-relaxed italic bg-brand-bg p-3 border border-brand-border rounded-xl">
-                    "{activeGoal}"
-                  </p>
+                  <span className="block text-[8px] font-black uppercase tracking-widest text-brand-muted">Or Create Custom Squad:</span>
+                  <input
+                    type="text"
+                    value={customSquadInput}
+                    onChange={e => {
+                      setCustomSquadInput(e.target.value);
+                      setSelectedSquadPreset('');
+                    }}
+                    placeholder="Enter Custom Squad Name"
+                    className="w-full bg-brand-bg border border-brand-border rounded-xl p-2.5 text-xs text-brand-text focus:border-brand-accent outline-none font-bold"
+                  />
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">👥 Team Roster Scoreboard:</p>
-                  <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
-                    {teammates.map((tm) => {
-                      const isMe = tm.student_id === currentUser?.id;
-                      return (
-                        <div 
-                          key={tm.student_id} 
-                          className={`flex items-center justify-between px-3 py-1.5 rounded-xl border text-[10px] font-bold ${
-                            isMe ? 'bg-brand-accent/5 border-brand-accent text-brand-accent' : 'bg-brand-bg border-brand-border text-brand-text'
-                          }`}
-                        >
-                          <span className="truncate max-w-[90px]">{tm.student_name} {isMe && '(You)'}</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-black text-[10px]">{tm.score || 0} pts</span>
-                            <span className={`w-1.5 h-1.5 rounded-full ${tm.is_finished ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingSquad(false);
+                      setCustomSquadInput('');
+                      setSelectedSquadPreset('');
+                    }}
+                    className="py-2 px-3 border border-brand-border rounded-xl text-[9px] font-black text-brand-muted uppercase tracking-wider"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const finalName = customSquadInput.trim() || selectedSquadPreset;
+                      if (!finalName) {
+                        showToast('Select or type a squad name', 'error');
+                        return;
+                      }
+                      handleJoinSquad(finalName);
+                    }}
+                    className="py-2 px-3 bg-brand-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm"
+                  >
+                    Join Squad
+                  </button>
                 </div>
+
+                {userGroup && (
+                  <button
+                    type="button"
+                    onClick={() => handleJoinSquad(null)}
+                    className="w-full py-2 border border-red-500/30 text-red-500 hover:bg-red-500/5 rounded-xl text-[9px] font-black uppercase tracking-wider"
+                  >
+                    Switch to Solo Mode
+                  </button>
+                )}
               </div>
             ) : (
-              <div className="py-6 text-center space-y-2 text-brand-muted">
-                <AlertCircle size={24} className="mx-auto opacity-40 text-brand-muted" />
-                <h5 className="text-[10px] font-black uppercase tracking-wider">Solo Mode</h5>
-                <p className="text-[9px] font-semibold leading-relaxed">
-                  You are working independently on this project. Ask your teacher to assign you to a custom squad!
-                </p>
-              </div>
+              <>
+                {userGroup ? (
+                  <div className="space-y-4">
+                    <div className="bg-brand-bg border border-brand-border rounded-2xl p-3 text-center space-y-1">
+                      <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Your Assigned Team</p>
+                      <h5 className="text-xs font-black text-brand-accent tracking-tight truncate" title={userGroup}>
+                        {userGroup}
+                      </h5>
+                      <p className="text-[9px] font-bold text-brand-text/80">
+                        Squad Total: <span className="font-black text-brand-accent">{teammates.reduce((sum, tm) => sum + (tm.score || 0), 0)} pts</span>
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">📜 Team Slogan / Quest:</p>
+                      <p className="text-[10px] font-medium leading-relaxed italic bg-brand-bg p-3 border border-brand-border rounded-xl">
+                        "{activeGoal}"
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">👥 Team Roster Scoreboard:</p>
+                      <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                        {teammates.map((tm) => {
+                          const isMe = tm.student_id === currentUser?.id;
+                          return (
+                            <div 
+                              key={tm.student_id} 
+                              className={`flex items-center justify-between px-3 py-1.5 rounded-xl border text-[10px] font-bold ${
+                                isMe ? 'bg-brand-accent/5 border-brand-accent text-brand-accent' : 'bg-brand-bg border-brand-border text-brand-text'
+                              }`}
+                            >
+                              <span className="truncate max-w-[90px]">{tm.student_name} {isMe && '(You)'}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-black text-[10px]">{tm.score || 0} pts</span>
+                                <span className={`w-1.5 h-1.5 rounded-full ${tm.is_finished ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-6 text-center space-y-2 text-brand-muted">
+                    <AlertCircle size={24} className="mx-auto opacity-40 text-brand-muted" />
+                    <h5 className="text-[10px] font-black uppercase tracking-wider">Solo Mode</h5>
+                    <p className="text-[9px] font-semibold leading-relaxed">
+                      You are working independently on this project. Click the button below to join or create a team!
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsEditingSquad(true)}
+                  className="w-full mt-2 py-2.5 bg-brand-accent/10 border border-brand-accent/20 hover:bg-brand-accent/20 text-brand-accent rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                >
+                  {userGroup ? "Change / Leave Squad" : "Choose / Join a Squad"}
+                </button>
+              </>
             )}
           </div>
         </div>

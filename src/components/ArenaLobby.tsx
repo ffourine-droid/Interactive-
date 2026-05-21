@@ -330,6 +330,22 @@ export default function ArenaLobby({ onBack, onGameStart }: ArenaLobbyProps) {
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
+  const togglePlayerTeam = async (playerRow: RoomPlayer) => {
+    if (!room) return;
+    try {
+      const nextTeam = playerRow.team === teams[0] ? teams[1] : teams[0];
+      const { error } = await supabase
+        .from('arena_room_players')
+        .update({ team: nextTeam })
+        .eq('id', playerRow.id);
+
+      if (error) throw error;
+      showToast(`Switched to ${nextTeam}! 🦁`, 'success');
+    } catch (e: any) {
+      showToast('Could not change team', 'error');
+    }
+  };
+
   const isHost = room?.host_username === username;
 
   return (
@@ -500,9 +516,29 @@ export default function ArenaLobby({ onBack, onGameStart }: ArenaLobbyProps) {
                       <div className="w-8 h-8 bg-brand-accent/10 rounded-lg flex items-center justify-center text-brand-accent font-black text-xs uppercase">
                         {p.username[0]}
                       </div>
-                      <span className="text-sm font-black text-brand-text">{p.username}</span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-brand-text">{p.username}</span>
+                        {room?.type === 'team' && p.team && (
+                          <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 mt-0.5 rounded-md text-center max-w-max ${
+                            p.team === teams[0] ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                          }`}>
+                            🦁 {p.team}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {p.username === room.host_username && <Crown size={14} className="text-amber-500" />}
+                    <div className="flex items-center gap-2">
+                      {room?.type === 'team' && p.username === username && (
+                        <button
+                          type="button"
+                          onClick={() => togglePlayerTeam(p)}
+                          className="px-2.5 py-1 bg-brand-accent text-white font-black text-[8px] uppercase tracking-wider rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-sm shadow-brand-accent/20"
+                        >
+                          Switch ⇄
+                        </button>
+                      )}
+                      {p.username === room.host_username && <Crown size={14} className="text-amber-500 text-right" />}
+                    </div>
                   </motion.div>
                 ))}
               </div>
