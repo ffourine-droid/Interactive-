@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, CheckCircle2, AlertCircle,
   Loader2, Play, Pause, ListChecks, MessageSquare,
   Award, ShieldCheck, HelpCircle, Save, X, FileJson,
-  Wand2, Sparkles, Edit
+  Wand2, Sparkles, Edit, BookOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -496,6 +496,8 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
     return saved ? JSON.parse(saved) : {};
   });
   const [availableStudents, setAvailableStudents] = useState<any[]>([]);
+  const [compQuestions, setCompQuestions] = useState<any[]>([]);
+  const [questionStats, setQuestionStats] = useState<Record<string, { correct: number, total: number }>>({});
 
   // Playful Group States
   const [activeTheme, setActiveTheme] = useState<'standard' | 'space' | 'wildlife' | 'magic'>('standard');
@@ -509,10 +511,41 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
   const [editingGroupIdx, setEditingGroupIdx] = useState<number | null>(null);
   const [tempGroupName, setTempGroupName] = useState('');
 
+  const fetchQuestionsAndStats = async () => {
+    try {
+      const { data: qs } = await supabase
+        .from('teacher_competition_questions')
+        .select('*')
+        .eq('competition_id', competition.id);
+      
+      setCompQuestions(qs || []);
+
+      const { data: resp } = await supabase
+        .from('teacher_competition_responses')
+        .select('question_id, is_correct')
+        .eq('competition_id', competition.id);
+
+      const stats: Record<string, { correct: number, total: number }> = {};
+      resp?.forEach(r => {
+        if (!stats[r.question_id]) {
+          stats[r.question_id] = { correct: 0, total: 0 };
+        }
+        stats[r.question_id].total++;
+        if (r.is_correct === true) {
+          stats[r.question_id].correct++;
+        }
+      });
+      setQuestionStats(stats);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     fetchParticipants();
     fetchAvailableStudents();
     fetchResponsesCount();
+    fetchQuestionsAndStats();
 
     // Subscribe to changes in participants and responses
     const participantsChannel = supabase
@@ -537,6 +570,7 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
       }, () => {
         fetchResponsesCount();
         fetchParticipants(); // Score might have changed after marking
+        fetchQuestionsAndStats();
       })
       .subscribe();
 
@@ -1242,32 +1276,53 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
                   </div>
                 ))}
               </div>
-            </div>
-          )}
 
-          {activeTab === 'marking' && (
-            <MarkingInterface competitionId={competition.id} />
-          )}
-
-          {activeTab === 'leaderboard' && (
-            <div className="space-y-3">
-              {participants.map((p, idx) => (
-                <div key={p.student_id} className={`flex items-center gap-4 p-4 rounded-2xl border ${idx === 0 ? 'bg-amber-500/5 border-amber-500/30' : 'bg-brand-bg border-brand-border'}`}>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm ${idx === 0 ? 'bg-amber-500 text-white' : idx === 1 ? 'bg-slate-300 text-slate-700' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-brand-surface text-brand-muted border border-brand-border'}`}>
-                    {idx + 1}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-black text-brand-text">{p.student_name}</p>
-                    <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">
-                      Accuracy: {p.total_questions > 0 ? Math.round((p.score / (p.total_questions * 10)) * 100) : 0}%
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-black text-brand-text tabular-nums leading-none">{p.score}</p>
-                    <p className="text-[8px] font-black text-brand-muted uppercase tracking-widest mt-1">Total Pts</p>
-                  </div>
+              {/* Classroom Revision & Question Insights */}
+              <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 space-y-6">
+                <div className="flex items-center gap-3">
+                  <BookOpen className="text-brand-accent" size={20} />
+                  <h3 className="text-xl font-black uppercase tracking-tight">📚 Class Revision & Question Insights</h3>
                 </div>
-              ))}
+                <p className="text-xs font-bold text-brand-muted">Review which concepts students mastered or found difficult during the live project.</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {compQuestions.map((q, qIdx) => {
+                    const stats = questionStats[q.id] || { correct: 0, total: 0 };
+                    const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+                    
+                    // Determine accuracy branding
+                    const brandColor = accuracy >= 70 
+                      ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' 
+                      : accuracy >= 40 
+                        ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' 
+                        : 'bg-red-500/10 text-red-500 border-red-500/20';
+
+                    return (
+                      <div key={q.id} className="bg-brand-bg border border-brand-border rounded-3xl p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Question {qIdx + 1} ({q.type.toUpperCase()})</span>
+                          <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border ${brandColor}`}>
+                            Class Accuracy: {accuracy}% ({stats.correct}/{stats.total})
+                          </span>
+                        </div>
+
+                        <p className="font-bold text-brand-text leading-snug text-sm">{q.question_text}</p>
+                        
+                        <div className="pt-2 border-t border-brand-border/40 text-xs font-bold">
+                          <span className="text-[9px] font-black text-brand-muted uppercase tracking-widest block mb-1">Expected Correct Answer:</span>
+                          <span className="text-emerald-600">{q.correct_answer}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {compQuestions.length === 0 && (
+                    <div className="col-span-2 py-12 text-center text-brand-muted border border-dashed border-brand-border rounded-3xl">
+                      No questions to show insights for.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

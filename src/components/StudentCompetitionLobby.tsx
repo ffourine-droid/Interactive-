@@ -61,6 +61,9 @@ export const StudentCompetitionLobby: React.FC<{
   const [userGroup, setUserGroup] = useState<string | null>(null);
   const [teammates, setTeammates] = useState<any[]>([]);
   const [activeGoal, setActiveGoal] = useState<string>('Work together to solve questions correctly! 🚀');
+  const [allParticipants, setAllParticipants] = useState<any[]>([]);
+  const [myResponses, setMyResponses] = useState<any[]>([]);
+  const [resultsTab, setResultsTab] = useState<'leaderboard' | 'revision'>('leaderboard');
 
   useEffect(() => {
     if (!activeComp || !currentUser) return;
@@ -69,10 +72,32 @@ export const StudentCompetitionLobby: React.FC<{
       try {
         const { data: part } = await supabase
           .from('teacher_competition_participants')
-          .select('group_name')
+          .select('group_name, is_finished')
           .eq('competition_id', activeComp.id)
           .eq('student_id', currentUser.id)
           .maybeSingle();
+
+        if (part?.is_finished) {
+          setHasFinished(true);
+        }
+
+        // Fetch all participants for the leaderboard
+        const { data: allParts } = await supabase
+          .from('teacher_competition_participants')
+          .select('student_id, student_name, score, is_finished, group_name')
+          .eq('competition_id', activeComp.id)
+          .order('score', { ascending: false });
+        
+        setAllParticipants(allParts || []);
+
+        // Also fetch my responses if finished or marking or finished, for revision
+        const { data: myResp } = await supabase
+          .from('teacher_competition_responses')
+          .select('*')
+          .eq('competition_id', activeComp.id)
+          .eq('student_id', currentUser.id);
+        
+        setMyResponses(myResp || []);
 
         const goal = localStorage.getItem(`group_goal_${activeComp.id}`);
         if (goal) {
@@ -112,8 +137,21 @@ export const StudentCompetitionLobby: React.FC<{
       })
       .subscribe();
 
+    const responsesChannel = supabase
+      .channel(`student_responses_${activeComp.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'teacher_competition_responses',
+        filter: `competition_id=eq.${activeComp.id}`
+      }, () => {
+        fetchTeamInfo();
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(responsesChannel);
     };
   }, [activeComp?.id, currentUser?.id]);
 
@@ -274,6 +312,12 @@ export const StudentCompetitionLobby: React.FC<{
         if (pErr) throw pErr;
       }
 
+      if (existingPart?.is_finished || comp.status === 'marking' || comp.status === 'finished') {
+        setHasFinished(true);
+      } else {
+        setHasFinished(false);
+      }
+
       setQuestions(qs);
       setActiveComp(comp);
       setCurrentIdx(0);
@@ -358,19 +402,367 @@ export const StudentCompetitionLobby: React.FC<{
   };
 
   if (hasFinished) {
+    // Group analysis
+    const groupMap: Record<string, { members: any[], totalScore: number, finishedCount: number }> = {};
+    
+    // Populate groups from allParticipants
+    allParticipants.forEach(p => {
+      if (p.group_name) {
+        if (!groupMap[p.group_name]) {
+          groupMap[p.group_name] = { members: [], totalScore: 0, finishedCount: 0 };
+        }
+        groupMap[p.group_name].members.push(p);
+        groupMap[p.group_name].totalScore += p.score || 0;
+        if (p.is_finished) {
+          groupMap[p.group_name].finishedCount += 1;
+        }
+      }
+    });
+
+    const rankedGroups = Object.entries(groupMap)
+      .map(([name, data]) => {
+        const avg = data.members.length > 0 ? Math.round(data.totalScore / data.members.length) : 0;
+        return {
+          name,
+          totalScore: data.totalScore,
+          avgScore: avg,
+          membersCount: data.members.length,
+          finishedCount: data.finishedCount,
+          members: data.members
+        };
+      })
+      .sort((a, b) => b.totalScore - a.totalScore); // Sort by total score
+
+    const sortedPlayers = [...allParticipants].sort((a, b) => (b.score || 0) - (a.score || 0));
+    
+    // Find current student's score and group
+    const myPartInfo = allParticipants.find(p => p.student_id === currentUser?.id);
+
+    // Winning Team Calculation (only if status is finished)
+    const winningGroup = rankedGroups.length > 0 ? rankedGroups[0] : null;
+
     return (
-      <div className="flex flex-col items-center justify-center p-8 space-y-6 text-center py-20">
-        <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center shadow-xl shadow-emerald-500/20">
-          <CheckCircle2 size={48} className="text-white" />
+      <div className="min-h-screen bg-brand-bg p-6 max-w-5xl mx-auto space-y-6">
+        {/* Header Ribbon */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-sm">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-[9px] font-black uppercase tracking-wider px-3 py-1 rounded-full border ${
+                activeComp?.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 
+                activeComp?.status === 'marking' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse' :
+                'bg-brand-text/10 text-brand-text border-brand-text/20'
+              }`}>
+                {activeComp?.status === 'active' ? '● Live Project' : activeComp?.status === 'marking' ? '⏳ Teacher Marking...' : '🏆 Session Concluded'}
+              </span>
+              <span className="text-[10px] font-black text-brand-accent uppercase tracking-widest bg-brand-accent/5 px-2.5 py-1 rounded-lg">
+                ✨ {activeComp?.subject}
+              </span>
+            </div>
+            <h2 className="text-3xl font-black tracking-tight uppercase leading-none">{activeComp?.title}</h2>
+            <p className="text-xs font-bold text-brand-muted">
+              Teacher: <span className="text-brand-text">{activeComp?.teacher_name || 'Academic Leader'}</span> • School: <span className="text-brand-text">{activeComp?.school_name || 'Academic Core'}</span>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={onBack}
+              className="px-6 py-4 bg-brand-bg hover:bg-brand-border/40 border border-brand-border text-brand-text font-black text-xs uppercase tracking-widest rounded-2xl transition-all"
+            >
+              Exit Project
+            </button>
+          </div>
         </div>
-        <h2 className="text-3xl font-bold tracking-tighter uppercase">Well Done!</h2>
-        <div className="space-y-2">
-          <p className="text-brand-muted font-bold">Your responses have been sent to your teacher.</p>
-          <p className="text-xs text-brand-muted">If some questions were short answer, your final score will be updated after marking.</p>
+
+        {/* Live Grading Pulse Banner */}
+        {activeComp?.status === 'marking' && (
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-[2rem] p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-inner">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20 animate-pulse">
+                <Clock size={24} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-black uppercase tracking-tight text-amber-500 text-sm">🎒 Live Teacher Review is Active</h4>
+                <p className="text-xs font-bold text-brand-muted">Your teacher is graded-marking short answer responses. Group Standings update automatically!</p>
+              </div>
+            </div>
+            <span className="text-[10px] uppercase font-black tracking-widest text-amber-600 bg-amber-500/10 px-4 py-2 border border-amber-500/20 rounded-full animate-bounce">
+              Live Scores Active 🚀
+            </span>
+          </div>
+        )}
+
+        {/* Finished / Revision Banner */}
+        {activeComp?.status === 'finished' && (
+          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-[2rem] p-6 flex flex-col items-center text-center justify-center gap-3">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20 shadow-xl shadow-emerald-500/10">
+              <Trophy size={32} />
+            </div>
+            <div className="space-y-1">
+              <h4 className="font-black uppercase tracking-tight text-emerald-500 text-xl">🎉 Revision and Review Session Open</h4>
+              <p className="text-xs font-bold text-brand-muted max-w-lg">The competition is finished! Compare results across teams, see individual accomplishments, and study correct answers below.</p>
+            </div>
+            {winningGroup && (
+              <div className="mt-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                <Star className="fill-amber-500" size={12} /> Winner: Group {winningGroup.name} with {winningGroup.totalScore} Pts! <Star className="fill-amber-500" size={12} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Selection */}
+        <div className="flex bg-brand-surface border border-brand-border p-1.5 rounded-2xl max-w-md mx-auto">
+          <button 
+            type="button"
+            onClick={() => setResultsTab('leaderboard')}
+            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${
+              resultsTab === 'leaderboard' 
+                ? 'bg-brand-text text-white shadow-lg' 
+                : 'text-brand-muted hover:text-brand-text'
+            }`}
+          >
+            <Trophy size={14} /> Group Standings
+          </button>
+          <button 
+            type="button"
+            onClick={() => setResultsTab('revision')}
+            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${
+              resultsTab === 'revision' 
+                ? 'bg-brand-text text-white shadow-lg' 
+                : 'text-brand-muted hover:text-brand-text'
+            }`}
+          >
+            <BookOpen size={14} /> Question Revision
+          </button>
         </div>
-        <button onClick={onBack} className="w-full bg-brand-accent text-white py-4 rounded-2xl font-bold uppercase tracking-wider shadow-lg shadow-brand-accent/20">
-          Back to My Work
-        </button>
+
+        {/* Contents */}
+        <AnimatePresence mode="wait">
+          {resultsTab === 'leaderboard' ? (
+            <motion.div 
+              key="leaderboard"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="space-y-6"
+            >
+              {/* Team Leaderboard Pod */}
+              <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-black uppercase tracking-tight flex items-center gap-2.5">
+                    <Users className="text-brand-accent" /> Live Team Leaderboard
+                  </h3>
+                  <span className="text-[10px] font-black text-brand-muted bg-brand-bg px-3 py-1 border border-brand-border rounded-lg uppercase">
+                    {rankedGroups.length} Active Teams
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {rankedGroups.map((group, idx) => {
+                    const isMyTeam = userGroup === group.name;
+
+                    return (
+                      <div 
+                        key={group.name} 
+                        className={`flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-[2rem] border transition-all ${
+                          isMyTeam 
+                            ? 'bg-brand-accent/5 border-brand-accent ring-2 ring-brand-accent/10' 
+                            : idx === 0 
+                              ? 'bg-amber-500/5 border-amber-500/20' 
+                              : 'bg-brand-bg border-brand-border'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${
+                            idx === 0 
+                              ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' 
+                              : isMyTeam 
+                                ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20'
+                                : 'bg-brand-surface text-brand-muted border border-brand-border'
+                          }`}>
+                            {idx === 0 ? '👑' : idx + 1}
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-lg font-black tracking-tight">{group.name}</h4>
+                              {isMyTeam && (
+                                <span className="bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
+                                  Your Team
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-bold text-brand-muted tracking-wide mt-1">
+                              {group.membersCount} Collaborative Teammates • {group.avgScore} Avg Pts per Player
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-8 pl-16 md:pl-0">
+                          <div className="text-right">
+                            <p className="text-[8px] font-black tracking-widest text-brand-muted uppercase">Finished Rate</p>
+                            <p className="text-xs font-black text-brand-text mt-1">{group.finishedCount}/{group.membersCount} Players</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[8px] font-black tracking-widest text-brand-muted uppercase">Group Total</p>
+                            <p className={`text-3xl font-black tabular-nums leading-none ${isMyTeam ? 'text-brand-accent' : idx === 0 ? 'text-amber-500' : 'text-brand-text'}`}>
+                              {group.totalScore}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {rankedGroups.length === 0 && (
+                    <div className="py-20 text-center text-brand-muted border border-dashed border-brand-border rounded-[2rem] bg-brand-bg">
+                      <Users size={48} className="mx-auto mb-4 opacity-10" />
+                      <p className="text-xs font-black uppercase tracking-widest">Waiting for team distributions or active entries...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Roster list */}
+              <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 space-y-6">
+                <h3 className="text-lg font-black uppercase tracking-tight">👤 Individual Standings</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {sortedPlayers.map((player, idx) => {
+                    const isMe = player.student_id === currentUser?.id;
+                    const accuracy = player.total_questions > 0 ? Math.round((player.score / (player.total_questions * 10)) * 100) : 0;
+
+                    return (
+                      <div 
+                        key={player.student_id} 
+                        className={`flex items-center justify-between gap-4 p-4 rounded-2xl border transition-all ${
+                          isMe 
+                            ? 'bg-brand-text text-white border-brand-text shadow-lg' 
+                            : 'bg-brand-bg border-brand-border'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                            isMe 
+                              ? 'bg-white text-brand-text' 
+                              : idx === 0 
+                                ? 'bg-amber-500 text-white shadow-sm' 
+                                : 'bg-brand-surface text-brand-muted border border-brand-border'
+                          }`}>
+                            {idx + 1}
+                          </div>
+                          <div>
+                            <p className="font-black text-sm">{player.student_name}{isMe && " (You)"}</p>
+                            <p className={`text-[9px] font-bold ${isMe ? 'text-white/75' : 'text-brand-muted'}`}>
+                              {player.group_name || 'No Group'} • Accuracy: {accuracy}%
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-xl font-black tabular-nums leading-none">{player.score || 0}</p>
+                          <p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${isMe ? 'text-white/60' : 'text-brand-muted'}`}>Pts</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div 
+              key="revision"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="space-y-6"
+            >
+              <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-black uppercase tracking-tight flex items-center gap-2.5">
+                    <BookOpen className="text-brand-accent" /> Question Review & Revision
+                  </h3>
+                  <span className="text-[10px] font-black text-brand-muted bg-brand-bg px-3 py-1 border border-brand-border rounded-lg uppercase">
+                    My Score: {myPartInfo?.score || 0} Pts
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {questions.map((question, idx) => {
+                    const studentResp = myResponses.find(r => r.question_id === question.id);
+                    const studentAns = studentResp?.answer_text || answers[question.id] || "No response provided";
+
+                    // For MCQ, map selected option code (e.g. 'A') to corresponding string in options array
+                    const isMCQ = question.type === 'mcq';
+                    
+                    let resolvedStudentAns = studentAns;
+                    if (isMCQ && question.options) {
+                      const optLetters = ['A', 'B', 'C', 'D'];
+                      const chosenIdx = optLetters.indexOf(studentAns.trim().toUpperCase());
+                      if (chosenIdx !== -1 && question.options[chosenIdx]) {
+                        resolvedStudentAns = `${studentAns.toUpperCase()}: ${question.options[chosenIdx]}`;
+                      }
+                    }
+
+                    let resolvedCorrectAns = question.correct_answer;
+                    if (isMCQ && question.options) {
+                      const optLetters = ['A', 'B', 'C', 'D'];
+                      const correctIdx = optLetters.indexOf(question.correct_answer.trim().toUpperCase());
+                      if (correctIdx !== -1 && question.options[correctIdx]) {
+                        resolvedCorrectAns = `${question.correct_answer.toUpperCase()}: ${question.options[correctIdx]}`;
+                      }
+                    }
+
+                    const isCorrect = studentResp?.is_correct; // Use database graded column
+
+                    return (
+                      <div key={question.id} className="bg-brand-bg border border-brand-border rounded-3xl p-6 space-y-4">
+                        {/* Upper row: question index and points */}
+                        <div className="flex items-center justify-between border-b border-brand-border/40 pb-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">
+                            Question {idx + 1} ({question.type === 'mcq' ? 'MCQ' : 'Short Answer'})
+                          </span>
+                          
+                          {isCorrect === true ? (
+                            <span className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1.5">
+                              ✅ Correct (+{question.points} Pts)
+                            </span>
+                          ) : isCorrect === false ? (
+                            <span className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1.5">
+                              ❌ Incorrect (+0 Pts)
+                            </span>
+                          ) : (
+                            <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1.5 animate-pulse">
+                              ⏳ Pending Mark
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Question Text */}
+                        <p className="font-bold text-brand-text leading-snug text-sm">{question.question_text}</p>
+
+                        {/* Double comparison row */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                          <div className="p-4 bg-brand-surface border border-brand-border rounded-2xl space-y-1">
+                            <span className="block text-[8px] font-black uppercase tracking-widest text-brand-accent">Student's Response:</span>
+                            <span className={`text-xs font-black ${isCorrect === false ? 'text-red-500' : isCorrect === true ? 'text-emerald-600' : 'text-brand-text'}`}>
+                              {resolvedStudentAns}
+                            </span>
+                          </div>
+                          
+                          <div className="p-4 bg-brand-surface border border-brand-border rounded-2xl space-y-1">
+                            <span className="block text-[8px] font-black uppercase tracking-widest text-brand-muted">Expected / Correct Answer:</span>
+                            <span className="text-xs font-black text-brand-text">
+                              {resolvedCorrectAns}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
