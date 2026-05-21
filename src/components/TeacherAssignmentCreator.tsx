@@ -57,7 +57,7 @@ interface Class {
   name: string;
 }
 
-export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelectedClassId?: string, importCode?: string }> = ({ onBack, preSelectedClassId, importCode: initialImportCode }) => {
+export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelectedClassId?: string, importCode?: string, initialData?: any }> = ({ onBack, preSelectedClassId, importCode: initialImportCode, initialData }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -92,7 +92,24 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     if (initialImportCode && initialImportCode.trim().length === 6) {
       handleImport(initialImportCode.trim());
     }
-  }, [preSelectedClassId, initialImportCode]);
+    if (initialData) {
+      setForm(prev => ({
+        ...prev,
+        title: initialData.title || '',
+        subject: initialData.subject || '',
+        grade: initialData.grade || '',
+      }));
+      if (initialData.questions) {
+        setQuestions(initialData.questions.map((q: any) => ({
+          id: q.id || Math.random().toString(36).substr(2, 9),
+          type: q.type === 'mcq' ? 'mcq' : 'short_answer',
+          text: q.text || q.question || '',
+          options: q.options || ['', '', '', ''],
+          correct_option: q.correct_option !== undefined ? q.correct_option : 0
+        })));
+      }
+    }
+  }, [preSelectedClassId, initialImportCode, initialData]);
 
   const handleImport = async (code: string) => {
     if (!code || code.length < 6) return;

@@ -227,6 +227,7 @@ function AppContent() {
                 onBack={() => setCurrentPage('teacher-dashboard')} 
                 preSelectedClassId={selectedClassId || undefined}
                 importCode={showImportOnCreator ? ' ' : undefined} // Passing a space triggers the expansion
+                initialData={currentPageProps?.importedWork}
               />
             </motion.div>
           </Suspense>
@@ -265,7 +266,11 @@ function AppContent() {
                 }}
                 onImportWork={(work) => {
                   setCurrentPageProps({ importedWork: work });
-                  setCurrentPage('create-exam'); // Redirect to exam creator for admin shared work
+                  if (work.type === 'assignment') {
+                    setCurrentPage('teacher');
+                  } else {
+                    setCurrentPage('create-exam');
+                  }
                 }}
               />
             </motion.div>

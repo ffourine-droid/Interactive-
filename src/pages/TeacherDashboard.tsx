@@ -78,27 +78,63 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [importCode, setImportCode] = useState('');
   const [importing, setImporting] = useState(false);
 
-  const handleImportByCode = async () => {
-    if (!importCode.trim()) {
+  const handleImportByCode = async (passedCode?: string) => {
+    const finalCode = (passedCode || importCode).trim().toUpperCase();
+    if (!finalCode) {
       showToast("Please enter a valid code", "error");
       return;
     }
 
     setImporting(true);
     try {
-      const code = importCode.trim().toUpperCase();
-
       // Check admin_assignments table (New preferred source)
       const { data: adminData } = await supabase
         .from('admin_assignments')
         .select('*')
-        .eq('share_code', code)
+        .eq('share_code', finalCode)
         .maybeSingle();
 
       if (adminData) {
+        if (adminData.type === 'groupwork') {
+          showToast("Importing Group Work...", "info");
+          // Create the teacher competition directly
+          const { data: comp, error: compErr } = await supabase
+            .from('teacher_competitions')
+            .insert([{
+              teacher_id: teacher?.id,
+              title: adminData.title,
+              subject: adminData.subject,
+              grade: adminData.grade,
+              status: 'active'
+            }])
+            .select()
+            .single();
+
+          if (compErr) throw compErr;
+
+          const questionsToInsert = adminData.questions.map((q: any) => ({
+            competition_id: comp.id,
+            question_text: q.question || q.text || '',
+            type: 'mcq',
+            options: q.options || ['', '', '', ''],
+            correct_answer: q.correct_answer || String(q.correct_option !== undefined ? q.correct_option : q.correct_answer || ''),
+            points: q.points || q.marks || 10
+          }));
+
+          const { error: qErr } = await supabase
+            .from('teacher_competition_questions')
+            .insert(questionsToInsert);
+
+          if (qErr) throw qErr;
+
+          showToast("Group Work competition imported successfully! Check your Groups tab.", "success");
+          if (teacher) fetchDashboardData(teacher.id);
+          setShowImportModal(false);
+          setImportCode('');
+          return;
+        }
+
         showToast("Shared work found!", "success");
-        // Open the appropriate creator with initial data
-        // For simplicity, we treat admin work as Assessments (can be extended)
         onImportWork(adminData);
         setShowImportModal(false);
         setImportCode('');
@@ -109,7 +145,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       const { data: examData } = await supabase
         .from('exams')
         .select('*')
-        .eq('share_code', code)
+        .eq('share_code', finalCode)
         .maybeSingle();
 
       if (examData) {
@@ -137,7 +173,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       const { data: assignData } = await supabase
         .from('assignments')
         .select('*')
-        .eq('share_code', code)
+        .eq('share_code', finalCode)
         .maybeSingle();
 
       if (assignData) {
@@ -749,6 +785,10 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <QuestionRequestForm 
               teacher={teacher} 
               onClose={() => setShowRequestModal(false)} 
+              onImportCode={(code) => {
+                setShowRequestModal(false);
+                handleImportByCode(code);
+              }}
             />
           </motion.div>
         </div>
