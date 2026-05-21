@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.teacher_competition_participants (
     score INTEGER DEFAULT 0,
     total_questions INTEGER DEFAULT 0,
     is_finished BOOLEAN DEFAULT false,
+    group_name TEXT, -- For real-time gamified sub-groups
     submitted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE(competition_id, student_id)

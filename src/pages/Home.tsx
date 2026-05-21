@@ -751,9 +751,9 @@ export default function Home({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed inset-0 z-[2000] bg-brand-bg flex flex-col"
+            className="fixed inset-0 z-[9999] bg-brand-bg flex flex-col overflow-hidden"
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border bg-brand-surface/80 backdrop-blur-xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border bg-brand-surface/80 backdrop-blur-xl shrink-0">
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setSelectedExperiment(null)}
@@ -776,7 +776,7 @@ export default function Home({
               </div>
             </div>
             
-            <div className="flex bg-brand-surface border-b border-brand-border px-2 overflow-x-auto no-scrollbar">
+            <div className="flex bg-brand-surface border-b border-brand-border px-2 overflow-x-auto no-scrollbar shrink-0">
               {selectedExperiment.slides && selectedExperiment.slides.length > 0 && (
                 <button 
                   onClick={() => { setViewMode('slides'); setZoom(100); setPan({ x: 0, y: 0 }); }}
@@ -811,20 +811,22 @@ export default function Home({
               )}
             </div>
             
-            <div className="flex-1 relative overflow-hidden bg-brand-bg">
+            <div className="flex-1 relative bg-brand-bg overflow-hidden">
               {viewMode === 'slides' && selectedExperiment.slides && selectedExperiment.slides.length > 0 && (
-                <SlidesViewer 
-                  slides={selectedExperiment.slides} 
-                  audioUrl={selectedExperiment.audio_url} 
-                />
+                <div className="absolute inset-0">
+                  <SlidesViewer 
+                    slides={selectedExperiment.slides} 
+                    audioUrl={selectedExperiment.audio_url} 
+                  />
+                </div>
               )}
               
               <div 
                 className={`absolute inset-0 flex flex-col ${viewMode === 'slides' ? 'hidden' : 'flex'}`}
               >
                 <div 
-                  className={`flex-1 w-full bg-brand-bg relative ${viewMode === 'notes' ? 'transition-transform duration-300 origin-center' : ''}`}
-                  style={viewMode === 'notes' ? { 
+                  className={`flex-1 w-full bg-brand-bg relative ${viewMode === 'notes' && (zoom !== 100 || pan.x !== 0 || pan.y !== 0) ? 'transition-transform duration-300 origin-center' : ''}`}
+                  style={viewMode === 'notes' && (zoom !== 100 || pan.x !== 0 || pan.y !== 0) ? { 
                     transform: `scale(${zoom / 100}) translate(${pan.x}%, ${pan.y}%)`,
                   } : {}}
                 >
@@ -863,32 +865,40 @@ export default function Home({
                           <html lang="en">
                             <head>
                               <meta charset="utf-8">
-                              <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+                              <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
                               <style>
-                                html, body { 
+                                * { box-sizing: border-box; }
+                                html { 
                                   height: 100%; 
                                   margin: 0; 
                                   padding: 0; 
                                 }
                                 body { 
                                   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                                  line-height: 1.6;
-                                  color: ${theme === 'dark' ? '#f5f5f5' : '#1a1a1a'};
+                                  line-height: 1.7;
+                                  color: ${theme === 'dark' ? '#f8fafc' : '#0f172a'};
                                   padding: 24px;
+                                  padding-bottom: 120px;
+                                  margin: 0;
                                   background: ${theme === 'dark' ? '#0f172a' : '#ffffff'};
                                   word-wrap: break-word;
                                   overflow-wrap: break-word;
-                                  overflow-y: auto;
-                                  -webkit-overflow-scrolling: touch;
+                                  min-height: 100%;
                                 }
-                                img { max-width: 100%; height: auto; border-radius: 12px; margin: 16px 0; }
-                                h1, h2, h3 { color: ${theme === 'dark' ? '#ffffff' : '#000000'}; margin-top: 1.5em; font-weight: 800; }
-                                h1 { font-size: 1.5rem; margin-top: 0; }
-                                p { margin-bottom: 1em; }
-                                table { width: 100%; border-collapse: collapse; margin: 1em 0; }
-                                th, td { border: 1px solid ${theme === 'dark' ? '#334155' : '#eee'}; padding: 8px; text-align: left; }
-                                pre { background: ${theme === 'dark' ? '#1e293b' : '#f5f5f5'}; padding: 12px; border-radius: 8px; overflow-x: auto; }
+                                img { max-width: 100%; height: auto; border-radius: 12px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+                                h1, h2, h3 { color: ${theme === 'dark' ? '#ffffff' : '#000000'}; margin-top: 1.5em; font-weight: 800; line-height: 1.3; }
+                                h1 { font-size: 1.75rem; margin-top: 0; border-bottom: 2px solid ${theme === 'dark' ? '#1e293b' : '#f1f5f9'}; padding-bottom: 12px; }
+                                h2 { font-size: 1.5rem; }
+                                p { margin-bottom: 1.25em; }
+                                table { width: 100%; border-collapse: collapse; margin: 1.5em 0; background: ${theme === 'dark' ? '#1e293b' : '#fafafa'}; border-radius: 8px; overflow: hidden; }
+                                th, td { border: 1px solid ${theme === 'dark' ? '#334155' : '#e2e8f0'}; padding: 12px; text-align: left; }
+                                th { background: ${theme === 'dark' ? '#334155' : '#f8fafc'}; font-weight: 700; }
+                                pre { background: ${theme === 'dark' ? '#1e293b' : '#f1f5f9'}; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 0.9em; }
+                                code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
                                 .loading { display: flex; align-items: center; justify-content: center; height: 100vh; font-weight: bold; }
+                                ::-webkit-scrollbar { width: 8px; }
+                                ::-webkit-scrollbar-track { background: transparent; }
+                                ::-webkit-scrollbar-thumb { background: ${theme === 'dark' ? '#334155' : '#cbd5e1'}; border-radius: 4px; }
                               </style>
                             </head>
                             <body>

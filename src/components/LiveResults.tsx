@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import {
   Trophy, RotateCcw, Home, Star,
   CheckCircle2, Flame, BarChart3, Shield
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface RoomPlayer {
   id: string;
@@ -36,21 +37,63 @@ interface LiveResultsProps {
 }
 
 export default function LiveResults({ room, players, username, onPlayAgain, onHome }: LiveResultsProps) {
-  const sorted = [...players].sort((a, b) => b.score - a.score);
+  const [playersList, setPlayersList] = useState<RoomPlayer[]>(players);
+
+  // Sync with prop updates
+  useEffect(() => {
+    setPlayersList(players);
+  }, [players]);
+
+  const fetchLatestPlayers = useCallback(async () => {
+    const { data } = await supabase
+      .from('arena_room_players')
+      .select('*')
+      .eq('room_id', room.id)
+      .order('score', { ascending: false });
+    if (data) {
+      setPlayersList(data as RoomPlayer[]);
+    }
+  }, [room.id]);
+
+  // Realtime subscription & polling fallback
+  useEffect(() => {
+    fetchLatestPlayers();
+
+    const channel = supabase
+      .channel(`live_results:${room.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'arena_room_players',
+        filter: `room_id=eq.${room.id}`,
+      }, () => {
+        fetchLatestPlayers();
+      })
+      .subscribe();
+
+    const interval = setInterval(fetchLatestPlayers, 2500);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
+  }, [room.id, fetchLatestPlayers]);
+
+  const sorted = [...playersList].sort((a, b) => b.score - a.score);
   const me = sorted.find(p => p.username === username);
   const myRank = sorted.findIndex(p => p.username === username) + 1;
   const medals = ['🥇', '🥈', '🥉'];
 
   // Team scores
   const teamScores = room.type === 'team'
-    ? players.reduce((acc, p) => {
+    ? playersList.reduce((acc, p) => {
         if (p.team) acc[p.team] = (acc[p.team] || 0) + p.score;
         return acc;
       }, {} as Record<string, number>)
     : null;
 
   const winningTeam = teamScores
-    ? Object.entries(teamScores).sort((a, b) => b[1] - a[1])[0]
+    ? Object.entries(teamScores).sort((a, b) => (b[1] as number) - (a[1] as number))[0]
     : null;
 
   const myTeam = me?.team;
@@ -122,7 +165,7 @@ export default function LiveResults({ room, players, username, onPlayAgain, onHo
           </div>
           <div className="space-y-2">
             {Object.entries(teamScores)
-              .sort((a, b) => b[1] - a[1])
+              .sort((a, b) => (b[1] as number) - (a[1] as number))
               .map(([team, score], i) => {
                 const isWinner = i === 0;
                 const isMyTeam = team === myTeam;

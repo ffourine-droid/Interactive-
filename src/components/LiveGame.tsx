@@ -121,23 +121,6 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
   const feedbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const myPlayerRef = useRef<RoomPlayer | null>(initialPlayers.find(p => p.username === username) || null);
 
-  // ── Realtime: watch all players' scores ──
-  useEffect(() => {
-    const channel = supabase
-      .channel(`live_game:${room.id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'arena_room_players',
-        filter: `room_id=eq.${room.id}`,
-      }, () => {
-        fetchPlayers();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [room.id]);
-
   const fetchPlayers = useCallback(async () => {
     const { data } = await supabase
       .from('arena_room_players')
@@ -146,6 +129,31 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
       .order('score', { ascending: false });
     if (data) setPlayers(data as RoomPlayer[]);
   }, [room.id]);
+
+  // ── Realtime: watch all players' scores ──
+  useEffect(() => {
+    fetchPlayers();
+
+    const channel = supabase
+      .channel(`live_game:${room.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'arena_room_players',
+        filter: `room_id=eq.${room.id}`,
+      }, () => {
+        fetchPlayers();
+      })
+      .subscribe();
+
+    // Active polling fallback for smooth real-time leaderboard changes
+    const pollInterval = setInterval(fetchPlayers, 2500);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+    };
+  }, [room.id, fetchPlayers]);
 
   // ── Timer ──
   useEffect(() => {
@@ -168,6 +176,22 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
     newCorrect: number, newAnswered: number, newBestStreak: number, finished = false
   ) => {
     const score = calcScore(newCorrect, newAnswered, newBestStreak);
+
+    // Optimistically update our own score locally for zero lag
+    setPlayers(prev => prev.map(p => {
+      if (p.username === username) {
+        return {
+          ...p,
+          score,
+          correct: newCorrect,
+          total_answered: newAnswered,
+          best_streak: newBestStreak,
+          is_finished: finished
+        };
+      }
+      return p;
+    }));
+
     const { data } = await supabase
       .from('arena_room_players')
       .update({

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, Swords, Users, Clock, 
-  ChevronRight, Play, CheckCircle2, AlertCircle,
+  ChevronRight, ChevronLeft, Play, CheckCircle2, AlertCircle,
   Loader2, Star, Sparkles, Send, Search, BookOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -56,6 +56,66 @@ export const StudentCompetitionLobby: React.FC<{
     const saved = localStorage.getItem('azilearn_student');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // Real-time Student Team Hub States
+  const [userGroup, setUserGroup] = useState<string | null>(null);
+  const [teammates, setTeammates] = useState<any[]>([]);
+  const [activeGoal, setActiveGoal] = useState<string>('Work together to solve questions correctly! 🚀');
+
+  useEffect(() => {
+    if (!activeComp || !currentUser) return;
+
+    const fetchTeamInfo = async () => {
+      try {
+        const { data: part } = await supabase
+          .from('teacher_competition_participants')
+          .select('group_name')
+          .eq('competition_id', activeComp.id)
+          .eq('student_id', currentUser.id)
+          .maybeSingle();
+
+        const goal = localStorage.getItem(`group_goal_${activeComp.id}`);
+        if (goal) {
+          setActiveGoal(goal);
+        }
+
+        if (part?.group_name) {
+          setUserGroup(part.group_name);
+          
+          const { data: members } = await supabase
+            .from('teacher_competition_participants')
+            .select('student_name, score, is_finished, student_id')
+            .eq('competition_id', activeComp.id)
+            .eq('group_name', part.group_name);
+
+          setTeammates(members || []);
+        } else {
+          setUserGroup(null);
+          setTeammates([]);
+        }
+      } catch (e) {
+        console.error("Error fetching student team details:", e);
+      }
+    };
+
+    fetchTeamInfo();
+
+    const channel = supabase
+      .channel(`student_lobby_team_${activeComp.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'teacher_competition_participants',
+        filter: `competition_id=eq.${activeComp.id}`
+      }, () => {
+        fetchTeamInfo();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeComp?.id, currentUser?.id]);
 
   useEffect(() => {
     if (currentUser) {
@@ -176,19 +236,43 @@ export const StudentCompetitionLobby: React.FC<{
         return;
       }
 
-      // 2. Register participant
-      const { error: pErr } = await supabase
-        .from('teacher_competition_participants')
-        .insert([{
-          competition_id: comp.id,
-          student_id: currentUser?.id || 'anon-' + Math.random().toString(36).substr(2, 9),
-          student_name: currentUser?.name || initialUsername,
-          score: 0,
-          total_questions: qs.length,
-          is_finished: false
-        }]);
+      // 2. Register participant or update existing pre-created row (e.g., from group assignment)
+      const studentId = currentUser?.id || 'anon-' + Math.random().toString(36).substr(2, 9);
+      const studentName = currentUser?.name || initialUsername;
 
-      if (pErr && !pErr.message.includes('unique_violation')) throw pErr;
+      const { data: existingPart } = await supabase
+        .from('teacher_competition_participants')
+        .select('*')
+        .eq('competition_id', comp.id)
+        .eq('student_id', studentId)
+        .maybeSingle();
+
+      if (existingPart) {
+        const { error: pErr } = await supabase
+          .from('teacher_competition_participants')
+          .update({
+            student_name: studentName,
+            total_questions: qs.length
+          })
+          .eq('competition_id', comp.id)
+          .eq('student_id', studentId);
+
+        if (pErr) throw pErr;
+      } else {
+        const { error: pErr } = await supabase
+          .from('teacher_competition_participants')
+          .insert([{
+            competition_id: comp.id,
+            student_id: studentId,
+            student_name: studentName,
+            score: 0,
+            total_questions: qs.length,
+            is_finished: false,
+            group_name: null
+          }]);
+
+        if (pErr) throw pErr;
+      }
 
       setQuestions(qs);
       setActiveComp(comp);
@@ -205,24 +289,32 @@ export const StudentCompetitionLobby: React.FC<{
     const newAnswers = { ...answers, [q.id]: answer };
     setAnswers(newAnswers);
 
-    if (currentIdx < questions.length - 1) {
-      setCurrentIdx(currentIdx + 1);
-    } else {
-      handleFinalSubmit(newAnswers);
+    // If MCQ and not on the last question, auto-advance gently so they see the highlighted choice
+    if (q.type === 'mcq' && currentIdx < questions.length - 1) {
+      setTimeout(() => {
+        setCurrentIdx(prev => Math.min(prev + 1, questions.length - 1));
+      }, 350);
     }
   };
 
   const handleFinalSubmit = async (finalAnswers: Record<string, string>) => {
+    const unasweredCount = questions.filter(q => !finalAnswers[q.id]?.trim()).length;
+    if (unasweredCount > 0) {
+      if (!confirm(`⚠️ You have ${unasweredCount} unanswered question(s). Are you sure you want to submit your final work?`)) {
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const studentId = currentUser?.id || 'anon-' + Math.random().toString(36).substr(2, 9);
       const studentName = currentUser?.name || initialUsername;
       
       const responses = questions.map(q => {
-        const ans = finalAnswers[q.id];
+        const ans = finalAnswers[q.id] || '';
         // Auto-grade MCQs
         const isMcq = q.type === 'mcq';
-        const rawIsCorrect = isMcq ? (ans.toUpperCase() === q.correct_answer.toUpperCase()) : null;
+        const rawIsCorrect = isMcq && ans ? (ans.trim().toUpperCase() === q.correct_answer.trim().toUpperCase()) : null;
         const isCorrect = rawIsCorrect === true ? true : (rawIsCorrect === false ? false : null);
         
         return {
@@ -257,7 +349,7 @@ export const StudentCompetitionLobby: React.FC<{
         .eq('student_id', studentId);
 
       setHasFinished(true);
-      showToast("Answers submitted!", "success");
+      showToast("🚀 Outstanding job! Your class project was submitted successfully!", "success");
     } catch (e: any) {
       showToast(e.message, 'error');
     } finally {
@@ -289,52 +381,215 @@ export const StudentCompetitionLobby: React.FC<{
     const safeProgress = isNaN(progress) ? 0 : progress;
 
     return (
-      <div className="min-h-screen bg-brand-bg flex flex-col p-6">
-        <div className="mb-8 space-y-4">
-          <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-brand-muted">
-            <span>Question {currentIdx + 1} of {questions.length}</span>
-            <span>{Math.round(safeProgress)}% Complete</span>
+      <div className="min-h-screen bg-brand-bg flex flex-col md:grid md:grid-cols-4 md:gap-8 p-6">
+        {/* Left 3 columns: Questions and Progress */}
+        <div className="md:col-span-3 flex flex-col justify-between space-y-6">
+          <div className="space-y-4">
+            {/* Upper Info Row */}
+            <div className="flex flex-wrap items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-wider text-brand-muted">
+              <span>Question {currentIdx + 1} of {questions.length}</span>
+              <span className="flex items-center gap-1 bg-brand-surface border border-brand-border px-3 py-1 rounded-full text-brand-accent tracking-widest font-black">
+                ✨ {activeComp.subject}
+              </span>
+              <span>{Math.round(safeProgress)}% Complete</span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="h-2.5 bg-brand-surface border border-brand-border rounded-full overflow-hidden">
+              <motion.div 
+                className="h-full bg-brand-accent"
+                initial={{ width: 0 }}
+                animate={{ width: `${safeProgress}%` }}
+              />
+            </div>
+
+            {/* Quick-Jump Question Map Badges */}
+            <div className="bg-brand-surface border border-brand-border rounded-2xl p-3 space-y-2">
+              <span className="block text-[8px] font-black uppercase tracking-widest text-brand-muted">📋 Project Map (Jump to any question):</span>
+              <div className="flex flex-wrap gap-2">
+                {questions.map((question, idx) => {
+                  const isCurrent = idx === currentIdx;
+                  const isAnswered = answers[question.id] !== undefined && answers[question.id] !== '';
+                  return (
+                    <button
+                      key={question.id}
+                      type="button"
+                      onClick={() => setCurrentIdx(idx)}
+                      className={`w-9 h-9 rounded-xl font-black text-xs transition-all flex items-center justify-center border ${
+                        isCurrent 
+                          ? 'bg-brand-accent text-white border-brand-accent shadow-lg shadow-brand-accent/20 scale-105' 
+                          : isAnswered
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:border-emerald-500'
+                            : 'bg-brand-bg text-brand-muted border-brand-border hover:border-brand-accent/30 hover:text-brand-accent'
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-          <div className="h-2 bg-brand-surface border border-brand-border rounded-full overflow-hidden">
-            <motion.div 
-              className="h-full bg-brand-accent"
-              initial={{ width: 0 }}
-              animate={{ width: `${safeProgress}%` }}
-            />
+
+          {/* Question Text & Options Container */}
+          <div className="flex-1 space-y-8 pt-4">
+            <h3 className="text-2xl font-black tracking-tight leading-tight text-brand-text">
+              {q.question_text}
+            </h3>
+
+            <div className="space-y-3">
+              {q.type === 'mcq' && q.options ? (
+                q.options.filter(o => o).map((opt, i) => {
+                  const optionChar = String.fromCharCode(65 + i);
+                  const isSelected = answers[q.id] === optionChar;
+                  return (
+                    <button 
+                      key={i}
+                      type="button"
+                      onClick={() => submitAnswer(optionChar)}
+                      className={`w-full p-5 border-2 rounded-2xl text-left font-bold transition-all flex items-center gap-4 ${
+                        isSelected 
+                          ? 'bg-brand-accent/5 border-brand-accent shadow-md text-brand-accent scale-[1.01]' 
+                          : 'bg-brand-surface border-brand-border hover:border-brand-accent/50 text-brand-text'
+                      }`}
+                    >
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs uppercase border transition-colors ${
+                        isSelected 
+                          ? 'bg-brand-accent text-white border-brand-accent' 
+                          : 'bg-brand-bg border-brand-border text-brand-muted'
+                      }`}>
+                        {optionChar}
+                      </span>
+                      <span className="flex-1">{opt}</span>
+                      {isSelected && <span className="text-brand-accent font-black text-xs mr-1">Selected ✓</span>}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="space-y-4">
+                  <textarea 
+                    value={answers[q.id] || ''}
+                    onChange={(e) => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                    placeholder="Type your response here..."
+                    className="w-full bg-brand-surface border-2 border-brand-border rounded-2xl p-6 font-semibold text-sm h-44 outline-none focus:border-brand-accent transition-colors"
+                  />
+                  <p className="text-[9px] font-bold text-brand-muted uppercase tracking-wider px-2">
+                    ✍️ Your thoughts are safely saved automatically. Use the navigation buttons below to turn in or adjust.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Navigation Controls Row */}
+          <div className="flex items-center justify-between gap-4 pt-6 border-t border-brand-border/40">
+            <button
+              type="button"
+              onClick={() => setCurrentIdx(prev => Math.max(0, prev - 1))}
+              disabled={currentIdx === 0}
+              className={`px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2 border transition-all ${
+                currentIdx === 0 
+                  ? 'opacity-40 cursor-not-allowed bg-brand-bg text-brand-muted border-brand-border' 
+                  : 'bg-brand-surface hover:bg-brand-border/30 text-brand-text border-brand-border active:scale-95'
+              }`}
+            >
+              <ChevronLeft size={14} />
+              Back
+            </button>
+
+            {currentIdx < questions.length - 1 ? (
+              <button
+                type="button"
+                onClick={() => setCurrentIdx(prev => Math.min(questions.length - 1, prev + 1))}
+                className="px-6 py-3.5 bg-brand-text hover:bg-brand-text/90 text-white rounded-2xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all shadow-md"
+              >
+                Next
+                <ChevronRight size={14} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleFinalSubmit(answers)}
+                disabled={isSubmitting}
+                className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-95 transition-all"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="animate-spin" size={14} />
+                    Submitting Project...
+                  </>
+                ) : (
+                  <>
+                    Submit Final Project 🚀
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="flex-1 space-y-8">
-          <h3 className="text-2xl font-bold tracking-tight leading-tight">{q.question_text}</h3>
+        {/* Right 1 column: Gamified Team Hub */}
+        <div className="md:col-span-1 border-t md:border-t-0 md:border-l border-brand-border pt-6 md:pt-0 md:pl-6 space-y-4 flex flex-col justify-start">
+          <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-5 space-y-4 shadow-sm">
+            <div className="flex items-center gap-2 pb-3 border-b border-brand-border/40">
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                <Swords size={16} />
+              </div>
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-brand-text">Squad Room</h4>
+                <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Active Standings</p>
+              </div>
+            </div>
 
-          <div className="space-y-3">
-            {q.type === 'mcq' && q.options ? (
-              q.options.filter(o => o).map((opt, i) => (
-                <button 
-                  key={i}
-                  onClick={() => submitAnswer(String.fromCharCode(65 + i))}
-                  className="w-full p-5 bg-brand-surface border-2 border-brand-border rounded-2xl text-left font-bold hover:border-brand-accent active:scale-95 transition-all flex items-center gap-4"
-                >
-                  <span className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted font-bold text-xs uppercase">{String.fromCharCode(65 + i)}</span>
-                  {opt}
-                </button>
-              ))
-            ) : (
+            {userGroup ? (
               <div className="space-y-4">
-                <textarea 
-                  id="short-answer-input"
-                  placeholder="Type your answer here..."
-                  className="w-full bg-brand-surface border-2 border-brand-border rounded-2xl p-6 font-bold text-sm h-40 outline-none focus:border-brand-accent transition-colors"
-                />
-                <button 
-                  onClick={() => {
-                    const el = document.getElementById('short-answer-input') as HTMLTextAreaElement;
-                    submitAnswer(el.value);
-                  }}
-                  className="w-full py-5 bg-brand-accent text-white rounded-2xl font-bold uppercase tracking-wider shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"
-                >
-                  Confirm Answer <Send size={18} />
-                </button>
+                <div className="bg-brand-bg border border-brand-border rounded-2xl p-3 text-center space-y-1">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Your Assigned Team</p>
+                  <h5 className="text-xs font-black text-brand-accent tracking-tight truncate" title={userGroup}>
+                    {userGroup}
+                  </h5>
+                  <p className="text-[9px] font-bold text-brand-text/80">
+                    Squad Total: <span className="font-black text-brand-accent">{teammates.reduce((sum, tm) => sum + (tm.score || 0), 0)} pts</span>
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">📜 Team Slogan / Quest:</p>
+                  <p className="text-[10px] font-medium leading-relaxed italic bg-brand-bg p-3 border border-brand-border rounded-xl">
+                    "{activeGoal}"
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted">👥 Team Roster Scoreboard:</p>
+                  <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                    {teammates.map((tm) => {
+                      const isMe = tm.student_id === currentUser?.id;
+                      return (
+                        <div 
+                          key={tm.student_id} 
+                          className={`flex items-center justify-between px-3 py-1.5 rounded-xl border text-[10px] font-bold ${
+                            isMe ? 'bg-brand-accent/5 border-brand-accent text-brand-accent' : 'bg-brand-bg border-brand-border text-brand-text'
+                          }`}
+                        >
+                          <span className="truncate max-w-[90px]">{tm.student_name} {isMe && '(You)'}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-black text-[10px]">{tm.score || 0} pts</span>
+                            <span className={`w-1.5 h-1.5 rounded-full ${tm.is_finished ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="py-6 text-center space-y-2 text-brand-muted">
+                <AlertCircle size={24} className="mx-auto opacity-40 text-brand-muted" />
+                <h5 className="text-[10px] font-black uppercase tracking-wider">Solo Mode</h5>
+                <p className="text-[9px] font-semibold leading-relaxed">
+                  You are working independently on this project. Ask your teacher to assign you to a custom squad!
+                </p>
               </div>
             )}
           </div>

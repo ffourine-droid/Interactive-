@@ -4,7 +4,8 @@ import {
   Plus, Search, Trophy, Clock, Users, 
   ChevronRight, Trash2, CheckCircle2, AlertCircle,
   Loader2, Play, Pause, ListChecks, MessageSquare,
-  Award, ShieldCheck, HelpCircle, Save, X, FileJson
+  Award, ShieldCheck, HelpCircle, Save, X, FileJson,
+  Wand2, Sparkles, Edit
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -398,6 +399,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
       <CompetitionDashboard 
         competition={selectedComp} 
         onBack={() => { setView('list'); fetchCompetitions(); }} 
+        classId={classId}
       />
     );
   }
@@ -476,7 +478,14 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
   );
 };
 
-const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => void }> = ({ competition, onBack }) => {
+const THEMES_PRESETS = {
+  standard: ['Group A', 'Group B', 'Group C', 'Group D'],
+  space: ['🚀 Cosmic Pulsars', '🌠 Nebula Raiders', '👾 Asteroid Rangers', '🛰️ Solar Voyagers'],
+  wildlife: ['🦊 Cyber Foxes', '🦫 Coding Capybaras', '🐼 Pixel Pandas', '🦁 Binary Lions'],
+  magic: ['🔮 Spellbound Wizards', '🐲 Dragon Alchemists', '🦅 Griffin Scholars', '🔥 Phoenix Sages']
+};
+
+const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => void, classId?: string }> = ({ competition, onBack, classId }) => {
   const { showToast } = useToast();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -487,6 +496,18 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
     return saved ? JSON.parse(saved) : {};
   });
   const [availableStudents, setAvailableStudents] = useState<any[]>([]);
+
+  // Playful Group States
+  const [activeTheme, setActiveTheme] = useState<'standard' | 'space' | 'wildlife' | 'magic'>('standard');
+  const [customGroupNames, setCustomGroupNames] = useState<string[]>(() => {
+    const saved = localStorage.getItem(`group_names_${competition.id}`);
+    return saved ? JSON.parse(saved) : THEMES_PRESETS.standard;
+  });
+  const [groupGoal, setGroupGoal] = useState(() => {
+    return localStorage.getItem(`group_goal_${competition.id}`) || 'Work together to solve questions correctly and aim high! 🚀';
+  });
+  const [editingGroupIdx, setEditingGroupIdx] = useState<number | null>(null);
+  const [tempGroupName, setTempGroupName] = useState('');
 
   useEffect(() => {
     fetchParticipants();
@@ -535,9 +556,14 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
   };
 
   const fetchAvailableStudents = async () => {
-    const { data: compData } = await supabase.from('teacher_competitions').select('grade').eq('id', competition.id).single();
-    const { data } = await supabase.from('students').select('*').eq('grade', compData?.grade);
-    setAvailableStudents(data || []);
+    if (classId) {
+      const { data } = await supabase.from('students').select('*').eq('class_id', classId);
+      setAvailableStudents(data || []);
+    } else {
+      const { data: compData } = await supabase.from('teacher_competitions').select('grade').eq('id', competition.id).single();
+      const { data } = await supabase.from('students').select('*').eq('grade', compData?.grade);
+      setAvailableStudents(data || []);
+    }
   };
 
   const fetchParticipants = async () => {
@@ -576,14 +602,196 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
     });
 
     try {
-      await supabase
+      const { data: existing } = await supabase
         .from('teacher_competition_participants')
-        .update({ group_name: groupName })
+        .select('*')
         .eq('competition_id', competition.id)
-        .eq('student_id', studentId);
+        .eq('student_id', studentId)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from('teacher_competition_participants')
+          .update({ group_name: groupName })
+          .eq('competition_id', competition.id)
+          .eq('student_id', studentId);
+        if (error) throw error;
+      } else {
+        const student = availableStudents.find(s => s.id === studentId);
+        const { error } = await supabase
+          .from('teacher_competition_participants')
+          .insert({
+            competition_id: competition.id,
+            student_id: studentId,
+            student_name: student?.name || 'Unknown Student',
+            score: 0,
+            total_questions: 0,
+            is_finished: false,
+            group_name: groupName
+          });
+        if (error) throw error;
+      }
     } catch (e) {
       console.error("Failed to update group in DB:", e);
     }
+  };
+
+  const changeThemeAndMigrate = async (themeKey: 'standard' | 'space' | 'wildlife' | 'magic') => {
+    const oldNames = [...customGroupNames];
+    const newNames = THEMES_PRESETS[themeKey];
+    setCustomGroupNames(newNames);
+    localStorage.setItem(`group_names_${competition.id}`, JSON.stringify(newNames));
+    setActiveTheme(themeKey);
+
+    const nextGroups = { ...groups };
+    const updatedIds: string[] = [];
+
+    Object.keys(nextGroups).forEach(studentId => {
+      const oldVal = nextGroups[studentId];
+      const idx = oldNames.indexOf(oldVal);
+      if (idx !== -1) {
+        nextGroups[studentId] = newNames[idx];
+        updatedIds.push(studentId);
+      }
+    });
+
+    setGroups(nextGroups);
+    localStorage.setItem(`groups_${competition.id}`, JSON.stringify(nextGroups));
+
+    for (const sId of updatedIds) {
+      try {
+        await supabase
+          .from('teacher_competition_participants')
+          .update({ group_name: nextGroups[sId] })
+          .eq('competition_id', competition.id)
+          .eq('student_id', sId);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    fetchParticipants();
+    showToast(`🪄 Activated ${themeKey === 'wildlife' ? 'Cyber Wildlife' : themeKey === 'space' ? 'Astro Wonders' : themeKey === 'magic' ? 'Fantasy Wizards' : 'Standard'} team theme!`, "success");
+  };
+
+  const autoDistributeUnassigned = async () => {
+    const unassigned = availableStudents.filter(s => !groups[s.id]);
+    if (unassigned.length === 0) {
+      showToast("Everyone is already assigned to a team! 🦊", "warning");
+      return;
+    }
+
+    const nextGroups = { ...groups };
+    const updated: { studentId: string, name: string, group: string }[] = [];
+
+    unassigned.forEach((student, index) => {
+      const assignedGroup = customGroupNames[index % customGroupNames.length];
+      nextGroups[student.id] = assignedGroup;
+      updated.push({ studentId: student.id, name: student.name, group: assignedGroup });
+    });
+
+    setGroups(nextGroups);
+    localStorage.setItem(`groups_${competition.id}`, JSON.stringify(nextGroups));
+
+    for (const item of updated) {
+      try {
+        const { data: existing } = await supabase
+          .from('teacher_competition_participants')
+          .select('*')
+          .eq('competition_id', competition.id)
+          .eq('student_id', item.studentId)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from('teacher_competition_participants')
+            .update({ group_name: item.group })
+            .eq('competition_id', competition.id)
+            .eq('student_id', item.studentId);
+        } else {
+          await supabase
+            .from('teacher_competition_participants')
+            .insert({
+              competition_id: competition.id,
+              student_id: item.studentId,
+              student_name: item.name,
+              score: 0,
+              total_questions: 0,
+              is_finished: false,
+              group_name: item.group
+            });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    fetchParticipants();
+    showToast(`🪄 Magic wand success! Distributed ${unassigned.length} students evenly!`, "success");
+  };
+
+  const clearAllGroups = async () => {
+    if (!confirm("Clear all student group assignments? This sends everyone back to Unassigned.")) return;
+
+    setGroups({});
+    localStorage.removeItem(`groups_${competition.id}`);
+
+    try {
+      const { error } = await supabase
+        .from('teacher_competition_participants')
+        .update({ group_name: null })
+        .eq('competition_id', competition.id);
+
+      if (error) throw error;
+      showToast("🧹 Clean sweep! All students are now unassigned.", "success");
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+    fetchParticipants();
+  };
+
+  const saveCustomGroupName = async (idx: number) => {
+    if (!tempGroupName.trim()) return;
+    const oldName = customGroupNames[idx];
+    const newName = tempGroupName.trim();
+
+    const nextGroupNames = [...customGroupNames];
+    nextGroupNames[idx] = newName;
+    setCustomGroupNames(nextGroupNames);
+    localStorage.setItem(`group_names_${competition.id}`, JSON.stringify(nextGroupNames));
+    setEditingGroupIdx(null);
+
+    const nextGroups = { ...groups };
+    const updatedIds: string[] = [];
+
+    Object.keys(nextGroups).forEach(sId => {
+      if (nextGroups[sId] === oldName) {
+        nextGroups[sId] = newName;
+        updatedIds.push(sId);
+      }
+    });
+
+    setGroups(nextGroups);
+    localStorage.setItem(`groups_${competition.id}`, JSON.stringify(nextGroups));
+
+    for (const sId of updatedIds) {
+      try {
+        await supabase
+          .from('teacher_competition_participants')
+          .update({ group_name: newName })
+          .eq('competition_id', competition.id)
+          .eq('student_id', sId);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    fetchParticipants();
+    showToast(`✏️ Renamed team to "${newName}"!`, "success");
+  };
+
+  const updateGroupGoal = (val: string) => {
+    setGroupGoal(val);
+    localStorage.setItem(`group_goal_${competition.id}`, val);
   };
 
   const toggleStatus = async () => {
@@ -718,36 +926,120 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
 
           {activeTab === 'groups' && (
             <div className="space-y-6">
-              <div className="bg-brand-accent/5 border border-brand-accent/20 rounded-2xl p-4 flex items-center gap-4">
-                <Users className="text-brand-accent" size={20} />
-                <div>
-                  <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest leading-none mb-1">Collaborative Strategy</p>
-                  <p className="text-xs font-bold">Assign students to groups. Their scores will be aggregated in Group Standings.</p>
+              {/* Strategy Header & Creative Challenge Generator */}
+              <div className="bg-gradient-to-r from-brand-accent/5 to-purple-500/5 border border-brand-accent/20 rounded-3xl p-6 space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-accent/10 flex items-center justify-center text-brand-accent flex-shrink-0">
+                    <Sparkles size={24} className="animate-pulse" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-black text-brand-text uppercase tracking-wider mb-1">Collaboration Strategy Room</h3>
+                    <p className="text-xs font-semibold text-brand-muted leading-relaxed">
+                      Transform passive homework into active team battle arenas. Select a fun preset theme, auto-balance rosters with the magic wand, or type custom names to customize each team!
+                    </p>
+                  </div>
+                </div>
+
+                {/* Team Theme Pickers & Global Challenge Input */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-brand-border/40">
+                  <div className="space-y-2">
+                    <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted">🔮 Team Name Preset Theme</label>
+                    <div className="flex flex-wrap gap-2">
+                      {(['standard', 'space', 'wildlife', 'magic'] as const).map(themeKey => (
+                        <button
+                          key={themeKey}
+                          onClick={() => changeThemeAndMigrate(themeKey)}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${
+                            activeTheme === themeKey
+                              ? 'bg-brand-accent text-white border-brand-accent shadow-md shadow-brand-accent/15'
+                              : 'bg-brand-bg text-brand-muted border-brand-border hover:border-brand-accent/40 hover:text-brand-accent'
+                          }`}
+                        >
+                          {themeKey === 'standard' ? 'Standard ABCD' : themeKey === 'space' ? 'Astro Wonders 🚀' : themeKey === 'wildlife' ? 'Cyber Wildlife 🦊' : 'Fantasy Magic 🔮'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted">📝 Active Group Team-Quest Goal (Seen by Students)</label>
+                    <input
+                      type="text"
+                      value={groupGoal}
+                      onChange={e => updateGroupGoal(e.target.value)}
+                      placeholder="e.g. Solve correctly to help your team win the ultimate badge! 🎉"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-2 text-xs font-bold outline-none focus:border-brand-accent transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Automation toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-brand-border/40">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={autoDistributeUnassigned}
+                      className="px-5 py-2 bg-purple-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-purple-600/15 hover:brightness-110 active:scale-95 transition-all"
+                    >
+                      <Wand2 size={13} />
+                      Magic Wand (Auto-Fill)
+                    </button>
+                    <button
+                      onClick={clearAllGroups}
+                      className="px-4 py-2 bg-brand-bg border border-brand-border rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 hover:bg-red-500/5 transition-colors"
+                    >
+                      Clear Assignments
+                    </button>
+                  </div>
+                  <div className="text-[10px] font-bold text-brand-muted">
+                    📊 Roster Status: <span className="text-brand-accent font-black">{availableStudents.filter(s => groups[s.id]).length}</span> / <span className="font-black">{availableStudents.length}</span> assigned
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2 px-2">
-                    <Users size={14} className="text-brand-muted" /> Unassigned Students
-                  </h3>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {/* Interactive Workspace Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column: Unassigned Drawer */}
+                <div className="lg:col-span-1 space-y-4 bg-brand-surface border border-brand-border rounded-3xl p-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-brand-text">
+                      <Users size={14} className="text-brand-muted" /> Unassigned Pupils
+                    </h3>
+                    <span className="text-[10px] font-black text-brand-muted bg-brand-bg px-2 py-0.5 rounded-full border border-brand-border">
+                      {availableStudents.filter(s => !groups[s.id]).length} Left
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 max-h-[480px] overflow-y-auto pr-2 custom-scrollbar">
                     {availableStudents.filter(s => !groups[s.id]).length === 0 ? (
-                      <p className="text-xs text-brand-muted p-4 text-center border-2 border-dashed border-brand-border rounded-2xl italic">No unassigned students</p>
+                      <div className="py-12 text-center border-2 border-dashed border-brand-border rounded-2xl italic space-y-2">
+                        <CheckCircle2 size={24} className="mx-auto text-emerald-500 opacity-60" />
+                        <p className="text-xs text-brand-muted font-bold uppercase tracking-wider">Perfect Balance!</p>
+                        <p className="text-[9px] text-brand-muted">All students are placed in a cozy team camp.</p>
+                      </div>
                     ) : (
                       availableStudents.filter(s => !groups[s.id]).map(s => (
-                        <div key={s.id} className="bg-brand-bg border border-brand-border rounded-xl p-3 flex items-center justify-between group">
-                          <span className="text-sm font-bold">{s.name}</span>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {['A', 'B', 'C', 'D'].map(g => (
-                              <button 
-                                key={g}
-                                onClick={() => updateStudentGroup(s.id, `Group ${g}`)}
-                                className="w-6 h-6 bg-brand-surface border border-brand-border rounded-md text-[10px] font-black hover:border-brand-accent hover:text-brand-accent"
-                              >
-                                {g}
-                              </button>
-                            ))}
+                        <div key={s.id} className="bg-brand-bg border border-brand-border rounded-2xl p-3 space-y-2 group transition-all hover:border-brand-accent/40 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-brand-text">{s.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] font-black text-brand-muted uppercase tracking-widest mr-1">Join:</span>
+                            {customGroupNames.map((gName, idx) => {
+                              // Extract first character as badge if emoji, otherwise index
+                              const firstChar = gName.trim().match(/^([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF])/) 
+                                ? gName.substring(0, 2) 
+                                : `T${idx + 1}`;
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => updateStudentGroup(s.id, gName)}
+                                  title={`Move to ${gName}`}
+                                  className="px-2 py-1 bg-brand-surface border border-brand-border rounded-lg text-[9px] font-black hover:border-brand-accent hover:text-brand-accent transition-colors flex items-center gap-1"
+                                >
+                                  {firstChar}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       ))
@@ -755,29 +1047,127 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
                   </div>
                 </div>
 
-                <div className="space-y-6">
-                  {['Group A', 'Group B', 'Group C', 'Group D'].map(groupName => {
-                    const members = availableStudents.filter(s => groups[s.id] === groupName);
-                    return (
-                      <div key={groupName} className="space-y-2">
-                        <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-2 flex justify-between">
-                          {groupName} <span>{members.length} Members</span>
-                        </h4>
-                        <div className="bg-brand-bg border border-brand-border rounded-2xl p-2 min-h-[60px] flex flex-wrap gap-2">
-                          {members.map(s => (
-                            <button 
-                              key={s.id}
-                              onClick={() => updateStudentGroup(s.id, null)}
-                              className="px-3 py-1 bg-brand-accent text-white rounded-lg text-[10px] font-black uppercase flex items-center gap-2 hover:brightness-110"
-                            >
-                              {s.name} <Trash2 size={10} />
-                            </button>
-                          ))}
-                          {members.length === 0 && <p className="text-[9px] text-brand-muted/40 p-2 italic">Select students above...</p>}
+                {/* Right Area: Interactive Team Pod Hubs */}
+                <div className="lg:col-span-2 space-y-4">
+                  <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2 px-1">
+                    🌟 Active Team Podquarters
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {customGroupNames.map((groupName, idx) => {
+                      const members = availableStudents.filter(s => groups[s.id] === groupName);
+                      const isEditing = editingGroupIdx === idx;
+
+                      // Extract logo badge
+                      const matchedEmoji = groupName.trim().match(/^([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF])/);
+                      const displayEmoji = matchedEmoji ? matchedEmoji[0] : '🛡️';
+                      const printableName = matchedEmoji 
+                        ? groupName.replace(matchedEmoji[0], '').trim() 
+                        : groupName;
+
+                      return (
+                        <div
+                          key={groupName}
+                          className="bg-brand-surface border border-brand-border rounded-[2rem] p-5 space-y-4 transition-all hover:border-brand-accent/30 relative shadow-sm"
+                        >
+                          {/* Pod Header */}
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              {isEditing ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={tempGroupName}
+                                    onChange={e => setTempGroupName(e.target.value)}
+                                    maxLength={30}
+                                    className="bg-brand-bg border border-brand-border rounded-lg px-2 py-1 text-xs font-black outline-none focus:border-brand-accent"
+                                    autoFocus
+                                    onKeyDown={e => e.key === 'Enter' && saveCustomGroupName(idx)}
+                                  />
+                                  <button
+                                    onClick={() => saveCustomGroupName(idx)}
+                                    className="p-1 text-emerald-500 hover:brightness-110"
+                                  >
+                                    <CheckCircle2 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingGroupIdx(null)}
+                                    className="p-1 text-red-500 hover:brightness-110"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 group/title">
+                                  <span className="text-xl" role="img" aria-label="team sign">{displayEmoji}</span>
+                                  <h4 className="text-xs font-black uppercase tracking-tight text-brand-text truncate max-w-[120px]">
+                                    {printableName}
+                                  </h4>
+                                  <button
+                                    onClick={() => {
+                                      setEditingGroupIdx(idx);
+                                      setTempGroupName(groupName);
+                                    }}
+                                    className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1 text-brand-muted hover:text-brand-accent"
+                                  >
+                                    <Edit size={10} />
+                                  </button>
+                                </div>
+                              )}
+                              <p className="text-[8px] font-black uppercase tracking-widest text-brand-muted mt-1">
+                                {members.length} Squad Members
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Member tags */}
+                          <div className="bg-brand-bg border border-brand-border rounded-2xl p-2 min-h-[140px] max-h-[180px] overflow-y-auto custom-scrollbar flex flex-wrap gap-2 content-start">
+                            {members.map(s => (
+                              <div
+                                key={s.id}
+                                className="px-2.5 py-1.5 bg-brand-surface border border-brand-border rounded-xl text-[10px] font-black uppercase tracking-wide flex items-center gap-1.5 shadow-sm group/tag hover:border-red-400"
+                              >
+                                <span className="text-brand-text leading-none">{s.name}</span>
+                                <button
+                                  onClick={() => updateStudentGroup(s.id, null)}
+                                  className="text-brand-muted hover:text-red-500 transition-colors"
+                                  title="Remove from Team"
+                                >
+                                  <X size={11} className="font-bold border rounded bg-brand-bg p-px" />
+                                </button>
+                              </div>
+                            ))}
+                            {members.length === 0 && (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-center py-6 text-brand-muted/40 font-bold space-y-1">
+                                <Users size={18} className="opacity-25" />
+                                <p className="text-[8px] uppercase tracking-widest">Squad Empty</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Quick Add Student Menu inside Group Pod */}
+                          {availableStudents.filter(s => !groups[s.id]).length > 0 && (
+                            <div className="pt-2 border-t border-brand-border/40">
+                              <select
+                                onChange={e => {
+                                  if (e.target.value) {
+                                    updateStudentGroup(e.target.value, groupName);
+                                    e.target.value = ''; // Reset select
+                                  }
+                                }}
+                                className="w-full bg-brand-bg hover:bg-brand-border/40 border border-brand-border rounded-xl py-1.5 px-3 text-[9px] font-black uppercase text-brand-muted outline-none appearance-none cursor-pointer text-center"
+                              >
+                                <option value="">➕ Fast Add Student...</option>
+                                {availableStudents.filter(s => !groups[s.id]).map(s => (
+                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -795,10 +1185,11 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
                 </h3>
                 
                 <div className="space-y-4">
-                  {['Group A', 'Group B', 'Group C', 'Group D'].map((groupName, idx) => {
+                  {customGroupNames.map((groupName, idx) => {
                     const groupMembers = participants.filter(p => groups[p.student_id] === groupName);
                     const totalScore = groupMembers.reduce((acc, p) => acc + p.score, 0);
-                    const avgScore = groupMembers.length > 0 ? Math.round(totalScore / groupMembers.length) : 0;
+                    const activeMembers = groupMembers.filter(p => p.is_finished || p.total_questions > 0);
+                    const avgScore = activeMembers.length > 0 ? Math.round(totalScore / activeMembers.length) : 0;
                     
                     if (groupMembers.length === 0) return null;
 
