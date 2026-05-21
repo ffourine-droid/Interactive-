@@ -33,6 +33,7 @@ interface Room {
   duration_seconds: number;
   questions: Question[];
   status: 'waiting' | 'active' | 'finished';
+  started_at?: string;
 }
 
 interface RoomPlayer {

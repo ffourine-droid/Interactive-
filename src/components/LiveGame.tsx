@@ -32,6 +32,7 @@ interface Room {
   duration_seconds: number;
   questions: Question[];
   status: 'waiting' | 'active' | 'finished';
+  started_at?: string;
 }
 
 interface RoomPlayer {
@@ -105,7 +106,13 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
 
   // ── Game state ──
   const [qIndex, setQIndex] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(room.duration_seconds);
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (room.started_at) {
+      const elapsed = Math.floor((Date.now() - new Date(room.started_at).getTime()) / 1000);
+      return Math.max(0, room.duration_seconds - elapsed);
+    }
+    return room.duration_seconds;
+  });
   const [correct, setCorrect] = useState(0);
   const [answered, setAnswered] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -120,6 +127,7 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const feedbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const myPlayerRef = useRef<RoomPlayer | null>(initialPlayers.find(p => p.username === username) || null);
+  const handleFinishRef = useRef<() => void>(() => {});
 
   const fetchPlayers = useCallback(async () => {
     const { data } = await supabase
@@ -162,7 +170,7 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
       setTimeLeft(t => {
         if (t <= 1) {
           clearInterval(timerRef.current!);
-          handleFinish();
+          handleFinishRef.current();
           return 0;
         }
         return t - 1;
@@ -200,7 +208,6 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
         total_answered: newAnswered,
         best_streak: newBestStreak,
         is_finished: finished,
-        ...(finished ? { finished_at: new Date().toISOString() } : {}),
       })
       .eq('room_id', room.id)
       .eq('username', username)
@@ -288,6 +295,10 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
       });
     });
   }, [isFinished, correct, answered, bestStreak, username, room, pushScore, onFinish]);
+
+  useEffect(() => {
+    handleFinishRef.current = handleFinish;
+  }, [handleFinish]);
 
   // ── Team scores ──
   const teamScores = room.type === 'team'

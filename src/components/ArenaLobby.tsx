@@ -23,6 +23,7 @@ interface Room {
   duration_seconds: number;
   questions: Question[];
   status: 'waiting' | 'active' | 'finished';
+  started_at?: string;
 }
 
 interface Question {
@@ -61,10 +62,10 @@ const SUBJECTS = [
 const GRADES = [7, 8, 9];
 const QUESTION_COUNTS = [10, 15, 20, 30];
 const DURATIONS = [
-  { label: '30s', value: 30 },
-  { label: '60s', value: 60 },
-  { label: '90s', value: 90 },
-  { label: '2min', value: 120 },
+  { label: '5min', value: 300 },
+  { label: '8min', value: 480 },
+  { label: '10min', value: 600 },
+  { label: '15min', value: 900 },
 ];
 
 const ROOM_TYPES: { type: RoomType; label: string; desc: string; icon: React.ReactNode; max: string }[] = [
@@ -127,7 +128,7 @@ export default function ArenaLobby({ onBack, onGameStart }: ArenaLobbyProps) {
   const [grade, setGrade] = useState(player?.grade || 7);
   const [subject, setSubject] = useState('Mathematics');
   const [questionCount, setQuestionCount] = useState(20);
-  const [duration, setDuration] = useState(60);
+  const [duration, setDuration] = useState(300);
   const [teams, setTeams] = useState(['Team Simba', 'Team Cheetah']);
   const [creating, setCreating] = useState(false);
 
@@ -309,7 +310,7 @@ export default function ArenaLobby({ onBack, onGameStart }: ArenaLobbyProps) {
     try {
       const { data: updated, error } = await supabase
         .from('arena_rooms')
-        .update({ status: 'active' })
+        .update({ status: 'active', started_at: new Date().toISOString() })
         .eq('id', room.id)
         .select()
         .single();

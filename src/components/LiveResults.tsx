@@ -26,6 +26,7 @@ interface Room {
   subject: string;
   question_count: number;
   duration_seconds: number;
+  started_at?: string;
 }
 
 interface LiveResultsProps {
