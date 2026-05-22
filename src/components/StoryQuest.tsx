@@ -1,0 +1,1399 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  BookOpen, Lock, Unlock, Award, CheckCircle2, XCircle, 
+  ChevronLeft, ArrowRight, ShieldAlert, Sparkles, Star, 
+  HelpCircle, Compass, Smile, Flame, ShieldCheck, Trophy, 
+  Check, PlayCircle, Loader2, RefreshCw
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useToast } from './Toast';
+
+// ─── Interfaces ──────────────────────────────────────────────────────────────
+
+interface StorySubject {
+  id: string;
+  subject_name: string;
+  character_name: string;
+  character_desc: string;
+  icon: string;
+  total_chapters: number;
+  grade: string;
+}
+
+interface StoryChapter {
+  id: string;
+  chapter_number: number;
+  title: string;
+  description: string;
+  total_scenes: number;
+  xp_reward: number;
+}
+
+interface StoryScene {
+  id: string;
+  scene_number: number;
+  narrative: string;
+  setting_local: string;
+  question?: SceneQuestion;
+}
+
+interface SceneQuestion {
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_option: 'A' | 'B' | 'C' | 'D';
+  explanation: string;
+}
+
+interface StudentStoryProgress {
+  subject_id: string;
+  current_chapter_id: string | null;
+  current_scene_number: number;
+  completed_chapters: string[];
+  total_xp: number;
+}
+
+// ─── Local Prebuilt Data (Kenya Context) ──────────────────────────────────────
+
+const PREBUILT_SUBJECTS: StorySubject[] = [
+  {
+    id: 'subj-business',
+    subject_name: 'Business Studies',
+    character_name: 'Amani',
+    character_desc: 'An enterprising 13-year-old helping her Cucu run a fresh produce kiosk in Nakuru town.',
+    icon: 'Compass',
+    total_chapters: 1,
+    grade: 'Grade 7'
+  },
+  {
+    id: 'subj-agriculture',
+    subject_name: 'Agriculture',
+    character_name: 'Karanja',
+    character_desc: 'An innovative youth in Karatina who constructs organic vertical gardens to defeat drought.',
+    icon: 'Sparks',
+    total_chapters: 1,
+    grade: 'Grade 7'
+  },
+  {
+    id: 'subj-maths',
+    subject_name: 'Mathematics',
+    character_name: 'Wanjiku',
+    character_desc: 'A sharp fabric pattern designer who calculates ratios in Nairobi’s bustling Gikomba market.',
+    icon: 'Star',
+    total_chapters: 1,
+    grade: 'Grade 7'
+  },
+  {
+    id: 'subj-science',
+    subject_name: 'Science & Tech',
+    character_name: 'Mutua',
+    character_desc: 'An ambitious investigator who uses chemical test slips to probe Athi River’s safety.',
+    icon: 'Award',
+    total_chapters: 1,
+    grade: 'Grade 7'
+  },
+  {
+    id: 'subj-arts',
+    subject_name: 'Creative Arts',
+    character_name: 'Nekesa',
+    character_desc: 'A sound recorder in Kakamega blending traditional Kayamba shaker rhythms with modern beats.',
+    icon: 'Smile',
+    total_chapters: 1,
+    grade: 'Grade 7'
+  },
+  {
+    id: 'subj-social',
+    subject_name: 'Social Studies',
+    character_name: 'Juma',
+    character_desc: 'A history enthusiast near Fort Jesus, Mombasa, discovering the secrets of Indian Ocean trade.',
+    icon: 'Compass',
+    total_chapters: 1,
+    grade: 'Grade 7'
+  }
+];
+
+const PREBUILT_CHAPTERS: Record<string, StoryChapter[]> = {
+  'subj-business': [
+    {
+      id: 'chap-biz-1',
+      chapter_number: 1,
+      title: 'Mama Mboga’s Balancing Act',
+      description: 'Discover why financial bookkeeping, credit records, and understanding liabilities keep kiosks profitable.',
+      total_scenes: 3,
+      xp_reward: 120
+    }
+  ],
+  'subj-agriculture': [
+    {
+      id: 'chap-agri-1',
+      chapter_number: 1,
+      title: 'Water Oasis & container gardening',
+      description: 'Learn organic mulching, drip container setups, and vertical agriculture in clay environments.',
+      total_scenes: 3,
+      xp_reward: 120
+    }
+  ],
+  'subj-maths': [
+    {
+      id: 'chap-math-1',
+      chapter_number: 1,
+      title: 'Proportions in the Gikomba stalls',
+      description: 'Apply ratios to Maasai Shuka fabric pieces, optimize markup margins, and handle discount transactions.',
+      total_scenes: 3,
+      xp_reward: 120
+    }
+  ],
+  'subj-science': [
+    {
+      id: 'chap-sci-1',
+      chapter_number: 1,
+      title: 'Red Litmus & Water Indicators',
+      description: 'Examine pH acids, trace wastewater run-offs, and implement phytoremediation using regional wetland reeds.',
+      total_scenes: 3,
+      xp_reward: 120
+    }
+  ],
+  'subj-arts': [
+    {
+      id: 'chap-art-1',
+      chapter_number: 1,
+      title: 'Complementary Hues of Luhya Shakers',
+      description: 'Analyze contrast parameters using warm-cool values, classify percussion idiophones, and learn copyright benefits.',
+      total_scenes: 3,
+      xp_reward: 120
+    }
+  ],
+  'subj-social': [
+    {
+      id: 'chap-soc-1',
+      chapter_number: 1,
+      title: 'Trade Monsoons & Fort Jesus Coral',
+      description: 'Explore historical maritime wind currents, Swahili integration, and the defensive resilience of coral stone blocks.',
+      total_scenes: 3,
+      xp_reward: 120
+    }
+  ]
+};
+
+const PREBUILT_SCENES: Record<string, StoryScene[]> = {
+  'chap-biz-1': [
+    {
+      id: 'scene-biz-1',
+      scene_number: 1,
+      setting_local: 'Nakuru Open-Air Market, Kenya',
+      narrative: 'The Nakuru open-air market is buzzing with buyers under the warm afternoon sun. Amani arrives at her grandmother’s kiosk, only to find Shiku, her Cucu (grandmother), looking worried and staring blankly into an old notebook. "Cucu, what is wrong?" asks Amani. Shiku sighs deeply, "We sold as usual today, Amani, but I cannot tell why our cash drawer is short by 800 Shillings. We have no clear records of our expenses!"',
+      question: {
+        question_text: 'What is the primary purpose of maintaining regular and strict financial records in a busy business kiosk?',
+        option_a: 'To make the stall look more professional and attract customers',
+        option_b: 'To satisfy local council officers during trade licensing inspections',
+        option_c: 'To carefully track income, register expenses, and prevent cash leakage',
+        option_d: 'To calculate how many hours the stall workers spend on site',
+        correct_option: 'C',
+        explanation: 'Financial bookkeeping tracks every single penny flowing in (income) and out (expenses). This clarifies exactly where cash goes, avoiding sudden unexplained shortages and helping a business evaluate actual margins.'
+      }
+    },
+    {
+      id: 'scene-biz-2',
+      scene_number: 2,
+      setting_local: 'Nakuru Market',
+      narrative: 'Amani grabs a clean cardboard worksheet. She helps Cucu list all the costs: they bought a crate of ripe tomatoes for 2,000 KES, paid 300 KES to a wheelbarrow transporter to shift it to their station, and sold everything for 3,100 KES in total. "Let’s work out the math!" Amani suggests eagerly. "We must identify all operational expenses and calculate our net profits correctly!"',
+      question: {
+        question_text: 'What were the total direct expenses incurred to settle the tomatoes, and how much net profit did Cucu make?',
+        option_a: 'Expenses: 2,000 KES; Profit: 1,100 KES',
+        option_b: 'Expenses: 2,300 KES; Profit: 800 KES',
+        option_c: 'Expenses: 2,300 KES; Profit: 3,100 KES',
+        option_d: 'Expenses: 3,100 KES; Profit: 0 KES',
+        correct_option: 'B',
+        explanation: 'Total cost comprises the product cost (2,000 KES) + transportation utility (300 KES) = 2,300 KES. Net Profit = Revenue (3,100 KES) - Expenses (2,300 KES) = 800 KES.'
+      }
+    },
+    {
+      id: 'scene-biz-3',
+      scene_number: 3,
+      setting_local: 'Nakuru Market',
+      narrative: 'Cucu smiles broadly as she reads the clear numbers. "We did remarkably well today, Amani!" Suddenly, Baba Mwangi, an wholesale sweet potato supplier, approaches offering them inventory on credit. Shiku wants to grab it, but Amani advises caution: "Cucu, buying on credit is useful, but we must understand that this becomes a liability we owe back!"',
+      question: {
+        question_text: 'What does purchasing stock "on credit" mean for Mama Mboga’s small market business?',
+        option_a: 'They get the inventory for free as a gift from Baba Mwangi',
+        option_b: 'They must pay double the price of the potatoes immediately on delivery',
+        option_c: 'They receive the potatoes now and must pay Baba Mwangi’s company later',
+        option_d: 'They are renting the potatoes and must return them if unsold',
+        correct_option: 'C',
+        explanation: 'Buying on credit represents an accounts payable liability. The merchant is allowed to take possession of the goods immediately and agrees to pay the supplier at a specified later date.'
+      }
+    }
+  ],
+  'chap-agri-1': [
+    {
+      id: 'scene-agri-1',
+      scene_number: 1,
+      setting_local: 'Karatina, Nyeri County',
+      narrative: 'Karanja walks through his dry backyard. The Nyeri sun has been blistering for weeks, and his family’s sukuma wiki (collard greens) are drooping. Soil moisture is completely gone, and tap water is expensive. Karanja thinks to himself: "Pouring cups of water over the leaves is a waste because it evaporates almost instantly in this dry heat. We need a targeted approach."',
+      question: {
+        question_text: 'Which irrigation method is most effective at conserving water during a severe dry spell?',
+        option_a: 'Sprinkling water liberally over the entire yard with a hose',
+        option_b: 'Flooding the garden beds until the clay is completely soaked',
+        option_c: 'Implementing targeted drip/container irrigation directly at root level',
+        option_d: 'Watering the garden only at direct midday when the plants are hottest',
+        correct_option: 'C',
+        explanation: 'Drip container irrigation feeds minimal quantities of water drop-by-drop right at the root zone where the plant needs it, mitigating soil runoff and evaporation losses.'
+      }
+    },
+    {
+      id: 'scene-agri-2',
+      scene_number: 2,
+      setting_local: 'Karatina garden',
+      narrative: 'Karanja collects old plastic 5-liter bottles from neighbors, pierces a microscopic hole near the caps, and hangs them upside down next to each succulent stalk. He wants to take a step further by covering the soil around each plant. "But with what?" asks his brother. "We must trap whatever water drips in!"',
+      question: {
+        question_text: 'Which organic materials are best suited to act as "mulch" to protect soil moisture from evaporating?',
+        option_a: 'Broken red glass pieces and colored gravel stones',
+        option_b: 'Fine dry sand or charcoal chips',
+        option_c: 'Dry grass, fallen leaves, or crop residues',
+        option_d: 'Old newspapers and crushed plastic bottles',
+        correct_option: 'C',
+        explanation: 'Organic mulches (like dry grass, leaves, straw, and coconut husks) protect soil from solar heat, block moisture evaporation, limit weed growth, and eventually decay, providing nutrients.'
+      }
+    },
+    {
+      id: 'scene-agri-3',
+      scene_number: 3,
+      setting_local: 'Karatina Garden',
+      narrative: 'Within a week, Karanja’s sukuma wiki are thriving, standing tall and deep green. Neighbors are amazed at how little water he used. Some neighbors mention having no soil plot. Karanja points to a large upright sack filled with soil and compost. "Look!" he says. "We can grow multiple levels of vegetables without needing wide fields!"',
+      question: {
+        question_text: 'What represents the chief benefit of vertical container/multistorey gardening?',
+        option_a: 'It allows growing many crops vertically, saving space and recycling soil nutrients',
+        option_b: 'It completely protects the plants from pests and bird attacks',
+        option_c: 'It forces the vegetables to grow larger because they are closer to the sky',
+        option_d: 'It changes the flavor of sukuma wiki, making them sweet',
+        correct_option: 'A',
+        explanation: 'Multistorey sack/container gardens make clever use of vertical space, enabling households with tiny yards or concrete balconies to achieve food security in urban areas.'
+      }
+    }
+  ],
+  'chap-math-1': [
+    {
+      id: 'scene-math-1',
+      scene_number: 1,
+      setting_local: 'Gikomba Market, Nairobi',
+      narrative: 'Gikomba is packed with rich patterns. Wanjiku’s mother receives a big order for custom school and traditional Maasai Shukas. She has a large single piece of vibrant red patterned fabric 24 meters long. She tells Wanjiku: "We must split this fabric into two rolls, one for Large sizes and one for Medium, in the exact ratio of 5:3. Tell me the length of each!"',
+      question: {
+        question_text: 'Using the ratio of 5:3, how many meters of the 24m fabric should Wanjiku measure for the Large roll?',
+        option_a: '15 meters',
+        option_b: '9 meters',
+        option_c: '12 meters',
+        option_d: '18 meters',
+        correct_option: 'A',
+        explanation: 'Total parts = 5 + 3 = 8 parts. Total fabric = 24m. One part = 24 / 8 = 3m. Large role gets 5 parts: 5 * 3 = 15m. Medium role gets 3 parts: 3 * 3 = 9m.'
+      }
+    },
+    {
+      id: 'scene-math-2',
+      scene_number: 2,
+      setting_local: 'Gikomba Market',
+      narrative: 'Wanjiku cuts the fabric neatly. Now her mom needs to set the selling price. The raw cost to procure and sew single medium-sized Maasai Shuka is 600 KES. "To pay our rent and school fees, we need to apply a 25% profit markup over the cost price," her mother calculations. "Wanjiku, set the price tag!"',
+      question: {
+        question_text: 'What should be the final retail price tag of the Maasai Shuka to achieve a 25% markup?',
+        option_a: '650 KES',
+        option_b: '750 KES',
+        option_c: '800 KES',
+        option_d: '725 KES',
+        correct_option: 'B',
+        explanation: 'Markup amount = 25% of 600 KES = 0.25 * 600 = 150 KES. Final Price = Cost Price + Markup = 600 + 150 = 750 KES.'
+      }
+    },
+    {
+      id: 'scene-math-3',
+      scene_number: 3,
+      setting_local: 'Gikomba Market',
+      narrative: 'A community group wants to purchase a batch of 10 Medium Maasai Shukas. They ask Wanjiku for a small wholesale volume discount. Wanjiku proposes: "If we give them an flat 10% discount from our total retail price of 7,500 KES, we can secure the sale quickly! But mother, let’s ensure we still make a sustainable profit!"',
+      question: {
+        question_text: 'After applying the 10% discount on the 7,500 KES total, what is the new price, and do they still make profit over the 6,000 KES manufacture cost?',
+        option_a: 'New price: 6,750 KES; yes, they earn 750 KES profit',
+        option_b: 'New price: 7,000 KES; yes, they earn 1,000 KES profit',
+        option_c: 'New price: 6,000 KES; no, they break even with 0 KES profit',
+        option_d: 'New price: 6,500 KES; yes, they earn 500 KES profit',
+        correct_option: 'A',
+        explanation: 'Discount = 10% of 7,500 = 750 KES. New selling value = 7,500 - 750 = 6,750 KES. Total cost price = 10 * 600 = 6,000 KES. Residual profit = 6,750 - 6,000 = 750 KES.'
+      }
+    }
+  ],
+  'chap-sci-1': [
+    {
+      id: 'scene-sci-1',
+      scene_number: 1,
+      setting_local: 'Machakos County',
+      narrative: 'Mutua is walking next to a small tributary that feeds the Athi River in Machakos. Near a factory outlet, he spots weird light-yellow soap foam floating on the water and dead algae along the banks. "This looks like a dangerous pH shift!" Mutua says. He grabs a test paper strip from his science backpack.',
+      question: {
+        question_text: 'If the river contains harmful acidic chemicals, what color change will indicate this when Mutua dips blue litmus paper in it?',
+        option_a: 'The blue litmus paper will stay dark blue',
+        option_b: 'The blue litmus paper will turn bright white',
+        option_c: 'The blue litmus paper will turn bright red or warm pink',
+        option_d: 'The blue litmus paper will turn deep purple',
+        correct_option: 'C',
+        explanation: 'Acidic substances react with blue litmus dye indicator, turning it red. A pH of less than 7 indicates acidity, which is toxic to river fish.'
+      }
+    },
+    {
+      id: 'scene-sci-2',
+      scene_number: 2,
+      setting_local: 'Machakos Riverbank',
+      narrative: 'Mutua confirms a ph balance of 4.5. He calls a county representative, Mr. Musyoka, who arrives on site. "Mutua, what is the big deal? It is just some soap bubbles washing away," says Mr. Musyoka. Mutua points to the dark turbid water. "When pollutants cloud the water, they block sunlight from reaching the moss on the riverbed!"',
+      question: {
+        question_text: 'Why is blocking sunlight harmful to underwater plants and the aquatic life cycle?',
+        option_a: 'It prevents plants from absorbing salts from the soil',
+        option_b: 'It blocks photosynthesis, which cuts off dissolved oxygen production for fish',
+        option_c: 'It makes the water too hot during the afternoon',
+        option_d: 'It makes the river plants invisible to insects',
+        correct_option: 'B',
+        explanation: 'Riverbed flora need solar rays to run photosynthesis. In photosynthesis, carbon dioxide and water are transformed into sugars and oxygen. Without light, oxygen drops, causing fish suffocation.'
+      }
+    },
+    {
+      id: 'scene-sci-3',
+      scene_number: 3,
+      setting_local: 'Machakos Wetland',
+      narrative: 'Mr. Musyoka understands. "We will mandate filtration! But is there a natural soil technique we can build near the outlet to prevent emergency runoff?" Mutua sketches a wetland channel lined with specific local reeds and gravel beds. "The roots filter waste naturally!"',
+      question: {
+        question_text: 'What scientific term describes using local plants to clean up soil or industrial water pollution?',
+        option_a: 'Sedimentation',
+        option_b: 'Phytoremediation and natural biofiltration',
+        option_c: 'Thermal condensation',
+        option_d: 'Salinization',
+        correct_option: 'B',
+        explanation: 'Phytoremediation is the bio-technological use of plants (such as wetland reeds) to clean up, hyperaccumulate, or neutralize toxins from aquatic systems and soil.'
+      }
+    }
+  ],
+  'chap-art-1': [
+    {
+      id: 'scene-art-1',
+      scene_number: 1,
+      setting_local: 'Kakamega Town, Western Kenya',
+      narrative: 'Nekesa is assembling a beautiful painting for the annual Kakamega cultural festival. Her uncle plays a beautiful Kayamba shaker—a traditional flat wood-and-reed sheet decorated with orange clay beads. Nekesa wants her painting to stand out. "To make my orange clay elements pop visually," she muses, "I must paint a highly contrasting cool background!"',
+      question: {
+        question_text: 'Which color lies directly opposite on the standard color wheel and serves as the highest-contrast complementary hue to Orange?',
+        option_a: 'Deep Cobalt Blue',
+        option_b: 'Bright Primary Red',
+        option_c: 'Vibrant Sunflower Yellow',
+        option_d: 'Forest Emerald Green',
+        correct_option: 'A',
+        explanation: 'Blue and orange are complementary colors. On the color wheel, complementary colors face each other directly, offering maximum warmth-vs-cool visual contrast.'
+      }
+    },
+    {
+      id: 'scene-art-2',
+      scene_number: 2,
+      setting_local: 'Kakamega Festival Ground',
+      narrative: 'The painting is gorgeous. Nekesa now plugs in her microphone. She records the rhythmic sound of her uncle shaking the Kayamba. The rustling sound is crisp. She explains how the simple instrument produces sound: "It is simple physics! Red seeds strike inside the dry hollow reeds!"',
+      question: {
+        question_text: 'To which class of musical instruments does the Kayamba shaker belong?',
+        option_a: 'Chordophone (stringed loop)',
+        option_b: 'Percussion / Idiophone (sound produced by body vibration)',
+        option_c: 'Aerophone (wind-blown tube)',
+        option_d: 'Membranophone (stretched skin drum)',
+        correct_option: 'B',
+        explanation: 'The Kayamba is an idiophone shaker. Vibrations are created by shaking hard seeds or beads against its reed body mesh without requiring a stretched membrane or string.'
+      }
+    },
+    {
+      id: 'scene-art-3',
+      scene_number: 3,
+      setting_local: 'Kakamega Studio',
+      narrative: 'Nekesa produces a high-energy lo-fi music track blending her uncle’s traditional Kayamba shaker loop with modern synthesizer drums. The blend is brilliant. Her schoolmates are dancing joyfully. The festival chief says: "Nekesa, your song is magnificent! Be sure to register your digital files so your creative assets remain protected!"',
+      question: {
+        question_text: 'Which legal protection secures Nekesa’s exclusive commercial rights to her musical recording?',
+        option_a: 'A county commercial trading patent',
+        option_b: 'A trademark certification',
+        option_c: 'A copyright registration',
+        option_d: 'A title deed of land ownership',
+        correct_option: 'C',
+        explanation: 'Copyright shields original audio masterworks, giving the creators absolute command over reproduction, performance, and commercial broadcasts.'
+      }
+    }
+  ],
+  'chap-soc-1': [
+    {
+      id: 'scene-soc-1',
+      scene_number: 1,
+      setting_local: 'Fort Jesus, Mombasa Island',
+      narrative: 'The salty sea spray cools the thick stone ramparts of Fort Jesus. Juma holds a translated copy of a 15th-century maritime diary. The text records that Arabic dhows sailed across the ocean using predictable seasonal breezes. Juma’s grandfather asks, "Juma, do you know which wind currents allowed these ancient ships to successfully travel here?"',
+      question: {
+        question_text: 'What seasonal wind systems facilitated historical merchant shipping across the Indian Ocean to East Africa?',
+        option_a: 'Fohn and Chinook mountain winds',
+        option_b: 'The Monsoon winds (Kaskazi and Kusi)',
+        option_c: 'High-altitude Jet streams',
+        option_d: 'The Westerlies',
+        correct_option: 'B',
+        explanation: 'Monsoon winds change directions seasonally. The Kaskazi blows from the northeast toward Kenya, while the Kusi blows from the southwest, enabling sailboats to travel back and forth.'
+      }
+    },
+    {
+      id: 'scene-soc-2',
+      scene_number: 2,
+      setting_local: 'Fort Jesus Museum',
+      narrative: 'Juma outlines map trade lines on paper. "Because of these steady winds, traders settled along Lamu, Malindi, and Mombasa, creating our incredible coastal Swahili culture!" Grandpa smiles, "Yes! And what is the highest duty of a modern Kenyan citizen living in such a diverse multicultural society?"',
+      question: {
+        question_text: 'What value is demonstrated when citizens from diverse origins cooperate actively to build a unified country?',
+        option_a: 'Individual competition and isolation',
+        option_b: 'Community cohesion and national integration (Umoja)',
+        option_c: 'Regional tribal division',
+        option_d: 'Economic protectionism and closing trade routes',
+        correct_option: 'B',
+        explanation: 'National integration (Umoja) and community cohesion promote mutual respect, celebrate cultural heritage diversity, and build economic partnerships across Kenya.'
+      }
+    },
+    {
+      id: 'scene-soc-3',
+      scene_number: 3,
+      setting_local: 'Fort Jesus Battlements',
+      narrative: 'Juma looks at the massive coral-stone walls built by Portuguese engineers in 1593. The fort survived dozens of heavy naval sieges because of these heavy defenses. Juma notes: "The material choice was ingenious. Building with ocean-sourced coral block wasn’t just cheap; it was a military masterstroke!"',
+      question: {
+        question_text: 'Why is coastal coral stone an excellent building block for defensive fortifications?',
+        option_a: 'It is highly flexible and bends easily when hit by waves',
+        option_b: 'It is lightweight, enabling it to float like wood',
+        option_c: 'It absorbs canon impacts without shattering and hardens securely over time when exposed to air',
+        option_d: 'It acts as a natural magnet that repels iron canon balls',
+        correct_option: 'C',
+        explanation: 'Coral limestone contains marine minerals. When exposed to air, it hardens over centuries. Its porous, layered matrix absorbs shock better than granite blocks, which easily splinter under impact.'
+      }
+    }
+  ]
+};
+
+interface StoryQuestProps {
+  onBack: () => void;
+}
+
+export default function StoryQuest({ onBack }: StoryQuestProps) {
+  // ─── STATE MANAGEMENT ──────────────────────────────────────────────────────
+  const [screen, setScreen] = useState<'subject_select' | 'story_home' | 'scene' | 'result' | 'chapter_complete'>('subject_select');
+  const [studentProfile, setStudentProfile] = useState<{ id: string; name: string; grade: string }>({
+    id: 'guest',
+    name: 'Learner',
+    grade: 'Grade 7'
+  });
+
+  const [subjects, setSubjects] = useState<StorySubject[]>(PREBUILT_SUBJECTS);
+  const [selectedSubject, setSelectedSubject] = useState<StorySubject | null>(null);
+  const [chapters, setChapters] = useState<StoryChapter[]>([]);
+  const [selectedChapter, setSelectedChapter] = useState<StoryChapter | null>(null);
+  
+  const [scenes, setScenes] = useState<StoryScene[]>([]);
+  const [currentSceneIndex, setCurrentSceneIndex] = useState<number>(0);
+  const [activeScene, setActiveScene] = useState<StoryScene | null>(null);
+  
+  const [selectedOption, setSelectedOption] = useState<'A' | 'B' | 'C' | 'D' | null>(null);
+  const [wrongAttempts, setWrongAttempts] = useState<number>(0);
+  const [isAnswerSubmitted, setIsAnswerSubmitted] = useState<boolean>(false);
+  const [resultState, setResultState] = useState<'correct' | 'wrong' | null>(null);
+  
+  const [loading, setLoading] = useState<boolean>(false);
+  const [syncing, setSyncing] = useState<boolean>(false);
+  
+  const [progressMap, setProgressMap] = useState<Record<string, StudentStoryProgress>>({});
+  
+  const { showToast } = useToast();
+
+  // ─── INITIALIZATION ────────────────────────────────────────────────────────
+  useEffect(() => {
+    // 1. Load active student profile
+    const studentStr = localStorage.getItem('azilearn_student');
+    let activeStudent = { id: 'guest', name: 'Learner', grade: 'Grade 7' };
+    if (studentStr) {
+      try {
+        const parsed = JSON.parse(studentStr);
+        if (parsed.name) {
+          activeStudent = {
+            id: parsed.id || 'student-local',
+            name: parsed.name,
+            grade: parsed.grade || 'Grade 7'
+          };
+          setStudentProfile(activeStudent);
+        }
+      } catch (e) {
+        console.error('Failed to parse student profile', e);
+      }
+    }
+
+    // 2. Load Local Progress fallback
+    const savedProgress = localStorage.getItem(`story_progress_${activeStudent.id}`);
+    if (savedProgress) {
+      try {
+        setProgressMap(JSON.parse(savedProgress));
+      } catch (e) {
+        console.error('Error loading story progress cache', e);
+      }
+    }
+
+    // 3. Trigger Supabase Fetch
+    fetchDatabaseData(activeStudent);
+  }, []);
+
+  // ─── DATABASE FETCHING ─────────────────────────────────────────────────────
+  const fetchDatabaseData = async (student: { id: string; name: string; grade: string }) => {
+    setLoading(true);
+    try {
+      // Attempt to load story subjects matching student grade
+      const { data: dbSubjects, error: subError } = await supabase
+        .from('story_subjects')
+        .select('*')
+        .eq('grade', student.grade);
+
+      if (!subError && dbSubjects && dbSubjects.length > 0) {
+        setSubjects(dbSubjects as StorySubject[]);
+      } else {
+        // Fall back to prebuilt subjects filtered for current grade or Grade 7 default
+        const filtered = PREBUILT_SUBJECTS.filter(s => s.grade === student.grade);
+        setSubjects(filtered.length > 0 ? filtered : PREBUILT_SUBJECTS);
+      }
+
+      // Try fetching active student story progress mapping
+      const { data: dbProgress, error: progError } = await supabase
+        .from('student_story_progress')
+        .select('*')
+        .eq('student_id', student.id);
+
+      if (!progError && dbProgress) {
+        const map: Record<string, StudentStoryProgress> = {};
+        dbProgress.forEach((p: any) => {
+          map[p.subject_id] = {
+            subject_id: p.subject_id,
+            current_chapter_id: p.current_chapter_id,
+            current_scene_number: p.current_scene_number,
+            completed_chapters: p.completed_chapters || [],
+            total_xp: p.total_xp || 0
+          };
+        });
+        setProgressMap(map);
+        localStorage.setItem(`story_progress_${student.id}`, JSON.stringify(map));
+      }
+    } catch (e) {
+      console.warn('Supabase not available or tables unprovisioned. Using rich local storage.', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── SYNC PROGRESS WITH SUPABASE & LOCAL ──────────────────────────────────
+  const saveProgress = async (
+    subjId: string, 
+    chapId: string, 
+    sceneNum: number, 
+    isChapComplete: boolean,
+    xpGained: number
+  ) => {
+    setSyncing(true);
+    
+    // Copy current mapping
+    const currentProgress = progressMap[subjId] || {
+      subject_id: subjId,
+      current_chapter_id: chapId,
+      current_scene_number: 1,
+      completed_chapters: [],
+      total_xp: 0
+    };
+
+    const updatedCompleted_chapters = [...currentProgress.completed_chapters];
+    if (isChapComplete && !updatedCompleted_chapters.includes(chapId)) {
+      updatedCompleted_chapters.push(chapId);
+    }
+
+    const nextProgress: StudentStoryProgress = {
+      subject_id: subjId,
+      current_chapter_id: chapId,
+      current_scene_number: sceneNum,
+      completed_chapters: updatedCompleted_chapters,
+      total_xp: currentProgress.total_xp + xpGained
+    };
+
+    const newMap = {
+      ...progressMap,
+      [subjId]: nextProgress
+    };
+
+    // Save to Local Cache
+    setProgressMap(newMap);
+    localStorage.setItem(`story_progress_${studentProfile.id}`, JSON.stringify(newMap));
+
+    // Try pushing to Supabase
+    try {
+      const { error } = await supabase
+        .from('student_story_progress')
+        .upsert({
+          student_id: studentProfile.id,
+          subject_id: subjId,
+          current_chapter_id: chapId,
+          current_scene_number: sceneNum,
+          completed_chapters: updatedCompleted_chapters,
+          total_xp: nextProgress.total_xp,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'student_id,subject_id' });
+
+      if (error) {
+        console.warn('Supabase progress save bypassed:', error.message);
+      }
+    } catch (e) {
+      console.warn('DB sync unavailable or tables unprovisioned. Progress preserved locally.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // ─── ACTION HANDLERS ───────────────────────────────────────────────────────
+  
+  const handleSelectSubject = async (sub: StorySubject) => {
+    setSelectedSubject(sub);
+    setLoading(true);
+
+    try {
+      // Attempt fetching Chapters from Supabase
+      const { data: dbChapters, error } = await supabase
+        .from('story_chapters')
+        .select('*')
+        .eq('story_id', sub.id) // Or filtered by subject relation
+        .order('chapter_number', { ascending: true });
+
+      if (!error && dbChapters && dbChapters.length > 0) {
+        setChapters(dbChapters as StoryChapter[]);
+      } else {
+        // Fall back to prebuilt
+        const fallbackChaps = PREBUILT_CHAPTERS[sub.id] || [];
+        setChapters(fallbackChaps);
+      }
+    } catch (e) {
+      setChapters(PREBUILT_CHAPTERS[sub.id] || []);
+    } finally {
+      setLoading(false);
+      setScreen('story_home');
+    }
+  };
+
+  const handleStartChapter = async (chap: StoryChapter) => {
+    setSelectedChapter(chap);
+    setLoading(true);
+
+    // Retrieve student progress for current subject
+    const subProgress = progressMap[selectedSubject?.id || ''] || {
+      current_chapter_id: chap.id,
+      current_scene_number: 1
+    };
+
+    // Let's decide starting scene number
+    let initialSceneNum = 1;
+    // If we are resumed into this selected chapter, grab completed scenes
+    if (subProgress.current_chapter_id === chap.id) {
+      initialSceneNum = Math.min(subProgress.current_scene_number, chap.total_scenes);
+    }
+
+    try {
+      // Fetch scenes for this chapter from Supabase
+      const { data: dbScenes, error } = await supabase
+        .from('story_scenes')
+        .select(`
+          id, scene_number, narrative, setting_local,
+          scene_questions (question_text, option_a, option_b, option_c, option_d, correct_option, explanation)
+        `)
+        .eq('chapter_id', chap.id)
+        .order('scene_number', { ascending: true });
+
+      if (!error && dbScenes && dbScenes.length > 0) {
+        const formattedScenes: StoryScene[] = dbScenes.map((s: any) => ({
+          id: s.id,
+          scene_number: s.scene_number,
+          narrative: s.narrative,
+          setting_local: s.setting_local || 'Kenyan Setting',
+          question: s.scene_questions ? {
+            question_text: s.scene_questions.question_text,
+            option_a: s.scene_questions.option_a,
+            option_b: s.scene_questions.option_b,
+            option_c: s.scene_questions.option_c,
+            option_d: s.scene_questions.option_d,
+            correct_option: s.scene_questions.correct_option,
+            explanation: s.scene_questions.explanation || ''
+          } : undefined
+        }));
+        
+        setScenes(formattedScenes);
+        const startIdx = Math.max(0, initialSceneNum - 1);
+        setCurrentSceneIndex(startIdx);
+        setActiveScene(formattedScenes[startIdx]);
+      } else {
+        // Fall back to prebuilt scenes
+        const prebuilt = PREBUILT_SCENES[chap.id] || [];
+        setScenes(prebuilt);
+        const startIdx = Math.max(0, Math.min(initialSceneNum - 1, prebuilt.length - 1));
+        setCurrentSceneIndex(startIdx);
+        setActiveScene(prebuilt[startIdx] || null);
+      }
+    } catch (e) {
+      const prebuilt = PREBUILT_SCENES[chap.id] || [];
+      setScenes(prebuilt);
+      const startIdx = Math.max(0, Math.min(initialSceneNum - 1, prebuilt.length - 1));
+      setCurrentSceneIndex(startIdx);
+      setActiveScene(prebuilt[startIdx] || null);
+    } finally {
+      setSelectedOption(null);
+      setWrongAttempts(0);
+      setIsAnswerSubmitted(false);
+      setResultState(null);
+      setLoading(false);
+      setScreen('scene');
+    }
+  };
+
+  const handleOptionSelect = (option: 'A' | 'B' | 'C' | 'D') => {
+    if (isAnswerSubmitted) return; // Answer locked
+    setSelectedOption(option);
+  };
+
+  const handleSubmitAnswer = () => {
+    if (!selectedOption || !activeScene?.question) return;
+
+    const correctOpt = activeScene.question.correct_option;
+    const isCorrect = selectedOption === correctOpt;
+
+    setIsAnswerSubmitted(true);
+
+    if (isCorrect) {
+      setResultState('correct');
+      showToast('Hakuna Matata! Correct Answer! 🌟', 'success');
+    } else {
+      setResultState('wrong');
+      const updatedWrong = wrongAttempts + 1;
+      setWrongAttempts(updatedWrong);
+      showToast('Not quite right, let’s study our choices! 🧐', 'error');
+    }
+
+    setScreen('result');
+  };
+
+  const handleNextAction = () => {
+    if (resultState === 'correct') {
+      // ─── CORRECT ANSWER FLOW ───────────────────────────────────────────────
+      const nextIdx = currentSceneIndex + 1;
+      const gainedXp = wrongAttempts === 0 ? 30 : (wrongAttempts === 1 ? 15 : 5);
+
+      if (nextIdx >= scenes.length) {
+        // Chapter fully finished! Go to celebration screen
+        saveProgress(
+          selectedSubject!.id, 
+          selectedChapter!.id, 
+          scenes.length, 
+          true, 
+          selectedChapter!.xp_reward
+        );
+        setScreen('chapter_complete');
+      } else {
+        // More scenes left in this chapter
+        saveProgress(
+          selectedSubject!.id, 
+          selectedChapter!.id, 
+          nextIdx + 1, 
+          false, 
+          gainedXp
+        );
+
+        setCurrentSceneIndex(nextIdx);
+        setActiveScene(scenes[nextIdx]);
+        
+        // Reset gameplay variables for next scene
+        setSelectedOption(null);
+        setWrongAttempts(0);
+        setIsAnswerSubmitted(false);
+        setResultState(null);
+        setScreen('scene');
+      }
+    } else {
+      // ─── WRONG ANSWER FLOW / TRY AGAIN ───────────────────────────────
+      setIsAnswerSubmitted(false);
+      setSelectedOption(null);
+      setResultState(null);
+      setScreen('scene');
+    }
+  };
+
+  const handleBackToChapters = () => {
+    setScreen('story_home');
+  };
+
+  const handleNextChapter = () => {
+    // Go back to the subject story selection hub
+    setSelectedChapter(null);
+    setScreen('story_home');
+  };
+
+  // Get active student completed chapters count for visual progress
+  const getSubjectCompletedCount = (subjId: string): number => {
+    const subProj = progressMap[subjId];
+    return subProj ? subProj.completed_chapters.length : 0;
+  };
+
+  const getSubjectXp = (subjId: string): number => {
+    const subProj = progressMap[subjId];
+    return subProj ? subProj.total_xp : 0;
+  };
+
+  // Get chapter lock status
+  const isChapterUnlocked = (subjId: string, chap: StoryChapter): boolean => {
+    if (chap.chapter_number === 1) return true; // First chapter is always unlocked
+    
+    // Check if previous chapter number is complete
+    const prevProj = progressMap[subjId];
+    if (!prevProj) return false;
+    
+    // Look up chapters for previous chapter completion
+    const chapList = PREBUILT_CHAPTERS[subjId] || [];
+    const prevChap = chapList.find(c => c.chapter_number === chap.chapter_number - 1);
+    
+    if (!prevChap) return true;
+    return prevProj.completed_chapters.includes(prevChap.id);
+  };
+
+  const getChapterProgressText = (chap: StoryChapter): string => {
+    const subProj = progressMap[selectedSubject?.id || ''];
+    if (!subProj || subProj.current_chapter_id !== chap.id) {
+      const isComplete = subProj?.completed_chapters.includes(chap.id);
+      return isComplete ? `${chap.total_scenes}/${chap.total_scenes} scenes` : '0%' ;
+    }
+    return `${subProj.current_scene_number - 1}/${chap.total_scenes} scenes`;
+  };
+
+  // Helper mapping icon standard strings to Lucide components
+  const getSubjectIcon = (iconStr: string) => {
+    switch (iconStr) {
+      case 'Compass': return <Compass className="w-5 h-5 text-tomato-500" />;
+      case 'Star': return <Star className="w-5 h-5 text-[#FF6B00]" />;
+      case 'Award': return <Award className="w-5 h-5 text-emerald-500" />;
+      case 'Smile': return <Smile className="w-5 h-5 text-indigo-500" />;
+      default: return <BookOpen className="w-5 h-5 text-[#FF6B00]" />;
+    }
+  };
+
+  return (
+    <div id="story-quest-root" className="w-full max-w-[420px] mx-auto min-h-screen bg-[#0A1628] text-white flex flex-col font-sans pb-10 shadow-2xl relative select-none">
+      {/* HEADER SECTION */}
+      <header className="p-4 border-b border-[#1A2E44] flex items-center justify-between bg-[#0F223A] sticky top-0 z-50">
+        <div className="flex items-center gap-2">
+          {screen !== 'subject_select' && (
+            <button 
+              onClick={() => {
+                if (screen === 'story_home') setScreen('subject_select');
+                else if (screen === 'scene' && !isAnswerSubmitted) {
+                  if (confirm('Are you sure you want to exit the story game? Progress will be saved.')) {
+                    setScreen('story_home');
+                  }
+                }
+                else if (screen === 'chapter_complete') setScreen('story_home');
+              }}
+              className="w-8 h-8 rounded-full bg-[#1A2E44]/60 hover:bg-[#1A2E44] flex items-center justify-center transition-all shrink-0 active:scale-90"
+            >
+              <ChevronLeft size={16} className="text-[#FF6B00]" />
+            </button>
+          )}
+          <div>
+            <h1 className="text-sm font-black tracking-tight leading-tight uppercase text-white flex items-center gap-1">
+              <span className="text-[#FF6B00]">Story</span> Quest
+              <Sparkles size={12} className="text-[#FF6B00]" />
+            </h1>
+            <p className="text-[9px] text-[#A0AEC0] font-bold uppercase tracking-wider leading-none">Kenya CBC Grade 6-9</p>
+          </div>
+        </div>
+
+        {/* PROFILE CHIPS / XP SCORE */}
+        <div className="flex items-center gap-2">
+          <div className="bg-[#1A2E44] border border-[#2D3748] px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm shrink-0">
+            <Trophy size={12} className="text-[#FF6B00]" />
+            <span className="text-[10px] font-black tracking-tighter tabular-nums text-white">
+              {Object.values(progressMap).reduce((sum: number, p: any) => sum + (p.total_xp || 0), 0)} XP
+            </span>
+          </div>
+
+          <button 
+            onClick={onBack}
+            className="text-[10px] uppercase font-black tracking-widest text-[#FF6B00] hover:text-white transition-colors bg-[#FF6B00]/10 px-3 py-1.5 rounded-xl border border-[#FF6B00]/20 active:scale-95 shrink-0"
+          >
+            Exit
+          </button>
+        </div>
+      </header>
+
+      {/* RENDER ACTIVE SCREEN SCREEN */}
+      <div className="flex-1 px-4 py-5 flex flex-col justify-between">
+        
+        {loading ? (
+          <div className="flex-1 flex flex-col justify-center items-center gap-3 py-20">
+            <Loader2 size={36} className="text-[#FF6B00] animate-spin" />
+            <p className="text-[#A0AEC0] text-xs font-bold uppercase tracking-widest animate-pulse">Loading Magic Scroll...</p>
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            
+            {/* ──────── SCREEN 1: SUBJECT SELECT SCREEN ──────── */}
+            {screen === 'subject_select' && (
+              <motion.div
+                key="subj_select_screen"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-5 flex-1 flex flex-col justify-between"
+              >
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-[#FF6B00]/15 to-transparent p-4 rounded-2xl border border-[#FF6B00]/20 space-y-1">
+                    <h2 className="text-sm font-black text-[#FF6B00] uppercase tracking-wider">Hi, {studentProfile.name}! 👋</h2>
+                    <p className="text-xs text-[#CBD5E0] leading-relaxed">
+                      Welcome to your Story Quest! Choose a subject below to join a local interactive learning story adventure that tests your CBC knowledge!
+                    </p>
+                    <div className="inline-flex items-center gap-1 bg-[#1A2E44] text-[#FF6B00] font-black text-[9px] uppercase px-2.5 py-1 rounded-full mt-2">
+                      <Flame size={10} /> Active grade: {studentProfile.grade}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {subjects.map((sub) => {
+                      const completeChaps = getSubjectCompletedCount(sub.id);
+                      const subjXp = getSubjectXp(sub.id);
+                      const isSelected = selectedSubject?.id === sub.id;
+
+                      return (
+                        <button
+                          key={sub.id}
+                          onClick={() => handleSelectSubject(sub)}
+                          className={`relative overflow-hidden p-4 rounded-2xl border text-left flex flex-col justify-between h-[135px] transition-all duration-300 active:scale-95 shadow-md ${
+                            isSelected 
+                              ? 'border-[#FF6B00] bg-gradient-to-b from-[#FF6B00]/10 to-[#0A1628] shadow-[#FF6B00]/15' 
+                              : 'border-[#1A2E44] bg-[#0F223A] hover:bg-[#122A48]'
+                          }`}
+                        >
+                          {/* Progress indicator */}
+                          <div className="absolute top-0 left-0 h-1 bg-[#FF6B00]" style={{ width: `${(completeChaps / sub.total_chapters) * 100}%` }} />
+
+                          <div className="w-full flex items-center justify-between">
+                            <div className="w-8 h-8 rounded-xl bg-[#1A2E44] flex items-center justify-center shrink-0">
+                              {getSubjectIcon(sub.icon)}
+                            </div>
+                            {subjXp > 0 && (
+                              <div className="bg-emerald-500/10 text-emerald-400 font-extrabold text-[8px] uppercase tracking-wider px-2 py-0.5 rounded-full">
+                                +{subjXp} XP
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <h3 className="font-sans font-black text-xs text-white leading-tight uppercase tracking-tight">{sub.subject_name}</h3>
+                            <p className="text-[10px] text-[#A0AEC0] font-bold">Hero: <span className="text-[#FF6B00]">{sub.character_name}</span></p>
+                            <p className="text-[9px] text-[#A0AEC0] uppercase tracking-wider flex items-center gap-1.5 mt-1 font-semibold">
+                              <span>{completeChaps}/{sub.total_chapters} Chaps</span>
+                              <span>•</span>
+                              <span>{sub.total_chapters > 0 && completeChaps === sub.total_chapters ? 'Completed 🎉' : 'Active'}</span>
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="text-center pt-5 border-t border-[#1A2E44]/60">
+                  <p className="text-[10px] uppercase font-bold text-[#A0AEC0] tracking-widest leading-relaxed">
+                    AziLearn game engine. Proudly localized for Kenyan primary schools.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ──────── SCREEN 2: STORY HOME SCREEN ──────── */}
+            {screen === 'story_home' && selectedSubject && (
+              <motion.div
+                key="story_home_screen"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-5 flex-1 flex flex-col justify-between"
+              >
+                <div className="space-y-4">
+                  {/* Subject Character Info banner */}
+                  <div className="bg-[#0F223A] border border-[#1A2E44] p-4 rounded-2xl text-center space-y-3 shadow-lg relative overflow-hidden">
+                    <div className="w-16 h-16 bg-gradient-to-tr from-[#FF6B00] to-orange-400 rounded-2xl flex items-center justify-center mx-auto shadow-md">
+                      <span className="text-2xl">🦸</span>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[9px] uppercase font-bold tracking-widest text-[#FF6B00] bg-[#FF6B00]/10 px-2 py-0.5 rounded-full">Hero Explorer</span>
+                      <h2 className="text-base font-black text-white">{selectedSubject.character_name}</h2>
+                      <p className="text-xs text-[#CBD5E0] px-4 leading-relaxed font-sans mt-1">{selectedSubject.character_desc}</p>
+                    </div>
+                  </div>
+
+                  {/* Chapter List Header */}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#A0AEC0] flex items-center gap-1.5">
+                      <BookOpen size={12} className="text-[#FF6B00]" /> Chapters Available
+                    </h3>
+                    <span className="text-[9px] tracking-widest uppercase font-black text-[#FF6B00]">{chapters.length} quests</span>
+                  </div>
+
+                  {/* Chapters Container */}
+                  <div className="space-y-3">
+                    {chapters.map((chap) => {
+                      const unlocked = isChapterUnlocked(selectedSubject.id, chap);
+                      const isCompleted = (progressMap[selectedSubject.id]?.completed_chapters || []).includes(chap.id);
+                      const subPro = progressMap[selectedSubject.id];
+                      const canContinue = subPro && subPro.current_chapter_id === chap.id && subPro.current_scene_number > 0 && subPro.current_scene_number <= chap.total_scenes;
+
+                      return (
+                        <div
+                          key={chap.id}
+                          className={`p-4 rounded-2xl border transition-all duration-300 flex flex-col gap-3 shadow-md ${
+                            unlocked 
+                              ? isCompleted 
+                                ? 'border-emerald-500/20 bg-[#0F223A]/80' 
+                                : 'border-[#FF6B00]/30 bg-gradient-to-r from-[#0F223A] to-[#122A48]'
+                              : 'border-[#1A2E44] bg-[#0A1628]/40 opacity-70'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <span className="text-[8px] font-black uppercase text-[#FF6B00] tracking-widest">Chapter {chap.chapter_number}</span>
+                              <h4 className="text-xs font-black text-white leading-snug">{chap.title}</h4>
+                              <p className="text-[11px] text-[#A0AEC0] leading-relaxed">{chap.description}</p>
+                            </div>
+
+                            <div className="shrink-0 flex flex-col items-end gap-1">
+                              {unlocked ? (
+                                isCompleted ? (
+                                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                                    <Check size={14} />
+                                  </div>
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-[#FF6B00]/10 flex items-center justify-center text-[#FF6B00]">
+                                    <Unlock size={12} />
+                                  </div>
+                                )
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-500">
+                                  <Lock size={12} />
+                                </div>
+                              )}
+                              <span className="text-[7px] uppercase font-bold tracking-widest text-[#A0AEC0] block pt-3 mt-auto">{getChapterProgressText(chap)}</span>
+                            </div>
+                          </div>
+
+                          {/* Progress Bar inside card */}
+                          {unlocked && (
+                            <div className="w-full bg-[#1A2E44] h-1.5 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-[#FF6B00] transition-all duration-300"
+                                style={{
+                                  width: isCompleted 
+                                    ? '100%' 
+                                    : subPro && subPro.current_chapter_id === chap.id 
+                                      ? `${((subPro.current_scene_number - 1) / chap.total_scenes) * 100}%` 
+                                      : '0%'
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {unlocked && (
+                            <div className="flex items-center justify-between pt-1">
+                              <div className="flex items-center gap-1 bg-[#1A2E44] px-2 py-0.5 rounded-full">
+                                <Award size={10} className="text-yellow-500" />
+                                <span className="text-[8px] font-bold uppercase text-white tracking-widest">{chap.xp_reward} XP Reward</span>
+                              </div>
+
+                              <button
+                                onClick={() => handleStartChapter(chap)}
+                                className={`px-4 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center gap-1 active:scale-95 transition-all ${
+                                  isCompleted 
+                                    ? 'bg-[#1A2E44]/60 border border-emerald-500/30 text-emerald-400' 
+                                    : 'bg-[#FF6B00] text-white'
+                                }`}
+                              >
+                                {isCompleted ? 'Replay Quest' : canContinue ? 'Continue' : 'Start Quest'}
+                                <ArrowRight size={10} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="text-center pt-5">
+                  <button
+                    onClick={() => setScreen('subject_select')}
+                    className="text-[10px] font-black tracking-widest text-[#FF6B00] uppercase hover:underline"
+                  >
+                    ← Change Subject
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ──────── SCREEN 3: SCENE SCREEN (Main Gameplay) ──────── */}
+            {screen === 'scene' && activeScene && selectedChapter && (
+              <motion.div
+                key="scene_screen"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-4 flex-1 flex flex-col justify-between"
+              >
+                {/* Top Section: Chapter title + scene progress */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[#A0AEC0] text-[9px] font-black uppercase tracking-widest">
+                    <span>{selectedChapter.title}</span>
+                    <span className="text-[#FF6B00]">Scene {activeScene.scene_number} of {selectedChapter.total_scenes}</span>
+                  </div>
+
+                  {/* Progress Line */}
+                  <div className="w-full bg-[#1A2E44] h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-[#FF6B00] to-orange-400 transition-all duration-300"
+                      style={{ width: `${(activeScene.scene_number / selectedChapter.total_scenes) * 100}%` }}
+                    />
+                  </div>
+
+                  {/* Location Tag */}
+                  {activeScene.setting_local && (
+                    <div className="inline-flex items-center gap-1 bg-[#FF6B00]/10 border border-[#FF6B00]/20 px-2 py-0.5 rounded-md">
+                      <span className="text-[8px] font-black text-[#FF6B00] uppercase tracking-wider">📍 Setting: {activeScene.setting_local}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Middle Section: Narrative Text in Styled Story Card (Looks like a Book Page) */}
+                <div className="flex-1 my-3 flex flex-col justify-center">
+                  <div className="bg-[#FFFDF5] text-[#1A2530] p-5 rounded-2xl border border-[#E2E8F0] shadow-xl relative overflow-hidden flex flex-col justify-between" style={{ minHeight: '180px' }}>
+                    {/* Corner Page Accents to simulate book */}
+                    <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-bl from-[#E2E8F0] to-[#FFFDF5] rounded-bl-xl border-l border-b border-[#E2E8F0]/80 shadow-inner" />
+                    
+                    {/* Story Content */}
+                    <p className="font-serif text-[12.5px] leading-relaxed select-text pr-2">
+                      {activeScene.narrative}
+                    </p>
+
+                    <div className="w-full flex items-center justify-between pt-4 border-t border-[#E2E8F0]/40 mt-3">
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-[#A0AEC0]">Study Quest Scroll</span>
+                      <span className="text-xs">📜</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Section: Multiple Choice Questions (A B C D) */}
+                {activeScene.question && (
+                  <div className="space-y-3">
+                    <div className="bg-[#0F223A] border border-[#1A2E44] p-3.5 rounded-2xl space-y-2">
+                      <div className="flex items-start gap-1.5">
+                        <HelpCircle size={15} className="text-[#FF6B00] shrink-0 mt-0.5" />
+                        <h4 className="text-[11.5px] font-extrabold text-white leading-normal pr-1">{activeScene.question.question_text}</h4>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        { label: 'A', text: activeScene.question.option_a },
+                        { label: 'B', text: activeScene.question.option_b },
+                        { label: 'C', text: activeScene.question.option_c },
+                        { label: 'D', text: activeScene.question.option_d },
+                      ].map((opt) => {
+                        const isChosen = selectedOption === opt.label;
+                        
+                        return (
+                          <button
+                            key={opt.label}
+                            onClick={() => handleOptionSelect(opt.label as any)}
+                            className={`w-full p-3 rounded-xl border text-left flex items-start gap-3 transition-all active:scale-[0.98] ${
+                              isChosen 
+                                ? 'border-[#FF6B00] bg-[#FF6B00]/10 text-white shadow-md' 
+                                : 'border-[#1A2E44] bg-[#0F223A] text-[#E2E8F0] hover:bg-[#122A48]'
+                            }`}
+                          >
+                            <span className={`w-5 h-5 rounded-lg font-black text-[10px] flex items-center justify-center shrink-0 border ${
+                              isChosen 
+                                ? 'bg-[#FF6B00] border-[#FF6B00] text-white' 
+                                : 'bg-[#1A2E44] border-[#2D3748] text-[#A0AEC0]'
+                            }`}>
+                              {opt.label}
+                            </span>
+                            <span className="text-[11px] leading-tight font-sans font-bold pt-[2px]">{opt.text}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Submit Button */}
+                    <button
+                      disabled={!selectedOption}
+                      onClick={handleSubmitAnswer}
+                      className={`w-full py-3.5 rounded-full font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 ${
+                        selectedOption 
+                          ? 'bg-[#FF6B00] text-white shadow-[#FF6B00]/10' 
+                          : 'bg-[#1A2E44] text-[#A0AEC0] cursor-not-allowed'
+                      }`}
+                    >
+                      <span>Submit Answer</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* ──────── SCREEN 4: RESULT SCREEN ──────── */}
+            {screen === 'result' && activeScene?.question && (
+              <motion.div
+                key="result_screen"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                className="flex-1 flex flex-col justify-between py-4"
+              >
+                <div className="space-y-6 text-center my-auto">
+                  
+                  {resultState === 'correct' ? (
+                    /* CORRECT RESULTS CANVAS */
+                    <div className="space-y-5">
+                      <div className="w-20 h-20 bg-[#FF6B00]/10 border border-[#FF6B00]/30 rounded-3xl flex items-center justify-center mx-auto animate-bounce relative">
+                        <CheckCircle2 size={48} className="text-[#FF6B00]" />
+                        <motion.div 
+                          initial={{ scale: 0 }}
+                          animate={{ scale: [1, 1.3, 1] }}
+                          transition={{ repeat: Infinity, duration: 1.5 }}
+                          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#FF6B00] flex items-center justify-center text-white"
+                        >
+                          <Star size={10} />
+                        </motion.div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-black text-[#A0AEC0] tracking-widest block">Studied & Solved</span>
+                        <h2 className="text-xl font-sans font-black text-white uppercase tracking-tight">Kazi safi! Excellent Job!</h2>
+                        <p className="text-[#CBD5E0] text-xs px-6 leading-relaxed mt-2 italic bg-[#0F223A] border border-[#1A2E44] py-3 rounded-2xl">
+                          "Success in studies matches success in deeds! Continue the quest explorer!"
+                        </p>
+                      </div>
+
+                      {/* XP Badge */}
+                      <div className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full shadow-inner">
+                        <Flame size={14} className="text-emerald-400 animate-pulse" />
+                        <span className="text-[#FFF] font-black text-xs uppercase tracking-wider">{wrongAttempts === 0 ? '+30 XP PERFECT' : wrongAttempts === 1 ? '+15 XP GAINED' : '+5 XP LEVEL'}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    /* WRONG RESULTS CANVAS */
+                    <div className="space-y-4">
+                      <div className="w-20 h-20 bg-red-500/10 border border-red-500/20 rounded-3xl flex items-center justify-center mx-auto animate-pulse">
+                        <XCircle size={48} className="text-red-500" />
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-black text-[#A0AEC0] tracking-widest block">Wrong Answer</span>
+                        <h2 className="text-xl font-sans font-black text-white uppercase tracking-tight">Let's Try Again!</h2>
+                        <p className="text-[#CBD5E0] text-xs px-6 leading-relaxed mt-1">
+                          The choices on ancient maps aren’t always clear. Review of studies is the secret to knowledge!
+                        </p>
+                      </div>
+
+                      {/* Show Explanation immediately or after 2nd wrong attempt */}
+                      {wrongAttempts >= 1 && (
+                        <div className="bg-[#1A2E44]/40 border border-[#2D3748] p-4 rounded-2xl text-left space-y-2 max-h-[180px] overflow-y-auto">
+                          <h4 className="text-[10px] font-black uppercase text-emerald-400 tracking-wider flex items-center gap-1.5">
+                            <BookOpen size={10} /> Explanations & Study Key:
+                          </h4>
+                          <p className="text-[#CBD5E0] text-[11px] leading-relaxed">
+                            {activeScene.question.explanation}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Return or Continue Actions Button */}
+                <div className="space-y-2">
+                  <button
+                    onClick={handleNextAction}
+                    className={`w-full py-4 rounded-full font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 ${
+                      resultState === 'correct' 
+                        ? 'bg-[#FF6B00] text-white shadow-[#FF6B00]/10' 
+                        : 'bg-red-500 text-white shadow-red-500/10'
+                    }`}
+                  >
+                    <span>{resultState === 'correct' ? 'Continue Story' : 'Try Again'}</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  
+                  {/* Exit during results is safe */}
+                  <button 
+                    onClick={handleBackToChapters}
+                    className="w-full py-2 bg-transparent text-[#A0AEC0] text-[10px] uppercase font-black tracking-widest hover:text-white transition-colors"
+                  >
+                    Exit Quest to Chapter Hub
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ──────── SCREEN 5: CHAPTER COMPLETE SCREEN ──────── */}
+            {screen === 'chapter_complete' && selectedChapter && (
+              <motion.div
+                key="chapter_comp_screen"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="flex-1 flex flex-col justify-between py-6 text-center"
+              >
+                <div className="my-auto space-y-6">
+                  {/* Confetti Visual Mock */}
+                  <div className="relative w-24 h-24 mx-auto bg-gradient-to-tr from-yellow-500 to-orange-400 rounded-full flex items-center justify-center shadow-lg shadow-yellow-500/20">
+                    <Trophy className="text-white animate-bounce" size={48} />
+                    {/* Stars visual effect */}
+                    <span className="absolute top-0 right-0 text-xl animate-spin">✨</span>
+                    <span className="absolute bottom-2 left-0 text-lg">🌟</span>
+                    <span className="absolute top-3 left-1 text-base">⭐</span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[9px] uppercase font-black text-[#FF6B00] tracking-widest block">Quest Finished</span>
+                    <h2 className="text-xl font-sans font-black text-white uppercase tracking-tight">Chapter Complete!</h2>
+                    <p className="text-xs text-[#CBD5E0] px-4 leading-relaxed mt-1">
+                      Outstanding work seeker! You successfully guided <span className="text-[#FF6B00] font-black">{selectedSubject?.character_name}</span> through <span className="text-white font-bold">"{selectedChapter.title}"</span>. Together you protected local communities while mastering key topics.
+                    </p>
+                  </div>
+
+                  <div className="bg-[#0F223A] border border-[#1A2E44] p-4 rounded-3xl inline-flex flex-col items-center gap-1 shadow-md">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[#A0AEC0]">Trophy Chest Reward</span>
+                    <p className="text-3xl font-black text-[#FF6B00] flex items-center justify-center gap-1 tabular-nums">
+                      +{selectedChapter.xp_reward} <span className="text-xs uppercase text-white font-bold">XP</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={handleNextChapter}
+                    className="w-full bg-[#FF6B00] text-white py-4 rounded-full font-black text-xs uppercase tracking-widest shadow-lg shadow-[#FF6B00]/15 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  >
+                    <span>Next Chapter</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button
+                    onClick={() => setScreen('subject_select')}
+                    className="w-full py-2 bg-transparent text-[#A0AEC0] text-[10px] uppercase font-black tracking-widest hover:text-white transition-colors"
+                  >
+                    View Other Subject Stories
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+          </AnimatePresence>
+        )}
+      </div>
+    </div>
+  );
+}

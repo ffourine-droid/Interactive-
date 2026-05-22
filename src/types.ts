@@ -29,7 +29,8 @@ export type Page =
   | 'admin-dashboard'
   | 'admin-assignment-creator'
   | 'groupwork'
-  | 'exam-results';
+  | 'exam-results'
+  | 'story-quest';
 
 export interface Question {
   index: number;

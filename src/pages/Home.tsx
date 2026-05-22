@@ -5,7 +5,7 @@ import {
   FileText, PlayCircle, Mic2, X, Download, 
   BarChart3, Plus, Moon, Sun, Trash2, Smartphone, 
   ExternalLink, CheckCircle2, XCircle, MoreHorizontal,
-  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft, Database, Users
+  Home as HomeIcon, LogOut, Shield, GraduationCap, ShieldCheck, ArrowLeft, Database, Users, BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -24,6 +24,7 @@ interface HomeProps {
   onArenaClick: () => void;
   onAdminTerminalClick: () => void;
   onParentClick: () => void;
+  onStoriesClick: () => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   selectedClass: string | null;
@@ -32,7 +33,7 @@ interface HomeProps {
 
 export default function Home({ 
   onBack, onAdminClick, onAdminTerminalClick, onTeacherClick, onTeacherDashboardClick, 
-  onAssignmentsClick, onExamsClick, onArenaClick, onParentClick, theme, setTheme,
+  onAssignmentsClick, onExamsClick, onArenaClick, onParentClick, onStoriesClick, theme, setTheme,
   selectedClass, setSelectedClass
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -288,6 +289,7 @@ export default function Home({
               <div className="flex-1 space-y-2 overflow-y-auto no-scrollbar pr-1">
                 {[
                   { id: 'home', label: 'Home Hub', icon: HomeIcon, action: () => { setActiveTab('home'); setIsSidebarOpen(false); setSelectedClass(null); } },
+                  { id: 'stories', label: 'Stories to Learn', icon: BookOpen, action: () => { onStoriesClick(); setIsSidebarOpen(false); } },
                   { id: 'assignments', label: 'My Classes', icon: FileText, action: () => { onAssignmentsClick(); setIsSidebarOpen(false); } },
                   { id: 'groupwork', label: 'My Work', icon: Users, action: () => { onArenaClick(); setIsSidebarOpen(false); } },
                   { id: 'exams', label: 'Timed Exams', icon: Clock, action: () => { onExamsClick(); setIsSidebarOpen(false); } },
@@ -438,6 +440,31 @@ export default function Home({
                         </div>
                       </div>
                       <ChevronRight size={18} className="text-brand-muted shrink-0" />
+                    </button>
+                  </div>
+
+                  {/* STORIES TO LEARN */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-[#FF6B00]/10 rounded-lg flex items-center justify-center text-[#FF6B00]">
+                        <BookOpen size={14} />
+                      </div>
+                      <h2 className="text-[11px] font-black uppercase tracking-[0.12em] text-brand-muted">Game-Based Learning</h2>
+                    </div>
+                    <button
+                      onClick={(e) => { rippleEffect(e); onStoriesClick(); }}
+                      className="relative overflow-hidden w-full bg-brand-surface border border-[#FF6B00]/30 rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm bg-gradient-to-r from-[#FF6B00]/10 to-transparent"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 bg-[#FF6B00] text-white rounded-xl flex items-center justify-center shadow-lg shadow-[#FF6B00]/25">
+                          <BookOpen size={20} />
+                        </div>
+                        <div className="text-left">
+                          <h3 className="text-base font-black text-[#FF6B00] tracking-tight">STORIES TO LEARN</h3>
+                          <p className="text-[9px] font-black uppercase tracking-wider text-brand-muted/60 whitespace-nowrap">Story Quest CBC Adventures</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={18} className="text-[#FF6B00] shrink-0" />
                     </button>
                   </div>
                 </div>

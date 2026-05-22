@@ -29,6 +29,7 @@ const CreateExamPage = lazy(() => import('./pages/CreateExamPage'));
 const ExamResultsPage = lazy(() => import('./pages/ExamResultsPage'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const GroupWorkPage = lazy(() => import('./pages/GroupWorkPage'));
+const StoryQuest = lazy(() => import('./components/StoryQuest'));
 
 import { examService } from './services/examService';
 
@@ -379,6 +380,20 @@ function AppContent() {
             <AdminDashboard onBack={() => setCurrentPage('home')} />
           </Suspense>
         );
+      case 'story-quest':
+        return (
+          <Suspense fallback={<LoadingFallback text="Opening Stories..." />}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              key="story-quest"
+              className="max-w-[420px] mx-auto min-h-screen font-sans"
+            >
+              <StoryQuest onBack={() => setCurrentPage('home')} />
+            </motion.div>
+          </Suspense>
+        );
       case 'groupwork':
         return (
           <Suspense fallback={<LoadingFallback text="Entering My Work..." />}>
@@ -421,6 +436,7 @@ function AppContent() {
                 onExamsClick={() => setCurrentPage('student-exams')}
                 onArenaClick={() => setCurrentPage('groupwork')}
                 onParentClick={() => setCurrentPage('parent')}
+                onStoriesClick={() => setCurrentPage('story-quest')}
                 selectedClass={selectedClass}
                 setSelectedClass={setSelectedClass}
                 theme={theme}
