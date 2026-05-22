@@ -17,6 +17,7 @@ interface Competition {
   status: 'active' | 'marking' | 'finished';
   teacher_name?: string;
   school_name?: string;
+  group_mappings?: any;
 }
 
 interface Question {
@@ -1001,6 +1002,19 @@ export const StudentCompetitionLobby: React.FC<{
                     <option value="">-- Choose Existing Squad --</option>
                     {Array.from(new Set([
                       ...allParticipants.map(p => p.group_name).filter(Boolean),
+                      ...(() => {
+                        const m = activeComp?.group_mappings;
+                        if (!m || typeof m !== 'object') return [];
+                        const names = new Set<string>();
+                        Object.keys(m).forEach(k => {
+                          if (Array.isArray(m[k])) {
+                            names.add(k);
+                          } else if (typeof m[k] === 'string') {
+                            names.add(m[k]);
+                          }
+                        });
+                        return Array.from(names);
+                      })(),
                       'Group A', 'Group B', 'Group C', 'Group D'
                     ])).map((gName) => (
                       <option key={gName} value={gName}>{gName}</option>

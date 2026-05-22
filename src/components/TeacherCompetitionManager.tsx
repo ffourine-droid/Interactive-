@@ -28,6 +28,7 @@ interface Competition {
   status: 'draft' | 'active' | 'marking' | 'finished';
   created_at: string;
   question_count?: number;
+  group_mappings?: any;
 }
 
 interface Participant {
@@ -503,7 +504,23 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
   const [activeTheme, setActiveTheme] = useState<'standard' | 'space' | 'wildlife' | 'magic'>('standard');
   const [customGroupNames, setCustomGroupNames] = useState<string[]>(() => {
     const saved = localStorage.getItem(`group_names_${competition.id}`);
-    return saved ? JSON.parse(saved) : THEMES_PRESETS.standard;
+    if (saved) return JSON.parse(saved);
+
+    // Dynamic recovery fallback from DB's group_mappings column
+    const mappings = competition.group_mappings;
+    if (mappings && typeof mappings === 'object') {
+      const names = new Set<string>();
+      Object.keys(mappings).forEach(key => {
+        if (Array.isArray(mappings[key])) {
+          names.add(key);
+        } else if (typeof mappings[key] === 'string') {
+          names.add(mappings[key]);
+        }
+      });
+      if (names.size > 0) return Array.from(names);
+    }
+
+    return THEMES_PRESETS.standard;
   });
   const [groupGoal, setGroupGoal] = useState(() => {
     return localStorage.getItem(`group_goal_${competition.id}`) || 'Work together to solve questions correctly and aim high! 🚀';

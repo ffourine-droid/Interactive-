@@ -313,7 +313,7 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
     if (!q) return;
 
     setSelected(letter);
-    const isCorrect = letter === q.correct_answer;
+    const isCorrect = letter.trim().toUpperCase() === q.correct_answer.trim().toUpperCase();
 
     setAnswered(a => a + 1);
 

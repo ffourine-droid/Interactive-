@@ -200,7 +200,7 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
       return p;
     }));
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('arena_room_players')
       .update({
         score,
@@ -211,10 +211,13 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
       })
       .eq('room_id', room.id)
       .eq('username', username)
-      .select()
-      .single();
+      .select();
 
-    if (data) myPlayerRef.current = data as RoomPlayer;
+    if (error) {
+      console.error("Error pushing score directly in LiveGame.tsx:", error);
+    } else if (data && data.length > 0) {
+      myPlayerRef.current = data[0] as RoomPlayer;
+    }
   }, [room.id, username]);
 
   // ── Handle answer ──
@@ -224,7 +227,7 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
     if (!q) return;
 
     setSelected(letter);
-    const isCorrect = letter === q.correct_answer;
+    const isCorrect = letter.trim().toUpperCase() === q.correct_answer.trim().toUpperCase();
     let newCorrect = correct;
     let newAnswered = answered + 1;
     let newStreak = streak;
@@ -434,7 +437,7 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
           {(['A', 'B', 'C', 'D'] as const).map(letter => {
             const key = `option_${letter.toLowerCase()}` as keyof Question;
             const optText = currentQ[key] as string;
-            const isCorrect = letter === currentQ.correct_answer;
+            const isCorrect = letter.trim().toUpperCase() === currentQ.correct_answer.trim().toUpperCase();
             const isSelected = selected === letter;
 
             let styleClass = `border ${OPTION_STYLES[letter].base}`;
