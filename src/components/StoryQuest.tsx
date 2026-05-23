@@ -11,15 +11,65 @@ import { useToast } from './Toast';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
+interface StoryCharacter {
+  character_name: string;
+  character_description: string;
+  home_town: string;
+  personality: string;
+}
+
 interface StorySubject {
   id: string;
-  subject_name: string;
-  character_name: string;
-  character_desc: string;
-  icon: string;
-  total_chapters: number;
+  name?: string;
+  subject_name?: string; // fallback
   grade: string;
+  story_title: string;
+  icon?: string;
+  total_chapters?: number;
+  story_characters?: StoryCharacter | StoryCharacter[] | any;
 }
+
+// Helper functions for safe retrieval from joined columns representation
+const getCharacter = (sub: StorySubject | undefined | null): StoryCharacter => {
+  if (!sub) {
+    return {
+      character_name: 'Unknown Hero',
+      character_description: 'An eager learner on a learning quest.',
+      home_town: 'Kenya',
+      personality: 'Enthusiastic'
+    };
+  }
+  if (sub.story_characters) {
+    if (Array.isArray(sub.story_characters)) {
+      return sub.story_characters[0] || {
+        character_name: 'Unknown Hero',
+        character_description: 'An eager learner on a learning quest.',
+        home_town: 'Kenya',
+        personality: 'Enthusiastic'
+      };
+    }
+    return sub.story_characters;
+  }
+  return {
+    character_name: (sub as any).character_name || 'Unknown Hero',
+    character_description: (sub as any).character_desc || (sub as any).character_description || 'An eager learner.',
+    home_town: (sub as any).home_town || 'Kenya',
+    personality: (sub as any).personality || 'Curious'
+  };
+};
+
+const getSubjectName = (sub: StorySubject): string => {
+  return sub.name || sub.subject_name || 'General';
+};
+
+const getStoryTitle = (sub: StorySubject): string => {
+  return sub.story_title || sub.name || sub.subject_name || 'Untold Adventure';
+};
+
+const isValidUUID = (id: string | null | undefined): boolean => {
+  if (!id) return false;
+  return id.length === 36 && id.includes('-');
+};
 
 interface StoryChapter {
   id: string;
@@ -61,57 +111,87 @@ interface StudentStoryProgress {
 const PREBUILT_SUBJECTS: StorySubject[] = [
   {
     id: 'subj-business',
-    subject_name: 'Business Studies',
-    character_name: 'Amani',
-    character_desc: 'An enterprising 13-year-old helping her Cucu run a fresh produce kiosk in Nakuru town.',
+    name: 'Business Studies',
+    grade: 'Grade 7',
+    story_title: "Mama Mboga's Venture",
     icon: 'Compass',
     total_chapters: 1,
-    grade: 'Grade 7'
+    story_characters: {
+      character_name: 'Amani',
+      character_description: 'An enterprising 13-year-old helping her Cucu run a fresh produce kiosk in Nakuru town.',
+      home_town: 'Nakuru',
+      personality: 'Enterprising and helpful'
+    }
   },
   {
     id: 'subj-agriculture',
-    subject_name: 'Agriculture',
-    character_name: 'Karanja',
-    character_desc: 'An innovative youth in Karatina who constructs organic vertical gardens to defeat drought.',
+    name: 'Agriculture',
+    grade: 'Grade 7',
+    story_title: 'The Water Oasis',
     icon: 'Sparks',
     total_chapters: 1,
-    grade: 'Grade 7'
+    story_characters: {
+      character_name: 'Karanja',
+      character_description: 'An innovative youth in Karatina who constructs organic vertical gardens to defeat drought.',
+      home_town: 'Karatina',
+      personality: 'Resourceful'
+    }
   },
   {
     id: 'subj-maths',
-    subject_name: 'Mathematics',
-    character_name: 'Wanjiku',
-    character_desc: 'A sharp fabric pattern designer who calculates ratios in Nairobi’s bustling Gikomba market.',
+    name: 'Mathematics',
+    grade: 'Grade 7',
+    story_title: "Wanjiku's Sewing Patterns",
     icon: 'Star',
     total_chapters: 1,
-    grade: 'Grade 7'
+    story_characters: {
+      character_name: 'Wanjiku',
+      character_description: 'A sharp fabric pattern designer who calculates ratios in Nairobi’s bustling Gikomba market.',
+      home_town: 'Nairobi',
+      personality: 'Analytical and creative'
+    }
   },
   {
     id: 'subj-science',
-    subject_name: 'Science & Tech',
-    character_name: 'Mutua',
-    character_desc: 'An ambitious investigator who uses chemical test slips to probe Athi River’s safety.',
+    name: 'Science & Tech',
+    grade: 'Grade 7',
+    story_title: 'Litmus Rivers',
     icon: 'Award',
     total_chapters: 1,
-    grade: 'Grade 7'
+    story_characters: {
+      character_name: 'Mutua',
+      character_description: 'An ambitious investigator who uses chemical test slips to probe Athi River’s safety.',
+      home_town: 'Athi River',
+      personality: 'Curious investigator'
+    }
   },
   {
     id: 'subj-arts',
-    subject_name: 'Creative Arts',
-    character_name: 'Nekesa',
-    character_desc: 'A sound recorder in Kakamega blending traditional Kayamba shaker rhythms with modern beats.',
+    name: 'Creative Arts',
+    grade: 'Grade 7',
+    story_title: 'Shaker Harmony',
     icon: 'Smile',
     total_chapters: 1,
-    grade: 'Grade 7'
+    story_characters: {
+      character_name: 'Nekesa',
+      character_description: 'A sound recorder in Kakamega blending traditional Kayamba shaker rhythms with modern beats.',
+      home_town: 'Kakamega',
+      personality: 'Artistic and expressive'
+    }
   },
   {
     id: 'subj-social',
-    subject_name: 'Social Studies',
-    character_name: 'Juma',
-    character_desc: 'A history enthusiast near Fort Jesus, Mombasa, discovering the secrets of Indian Ocean trade.',
+    name: 'Social Studies',
+    grade: 'Grade 7',
+    story_title: 'Fort Island Seafarer',
     icon: 'Compass',
     total_chapters: 1,
-    grade: 'Grade 7'
+    story_characters: {
+      character_name: 'Juma',
+      character_description: 'A history enthusiast near Fort Jesus, Mombasa, discovering the secrets of Indian Ocean trade.',
+      home_town: 'Mombasa',
+      personality: 'Historical explorer'
+    }
   }
 ];
 
@@ -469,12 +549,16 @@ interface StoryQuestProps {
 
 export default function StoryQuest({ onBack }: StoryQuestProps) {
   // ─── STATE MANAGEMENT ──────────────────────────────────────────────────────
-  const [screen, setScreen] = useState<'subject_select' | 'story_home' | 'scene' | 'result' | 'chapter_complete'>('subject_select');
+  const [screen, setScreen] = useState<'subject_select' | 'story_home' | 'scene' | 'result' | 'chapter_complete' | 'setup'>('subject_select');
   const [studentProfile, setStudentProfile] = useState<{ id: string; name: string; grade: string }>({
     id: 'guest',
     name: 'Learner',
     grade: 'Grade 7'
   });
+
+  // Local setup state if player information is not already present
+  const [setupName, setSetupName] = useState('');
+  const [setupGrade, setSetupGrade] = useState('Grade 7');
 
   const [subjects, setSubjects] = useState<StorySubject[]>(PREBUILT_SUBJECTS);
   const [selectedSubject, setSelectedSubject] = useState<StorySubject | null>(null);
@@ -499,10 +583,40 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
   // ─── INITIALIZATION ────────────────────────────────────────────────────────
   useEffect(() => {
-    // 1. Load active student profile
+    // 1. Try to load student profile from various storage keys in priority order
+    let activeStudent: { id: string; name: string; grade: string } | null = null;
+    
+    const playerStr = localStorage.getItem('azilearn_player');
+    const arenaPlayerStr = localStorage.getItem('azilearn_arena_player');
     const studentStr = localStorage.getItem('azilearn_student');
-    let activeStudent = { id: 'guest', name: 'Learner', grade: 'Grade 7' };
-    if (studentStr) {
+
+    if (playerStr) {
+      try {
+        const parsed = JSON.parse(playerStr);
+        if (parsed.username) {
+          activeStudent = {
+            id: parsed.id || `p-${parsed.username}`,
+            name: parsed.username,
+            grade: parsed.grade ? (typeof parsed.grade === 'number' ? `Grade ${parsed.grade}` : parsed.grade) : 'Grade 7'
+          };
+        }
+      } catch (e) {
+        console.error('Failed to parse azilearn_player', e);
+      }
+    } else if (arenaPlayerStr) {
+      try {
+        const parsed = JSON.parse(arenaPlayerStr);
+        if (parsed.username) {
+          activeStudent = {
+            id: parsed.id || `p-${parsed.username}`,
+            name: parsed.username,
+            grade: parsed.grade ? (typeof parsed.grade === 'number' ? `Grade ${parsed.grade}` : parsed.grade) : 'Grade 7'
+          };
+        }
+      } catch (e) {
+        console.error('Failed to parse azilearn_arena_player', e);
+      }
+    } else if (studentStr) {
       try {
         const parsed = JSON.parse(studentStr);
         if (parsed.name) {
@@ -511,43 +625,124 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
             name: parsed.name,
             grade: parsed.grade || 'Grade 7'
           };
-          setStudentProfile(activeStudent);
         }
       } catch (e) {
         console.error('Failed to parse student profile', e);
       }
     }
 
-    // 2. Load Local Progress fallback
-    const savedProgress = localStorage.getItem(`story_progress_${activeStudent.id}`);
-    if (savedProgress) {
-      try {
-        setProgressMap(JSON.parse(savedProgress));
-      } catch (e) {
-        console.error('Error loading story progress cache', e);
+    if (activeStudent) {
+      setStudentProfile(activeStudent);
+      setScreen('subject_select');
+      
+      // 2. Load Local Progress fallback
+      const savedProgress = localStorage.getItem(`story_progress_${activeStudent.id}`);
+      if (savedProgress) {
+        try {
+          setProgressMap(JSON.parse(savedProgress));
+        } catch (e) {
+          console.error('Error loading story progress cache', e);
+        }
       }
-    }
 
-    // 3. Trigger Supabase Fetch
-    fetchDatabaseData(activeStudent);
+      // 3. Trigger Supabase Fetch
+      fetchDatabaseData(activeStudent);
+    } else {
+      setScreen('setup');
+    }
   }, []);
+
+  const handleCreatePlayer = (username: string, selectedGrade: string) => {
+    if (!username.trim()) {
+      showToast('Please enter a username or nickname', 'error');
+      return;
+    }
+    const numericGrade = parseInt(selectedGrade.replace(/\D/g, ''), 10) || 7;
+    const newPlayer = {
+      id: `p-${username.trim().toLowerCase()}-${Date.now()}`,
+      username: username.trim(),
+      grade: numericGrade
+    };
+    
+    // Save to keys as requested
+    localStorage.setItem('azilearn_player', JSON.stringify(newPlayer));
+    localStorage.setItem('azilearn_arena_player', JSON.stringify(newPlayer));
+
+    const activeStudent = {
+      id: newPlayer.id,
+      name: newPlayer.username,
+      grade: `Grade ${numericGrade}`
+    };
+
+    setStudentProfile(activeStudent);
+    setScreen('subject_select');
+    fetchDatabaseData(activeStudent);
+    showToast(`Welcome ${newPlayer.username}! Let's start the quest! ⚔️`, 'success');
+  };
 
   // ─── DATABASE FETCHING ─────────────────────────────────────────────────────
   const fetchDatabaseData = async (student: { id: string; name: string; grade: string }) => {
     setLoading(true);
     try {
-      // Attempt to load story subjects matching student grade
-      const { data: dbSubjects, error: subError } = await supabase
+      const numericGrade = parseInt(student.grade.replace(/\D/g, ''), 10) || 7;
+      console.log('Querying grade as integer:', numericGrade);
+      
+      // Attempt to load story subjects matching student grade joining story_characters
+      let { data: dbSubjects, error: subError } = await supabase
         .from('story_subjects')
-        .select('*')
-        .eq('grade', student.grade);
+        .select(`
+          id,
+          name,
+          grade,
+          story_title,
+          story_characters (
+            character_name,
+            character_description,
+            home_town,
+            personality
+          )
+        `)
+        .eq('grade', numericGrade);
+
+      // Robust grade representation fallback:
+      // If we got zero results or error, try querying with original string 'student.grade' as fallback
+      if (subError || !dbSubjects || dbSubjects.length === 0) {
+        console.log(`No results for integer "${numericGrade}". Trying fallback query matching original text "${student.grade}"...`);
+        const { data: fallbackSubjects, error: fallbackError } = await supabase
+          .from('story_subjects')
+          .select(`
+            id,
+            name,
+            grade,
+            story_title,
+            story_characters (
+              character_name,
+              character_description,
+              home_town,
+              personality
+            )
+          `)
+          .eq('grade', student.grade);
+          
+        if (!fallbackError && fallbackSubjects && fallbackSubjects.length > 0) {
+          dbSubjects = fallbackSubjects;
+          subError = null;
+        }
+      }
 
       if (!subError && dbSubjects && dbSubjects.length > 0) {
+        console.log('Successfully fetched story subjects and heroes from Supabase:', dbSubjects);
         setSubjects(dbSubjects as StorySubject[]);
+        console.log('subjects', dbSubjects); // Explicitly logged for developers/testers to inspect in browser console
       } else {
+        if (subError) {
+          console.error('Supabase fetch error for subjects:', subError);
+        }
         // Fall back to prebuilt subjects filtered for current grade or Grade 7 default
         const filtered = PREBUILT_SUBJECTS.filter(s => s.grade === student.grade);
-        setSubjects(filtered.length > 0 ? filtered : PREBUILT_SUBJECTS);
+        const fallback = filtered.length > 0 ? filtered : PREBUILT_SUBJECTS;
+        console.log('No matching DB subjects found or table unprovisioned. Falling back to prebuilt subjects:', fallback);
+        setSubjects(fallback);
       }
 
       // Try fetching active student story progress mapping
@@ -648,22 +843,67 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     setSelectedSubject(sub);
     setLoading(true);
 
-    try {
-      // Attempt fetching Chapters from Supabase
-      const { data: dbChapters, error } = await supabase
-        .from('story_chapters')
-        .select('*')
-        .eq('story_id', sub.id) // Or filtered by subject relation
-        .order('chapter_number', { ascending: true });
+    if (!isValidUUID(sub.id)) {
+      setChapters(PREBUILT_CHAPTERS[sub.id] || []);
+      setLoading(false);
+      setScreen('story_home');
+      return;
+    }
 
-      if (!error && dbChapters && dbChapters.length > 0) {
-        setChapters(dbChapters as StoryChapter[]);
+    try {
+      let dbChapters: any[] = [];
+      let fetchError: any = null;
+
+      // Try fetching modules/chapters through the 'stories' parent table relation
+      const { data: dbStories, error: storyErr } = await supabase
+        .from('stories')
+        .select('id')
+        .eq('subject_id', sub.id);
+
+      if (!storyErr && dbStories && dbStories.length > 0) {
+        const storyIds = dbStories.map(s => s.id);
+        const { data, error } = await supabase
+          .from('story_chapters')
+          .select('*')
+          .in('story_id', storyIds)
+          .order('chapter_number', { ascending: true });
+        
+        if (!error && data) {
+          dbChapters = data;
+        } else {
+          fetchError = error;
+        }
+      } else {
+        // Fall back direct inquiry
+        const { data, error } = await supabase
+          .from('story_chapters')
+          .select('*')
+          .eq('story_id', sub.id)
+          .order('chapter_number', { ascending: true });
+        
+        if (!error && data) {
+          dbChapters = data;
+        } else {
+          fetchError = error;
+        }
+      }
+
+      if (!fetchError && dbChapters && dbChapters.length > 0) {
+        setChapters(dbChapters.map((c: any) => ({
+          id: c.id,
+          chapter_number: c.chapter_number,
+          title: c.title,
+          description: c.description || '',
+          total_scenes: c.total_scenes || 3,
+          xp_reward: c.xp_reward || 100
+        })));
       } else {
         // Fall back to prebuilt
         const fallbackChaps = PREBUILT_CHAPTERS[sub.id] || [];
         setChapters(fallbackChaps);
       }
     } catch (e) {
+      console.warn('Supabase query failed for chapters:', e);
       setChapters(PREBUILT_CHAPTERS[sub.id] || []);
     } finally {
       setLoading(false);
@@ -686,6 +926,21 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     // If we are resumed into this selected chapter, grab completed scenes
     if (subProgress.current_chapter_id === chap.id) {
       initialSceneNum = Math.min(subProgress.current_scene_number, chap.total_scenes);
+    }
+
+    if (!isValidUUID(chap.id)) {
+      const prebuilt = PREBUILT_SCENES[chap.id] || [];
+      setScenes(prebuilt);
+      const startIdx = Math.max(0, Math.min(initialSceneNum - 1, prebuilt.length - 1));
+      setCurrentSceneIndex(startIdx);
+      setActiveScene(prebuilt[startIdx] || null);
+      setSelectedOption(null);
+      setWrongAttempts(0);
+      setIsAnswerSubmitted(false);
+      setResultState(null);
+      setLoading(false);
+      setScreen('scene');
+      return;
     }
 
     try {
@@ -711,7 +966,7 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
             option_b: s.scene_questions.option_b,
             option_c: s.scene_questions.option_c,
             option_d: s.scene_questions.option_d,
-            correct_option: s.scene_questions.correct_option,
+            correct_option: s.scene_questions.correct_option as 'A' | 'B' | 'C' | 'D',
             explanation: s.scene_questions.explanation || ''
           } : undefined
         }));
@@ -931,6 +1186,82 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
         ) : (
           <AnimatePresence mode="wait">
             
+            {/* ──────── SCREEN 0: QUICK IDENTITY SETUP ──────── */}
+            {screen === 'setup' && (
+              <motion.div
+                key="setup_screen"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-6 flex-1 flex flex-col justify-center py-6 animate-fade-in"
+              >
+                <div className="space-y-3 text-center">
+                  <div className="w-16 h-16 bg-[#FF6B00]/10 border border-[#FF6B00]/30 rounded-3xl flex items-center justify-center mx-auto shadow-sm">
+                    <Sparkles size={28} className="text-[#FF6B00]" />
+                  </div>
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-sans font-black text-white uppercase tracking-tight">Enter the Quest</h2>
+                    <p className="text-xs text-[#A0AEC0] px-6">
+                      Choose a learning nickname and your grade to record progress, earn trophies, and track your XP rewards!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-[#0F223A] border border-[#1A2E44] p-5 rounded-3xl space-y-4 shadow-xl">
+                  {/* Nickname Input */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-[#FF6B00] tracking-wider block">Nickname / Username</label>
+                    <input 
+                      type="text"
+                      maxLength={18}
+                      placeholder="e.g. Zawadi, Jasiri, Kofi"
+                      value={setupName}
+                      onChange={(e) => setSetupName(e.target.value.replace(/[^a-zA-Z0-9 ]/g, ''))}
+                      className="w-full bg-[#0A1628] border border-[#1A2E44] rounded-2xl px-4 py-3 text-sm text-white placeholder-[#A0AEC0]/40 outline-none focus:border-[#FF6B00] transition-colors font-bold"
+                    />
+                  </div>
+
+                  {/* Grade Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-[#FF6B00] tracking-wider block">Select Your Grade</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Grade 6', 'Grade 7', 'Grade 8', 'Grade 9'].map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setSetupGrade(g)}
+                          className={`py-3 rounded-2xl border font-black text-xs uppercase tracking-wider transition-all active:scale-95 ${
+                            setupGrade === g
+                              ? 'bg-[#FF6B00] border-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/10'
+                              : 'bg-[#0A1628] border-[#1A2E44] text-[#A0AEC0] hover:border-[#2D3748]'
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => handleCreatePlayer(setupName, setupGrade)}
+                    className="w-full bg-[#FF6B00] hover:bg-[#FF6B00]/90 text-white py-4 rounded-full font-black text-xs uppercase tracking-widest shadow-lg shadow-[#FF6B00]/15 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  >
+                    <span>Start Quest</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  
+                  <button
+                    onClick={onBack}
+                    className="w-full py-2 bg-transparent text-[#A0AEC0] text-[10px] uppercase font-black tracking-widest hover:text-white transition-colors mt-2"
+                  >
+                    Go Back Home
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             {/* ──────── SCREEN 1: SUBJECT SELECT SCREEN ──────── */}
             {screen === 'subject_select' && (
               <motion.div
@@ -982,12 +1313,21 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                           </div>
 
                           <div className="space-y-1">
-                            <h3 className="font-sans font-black text-xs text-white leading-tight uppercase tracking-tight">{sub.subject_name}</h3>
-                            <p className="text-[10px] text-[#A0AEC0] font-bold">Hero: <span className="text-[#FF6B00]">{sub.character_name}</span></p>
+                            <h3 className="font-sans font-black text-xs text-[#FF6B00] leading-tight uppercase tracking-tight">
+                              {getStoryTitle(sub)}
+                            </h3>
+                            <p className="text-[10px] text-white font-bold">
+                              ⭐ {getCharacter(sub).character_name}'s Story
+                            </p>
+                            <p className="text-[8.5px] text-[#A0AEC0] font-semibold flex items-center gap-1 mt-0.5">
+                              <span>📍 {getCharacter(sub).home_town}</span>
+                              <span className="opacity-40">•</span>
+                              <span className="text-[7.5px] text-[#A0AEC0]/70 uppercase tracking-wider">{getSubjectName(sub)}</span>
+                            </p>
                             <p className="text-[9px] text-[#A0AEC0] uppercase tracking-wider flex items-center gap-1.5 mt-1 font-semibold">
-                              <span>{completeChaps}/{sub.total_chapters} Chaps</span>
+                              <span>{completeChaps}/{(sub.total_chapters || 1)} Chaps</span>
                               <span>•</span>
-                              <span>{sub.total_chapters > 0 && completeChaps === sub.total_chapters ? 'Completed 🎉' : 'Active'}</span>
+                              <span>{(sub.total_chapters || 1) > 0 && completeChaps === (sub.total_chapters || 1) ? 'Completed 🎉' : 'Active'}</span>
                             </p>
                           </div>
                         </button>
@@ -1020,9 +1360,12 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                       <span className="text-2xl">🦸</span>
                     </div>
                     <div className="space-y-1">
-                      <span className="text-[9px] uppercase font-bold tracking-widest text-[#FF6B00] bg-[#FF6B00]/10 px-2 py-0.5 rounded-full">Hero Explorer</span>
-                      <h2 className="text-base font-black text-white">{selectedSubject.character_name}</h2>
-                      <p className="text-xs text-[#CBD5E0] px-4 leading-relaxed font-sans mt-1">{selectedSubject.character_desc}</p>
+                      <span className="text-[9px] uppercase font-black tracking-widest text-[#FF6B00] bg-[#FF6B00]/10 px-2.5 py-0.5 rounded-full">
+                        {getStoryTitle(selectedSubject)} Key Hook
+                      </span>
+                      <h2 className="text-base font-black text-white">{getCharacter(selectedSubject).character_name}</h2>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-[#A0AEC0] mt-0.5">Hometown: {getCharacter(selectedSubject).home_town}</p>
+                      <p className="text-xs text-[#CBD5E0] px-4 leading-relaxed font-sans mt-1.5">{getCharacter(selectedSubject).character_description}</p>
                     </div>
                   </div>
 
@@ -1361,7 +1704,7 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                     <span className="text-[9px] uppercase font-black text-[#FF6B00] tracking-widest block">Quest Finished</span>
                     <h2 className="text-xl font-sans font-black text-white uppercase tracking-tight">Chapter Complete!</h2>
                     <p className="text-xs text-[#CBD5E0] px-4 leading-relaxed mt-1">
-                      Outstanding work seeker! You successfully guided <span className="text-[#FF6B00] font-black">{selectedSubject?.character_name}</span> through <span className="text-white font-bold">"{selectedChapter.title}"</span>. Together you protected local communities while mastering key topics.
+                      Outstanding work seeker! You successfully guided <span className="text-[#FF6B00] font-black">{getCharacter(selectedSubject).character_name}</span> through <span className="text-white font-bold">"{selectedChapter.title}"</span>. Together you protected local communities while mastering key topics.
                     </p>
                   </div>
 

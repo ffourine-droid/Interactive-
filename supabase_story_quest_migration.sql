@@ -4,12 +4,21 @@
 -- Create tables
 CREATE TABLE IF NOT EXISTS public.story_subjects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    subject_name VARCHAR(100) NOT NULL,
-    character_name VARCHAR(100) NOT NULL,
-    character_desc TEXT NOT NULL,
-    icon VARCHAR(100) DEFAULT 'BookOpen',
-    total_chapters INT DEFAULT 3,
+    name VARCHAR(100) NOT NULL,
     grade VARCHAR(20) NOT NULL,
+    story_title VARCHAR(255) NOT NULL,
+    icon VARCHAR(100) DEFAULT 'BookOpen',
+    total_chapters INT DEFAULT 1,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.story_characters (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    subject_id UUID REFERENCES public.story_subjects(id) ON DELETE CASCADE UNIQUE,
+    character_name VARCHAR(100) NOT NULL,
+    character_description TEXT NOT NULL,
+    home_town VARCHAR(100) NOT NULL,
+    personality VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -70,6 +79,7 @@ CREATE TABLE IF NOT EXISTS public.student_story_progress (
 
 -- Enable RLS
 ALTER TABLE public.story_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.story_characters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.story_chapters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.story_scenes ENABLE ROW LEVEL SECURITY;
@@ -78,6 +88,7 @@ ALTER TABLE public.student_story_progress ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read of content
 CREATE POLICY "Allow public select story_subjects" ON public.story_subjects FOR SELECT USING (true);
+CREATE POLICY "Allow public select story_characters" ON public.story_characters FOR SELECT USING (true);
 CREATE POLICY "Allow public select stories" ON public.stories FOR SELECT USING (true);
 CREATE POLICY "Allow public select story_chapters" ON public.story_chapters FOR SELECT USING (true);
 CREATE POLICY "Allow public select story_scenes" ON public.story_scenes FOR SELECT USING (true);
@@ -88,6 +99,7 @@ CREATE POLICY "Allow all student progress access" ON public.student_story_progre
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_story_subjects_grade ON public.story_subjects(grade);
+CREATE INDEX IF NOT EXISTS idx_story_characters_subject ON public.story_characters(subject_id);
 CREATE INDEX IF NOT EXISTS idx_stories_subject ON public.stories(subject_id);
 CREATE INDEX IF NOT EXISTS idx_story_chapters_story ON public.story_chapters(story_id);
 CREATE INDEX IF NOT EXISTS idx_story_scenes_chapter ON public.story_scenes(chapter_id);

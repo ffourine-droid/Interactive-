@@ -20,13 +20,15 @@ import {
   CheckCircle2,
   AlertCircle,
   Zap,
-  Users
+  Users,
+  BookOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { ArenaQuestionCreator } from '../components/ArenaQuestionCreator';
 import { QuestionManager } from '../components/QuestionManager';
 import { MaterialManager } from '../components/MaterialManager';
+import StoryQuestManager from '../components/StoryQuestManager';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -35,7 +37,7 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories'>('overview');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
   
@@ -404,6 +406,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             { id: 'shared' as const, icon: FileText, label: 'Templates', badge: 0 },
             { id: 'system' as const, icon: Database, label: 'Materials', badge: 0 },
             { id: 'arena' as const, icon: Zap, label: 'Arena & Qns', badge: 0 },
+            { id: 'stories' as const, icon: BookOpen, label: 'Story Quest', badge: 0 },
             { id: 'requests' as const, icon: MessageCircle, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
             { id: 'teachers' as const, icon: Users, label: 'Teachers', badge: 0 }
           ].map(tab => {
@@ -466,6 +469,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                 { id: 'shared' as const, label: 'Templates', badge: 0 },
                 { id: 'system' as const, label: 'Materials', badge: 0 },
                 { id: 'arena' as const, label: 'Arena', badge: 0 },
+                { id: 'stories' as const, label: 'Story Quest', badge: 0 },
                 { id: 'requests' as const, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
                 { id: 'teachers' as const, label: 'Teachers', badge: 0 }
               ].map(tab => {
@@ -1023,6 +1027,13 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                      </tbody>
                   </table>
                </div>
+            </div>
+          )}
+
+          {/* ────── TABS: STORIES QUEST CONTENT MANAGER ────── */}
+          {!loading && activeTab === 'stories' && (
+            <div className="animate-in fade-in duration-300">
+              <StoryQuestManager />
             </div>
           )}
         </main>
