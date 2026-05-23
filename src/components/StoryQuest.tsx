@@ -96,6 +96,8 @@ interface SceneQuestion {
   option_d: string;
   correct_option: 'A' | 'B' | 'C' | 'D';
   explanation: string;
+  response_correct?: string;
+  response_wrong?: string;
 }
 
 interface StudentStoryProgress {
@@ -581,6 +583,65 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
   
   const { showToast } = useToast();
 
+  const [isReading, setIsReading] = useState<boolean>(false);
+
+  // Google TTS functions
+  const speakText = (text: string) => {
+    if (!window.speechSynthesis) return;
+    
+    // Stop any current speech first
+    window.speechSynthesis.cancel();
+
+    // Clean up html tags or any odd double character strings
+    const cleanText = text.replace(/<\/?[^>]+(>|$)/g, "");
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+    // Settings
+    utterance.rate = 0.9;      // slightly slower — easier for students
+    utterance.pitch = 1.0;     
+    utterance.volume = 1.0;    
+
+    // Detect language by subject name
+    const subjectName = selectedSubject ? (selectedSubject.name || selectedSubject.subject_name || '') : '';
+    if (subjectName.toLowerCase().includes('kiswahili')) {
+      utterance.lang = 'sw-KE'; 
+    } else {
+      utterance.lang = 'en-GB';  // British English sounds cleaner than US
+    }
+
+    utterance.onstart = () => {
+      setIsReading(true);
+    };
+
+    utterance.onend = () => {
+      setIsReading(false);
+    };
+
+    utterance.onerror = () => {
+      setIsReading(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeech = () => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsReading(false);
+    }
+  };
+
+  // Stop speech when scene transitions or unmounts
+  useEffect(() => {
+    stopSpeech();
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [activeScene]);
+
   // ─── INITIALIZATION ────────────────────────────────────────────────────────
   useEffect(() => {
     // 1. Try to load student profile from various storage keys in priority order
@@ -688,27 +749,13 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
       console.log('Querying grade as integer:', numericGrade);
       
       // Attempt to load story subjects matching student grade joining story_characters
-      let { data: dbSubjects, error: subError } = await supabase
-        .from('story_subjects')
-        .select(`
-          id,
-          name,
-          grade,
-          story_title,
-          story_characters (
-            character_name,
-            character_description,
-            home_town,
-            personality
-          )
-        `)
-        .eq('grade', numericGrade);
+      // Securely matching both numerical or string representation of grade to avoid Postgres type mismatch errors
+      let dbSubjects: any[] | null = null;
+      let subError: any = null;
 
-      // Robust grade representation fallback:
-      // If we got zero results or error, try querying with original string 'student.grade' as fallback
-      if (subError || !dbSubjects || dbSubjects.length === 0) {
-        console.log(`No results for integer "${numericGrade}". Trying fallback query matching original text "${student.grade}"...`);
-        const { data: fallbackSubjects, error: fallbackError } = await supabase
+      try {
+        // Try Option 1: Numeric Grade Query
+        const { data, error } = await supabase
           .from('story_subjects')
           .select(`
             id,
@@ -722,11 +769,32 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
               personality
             )
           `)
-          .eq('grade', student.grade);
-          
-        if (!fallbackError && fallbackSubjects && fallbackSubjects.length > 0) {
-          dbSubjects = fallbackSubjects;
-          subError = null;
+          .eq('grade', numericGrade);
+        if (error) throw error;
+        dbSubjects = data;
+      } catch (err: any) {
+        console.warn(`Querying subject matching integer grade ${numericGrade} failed, falling back to string query...`, err);
+        // Try Option 2: String/Text Or check
+        try {
+          const { data, error } = await supabase
+            .from('story_subjects')
+            .select(`
+              id,
+              name,
+              grade,
+              story_title,
+              story_characters (
+                character_name,
+                character_description,
+                home_town,
+                personality
+              )
+            `)
+            .or(`grade.eq."${student.grade}",grade.eq."Grade ${numericGrade}"`);
+          if (error) throw error;
+          dbSubjects = data;
+        } catch (err2: any) {
+          subError = err2;
         }
       }
 
@@ -852,47 +920,94 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
     try {
       let dbChapters: any[] = [];
-      let fetchError: any = null;
+      let finalError: any = null;
 
-      // Try fetching modules/chapters through the 'stories' parent table relation
-      const { data: dbStories, error: storyErr } = await supabase
-        .from('stories')
-        .select('id')
-        .eq('subject_id', sub.id);
-
-      if (!storyErr && dbStories && dbStories.length > 0) {
-        const storyIds = dbStories.map(s => s.id);
+      // Pathway A: Direct subject_id query (Supporting user defined/migrated custom columns)
+      try {
         const { data, error } = await supabase
           .from('story_chapters')
-          .select('*')
-          .in('story_id', storyIds)
+          .select('id, chapter_number, title, topic_covered, subject_id, description, total_scenes, xp_reward')
+          .eq('subject_id', sub.id)
           .order('chapter_number', { ascending: true });
         
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           dbChapters = data;
-        } else {
-          fetchError = error;
+        } else if (error) {
+          throw error;
         }
-      } else {
-        // Fall back direct inquiry
-        const { data, error } = await supabase
-          .from('story_chapters')
-          .select('*')
-          .eq('story_id', sub.id)
-          .order('chapter_number', { ascending: true });
-        
-        if (!error && data) {
-          dbChapters = data;
-        } else {
-          fetchError = error;
+      } catch (e1) {
+        console.warn("Direct subject_id query failed in StoryQuest, trying direct select without extra columns...", e1);
+        try {
+          const { data, error } = await supabase
+            .from('story_chapters')
+            .select('id, chapter_number, title, description, total_scenes, xp_reward')
+            .eq('subject_id', sub.id)
+            .order('chapter_number', { ascending: true });
+          
+          if (!error && data && data.length > 0) {
+            dbChapters = data;
+          } else if (error) {
+            throw error;
+          }
+        } catch (e2) {
+          finalError = e2;
         }
       }
 
-      if (!fetchError && dbChapters && dbChapters.length > 0) {
+      // Pathway B: Relational query through 'stories' if we don't have chapters yet
+      if (dbChapters.length === 0) {
+        try {
+          const { data: dbStories, error: storyErr } = await supabase
+            .from('stories')
+            .select('id')
+            .eq('subject_id', sub.id);
+
+          if (!storyErr && dbStories && dbStories.length > 0) {
+            const storyIds = dbStories.map(s => s.id);
+            const { data, error } = await supabase
+              .from('story_chapters')
+              .select('*')
+              .in('story_id', storyIds)
+              .order('chapter_number', { ascending: true });
+            
+            if (!error && data) {
+              dbChapters = data;
+            } else if (error) {
+              throw error;
+            }
+          }
+        } catch (storyQueryErr) {
+          console.warn("Querying chapters through stories schema failed in StoryQuest...", storyQueryErr);
+          finalError = storyQueryErr;
+        }
+      }
+
+      // Pathway C: Fallback to story_id direct comparison
+      if (dbChapters.length === 0) {
+        try {
+          const { data, error } = await supabase
+            .from('story_chapters')
+            .select('*')
+            .eq('story_id', sub.id)
+            .order('chapter_number', { ascending: true });
+          
+          if (!error && data) {
+            dbChapters = data;
+          } else if (error) {
+            throw error;
+          }
+        } catch (directStoryErr) {
+          console.warn("Direct story_id comparison query failed:", directStoryErr);
+          finalError = directStoryErr;
+        }
+      }
+
+      if (dbChapters && dbChapters.length > 0) {
         setChapters(dbChapters.map((c: any) => ({
           id: c.id,
           chapter_number: c.chapter_number,
           title: c.title,
+          topic_covered: c.topic_covered || '',
           description: c.description || '',
           total_scenes: c.total_scenes || 3,
           xp_reward: c.xp_reward || 100
@@ -945,14 +1060,37 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
     try {
       // Fetch scenes for this chapter from Supabase
-      const { data: dbScenes, error } = await supabase
-        .from('story_scenes')
-        .select(`
-          id, scene_number, narrative, setting_local,
-          scene_questions (question_text, option_a, option_b, option_c, option_d, correct_option, explanation)
-        `)
-        .eq('chapter_id', chap.id)
-        .order('scene_number', { ascending: true });
+      let dbScenes: any[] | null = null;
+      let error: any = null;
+
+      try {
+        const res = await supabase
+          .from('story_scenes')
+          .select(`
+            id, scene_number, narrative, setting_local,
+            scene_questions (question_text, option_a, option_b, option_c, option_d, correct_option, explanation, response_correct, response_wrong)
+          `)
+          .eq('chapter_id', chap.id)
+          .order('scene_number', { ascending: true });
+        if (res.error) throw res.error;
+        dbScenes = res.data;
+      } catch (err: any) {
+        console.warn(`Querying story_scenes with setting_local failed, falling back to query without setting_local...`, err);
+        try {
+          const res = await supabase
+            .from('story_scenes')
+            .select(`
+              id, scene_number, narrative,
+              scene_questions (question_text, option_a, option_b, option_c, option_d, correct_option, explanation, response_correct, response_wrong)
+            `)
+            .eq('chapter_id', chap.id)
+            .order('scene_number', { ascending: true });
+          if (res.error) throw res.error;
+          dbScenes = res.data;
+        } catch (err2) {
+          error = err2;
+        }
+      }
 
       if (!error && dbScenes && dbScenes.length > 0) {
         const formattedScenes: StoryScene[] = dbScenes.map((s: any) => ({
@@ -967,7 +1105,9 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
             option_c: s.scene_questions.option_c,
             option_d: s.scene_questions.option_d,
             correct_option: s.scene_questions.correct_option as 'A' | 'B' | 'C' | 'D',
-            explanation: s.scene_questions.explanation || ''
+            explanation: s.scene_questions.explanation || '',
+            response_correct: s.scene_questions.response_correct || '',
+            response_wrong: s.scene_questions.response_wrong || ''
           } : undefined
         }));
         
@@ -1015,11 +1155,13 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     if (isCorrect) {
       setResultState('correct');
       showToast('Hakuna Matata! Correct Answer! 🌟', 'success');
+      speakText(activeScene.question.response_correct || 'Hakuna Matata! Correct Answer! Excellent job.');
     } else {
       setResultState('wrong');
       const updatedWrong = wrongAttempts + 1;
       setWrongAttempts(updatedWrong);
       showToast('Not quite right, let’s study our choices! 🧐', 'error');
+      speakText(activeScene.question.response_wrong || 'Not quite right, let’s study our choices and try again!');
     }
 
     setScreen('result');
@@ -1519,9 +1661,33 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                       {activeScene.narrative}
                     </p>
 
-                    <div className="w-full flex items-center justify-between pt-4 border-t border-[#E2E8F0]/40 mt-3">
-                      <span className="text-[8.5px] font-black uppercase tracking-wider text-[#A0AEC0]">Study Quest Scroll</span>
-                      <span className="text-xs">📜</span>
+                    <div className="w-full flex items-center justify-between pt-3 border-t border-[#E2E8F0]/40 mt-3 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (isReading) {
+                              stopSpeech();
+                            } else {
+                              speakText(activeScene.narrative);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer ${
+                            isReading 
+                              ? 'bg-red-500 text-white animate-pulse' 
+                              : 'bg-[#FF6B00] text-white hover:bg-orange-600 shadow-[#FF6B00]/10'
+                          }`}
+                        >
+                          <span>🔊 Read Aloud</span>
+                        </button>
+
+                        <button
+                          onClick={stopSpeech}
+                          className="px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide bg-[#0A1628] text-white border border-[#1A2E44]/30 hover:bg-slate-900 transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                        >
+                          <span>⏹ Stop</span>
+                        </button>
+                      </div>
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-[#A0AEC0] font-mono">Study Quest Scroll</span>
                     </div>
                   </div>
                 </div>

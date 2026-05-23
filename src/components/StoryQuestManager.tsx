@@ -166,30 +166,91 @@ export default function StoryQuestManager() {
 
       for (const item of SEED_DATA) {
         // Find or create subject
-        const { data: existingSub } = await supabase
-          .from('story_subjects')
-          .select('id')
-          .eq('name', item.name)
-          .eq('grade', item.grade)
-          .maybeSingle();
+        const numericGrade = parseInt(item.grade.replace(/\D/g, ''), 10) || 7;
+        let existingSub = null;
+
+        try {
+          const { data, error } = await supabase
+            .from('story_subjects')
+            .select('id')
+            .eq('name', item.name)
+            .eq('grade', item.grade)
+            .maybeSingle();
+          if (error) throw error;
+          existingSub = data;
+        } catch (err: any) {
+          console.warn(`Querying subject with string grade "${item.grade}" failed, retrying with numeric grade "${numericGrade}"...`, err);
+          try {
+            const { data, error } = await supabase
+              .from('story_subjects')
+              .select('id')
+              .eq('name', item.name)
+              .eq('grade', numericGrade)
+              .maybeSingle();
+            if (error) throw error;
+            existingSub = data;
+          } catch (err2: any) {
+            console.error('Field/type mismatch querying story_subjects:', err2);
+          }
+        }
 
         let subjectId = existingSub?.id;
 
         if (!subjectId) {
-          const { data: newSub, error: subErr } = await supabase
-            .from('story_subjects')
-            .insert({
-              name: item.name,
-              grade: item.grade,
-              story_title: item.story_title,
-              icon: item.icon,
-              total_chapters: item.chapters.length
-            })
-            .select('id')
-            .single();
+          let newSub = null;
+          let subErr = null;
 
-          if (subErr) throw subErr;
-          subjectId = newSub.id;
+          // Permutations of [useNumericGrade: boolean, columns: string[]] to try
+          const trials = [
+            // Try String Grade Options
+            { useNumeric: false, columns: ['icon', 'total_chapters'] },
+            { useNumeric: false, columns: ['total_chapters'] },
+            { useNumeric: false, columns: ['icon'] },
+            { useNumeric: false, columns: [] },
+
+            // Try Numeric Grade Options
+            { useNumeric: true, columns: ['icon', 'total_chapters'] },
+            { useNumeric: true, columns: ['total_chapters'] },
+            { useNumeric: true, columns: ['icon'] },
+            { useNumeric: true, columns: [] },
+          ];
+
+          for (const trial of trials) {
+            try {
+              const payload: any = {
+                name: item.name,
+                grade: trial.useNumeric ? numericGrade : item.grade,
+                story_title: item.story_title,
+              };
+              if (trial.columns.includes('icon')) payload.icon = item.icon;
+              if (trial.columns.includes('total_chapters')) payload.total_chapters = item.chapters.length;
+
+              const res = await supabase
+                .from('story_subjects')
+                .insert(payload)
+                .select('id')
+                .maybeSingle();
+
+              if (!res.error && res.data) {
+                newSub = res.data;
+                break; // Found a working configuration!
+              }
+              if (res.error) subErr = res.error;
+            } catch (err: any) {
+              subErr = err;
+            }
+          }
+
+          if (!newSub && subErr) {
+            console.error("All insertion options for story_subjects failed:", subErr);
+            throw subErr;
+          }
+
+          if (newSub) {
+            subjectId = newSub.id;
+          } else {
+            throw new Error("Could not find or create subject ID");
+          }
         }
 
         // Check if character profile exists
@@ -228,11 +289,25 @@ export default function StoryQuestManager() {
               title: item.story_title,
               description: item.character.character_description
             })
-            .select('id')
-            .single();
+            .select('id');
 
           if (storyErr) throw storyErr;
-          storyId = newStory.id;
+          
+          if (newStory && newStory.length > 0) {
+            storyId = newStory[0].id;
+          } else {
+            // Re-fetch to be absolutely certain
+            const { data: refetched } = await supabase
+              .from('stories')
+              .select('id')
+              .eq('subject_id', subjectId)
+              .maybeSingle();
+            storyId = refetched?.id;
+          }
+
+          if (!storyId) {
+            throw new Error(`Failed to create a story entry for subject: ${item.name}`);
+          }
         }
 
         // Create Chapters
@@ -245,7 +320,8 @@ export default function StoryQuestManager() {
             .maybeSingle();
 
           if (!existingChap) {
-            await supabase
+            // Try inserting with all schema columns (total_scenes, xp_reward)
+            const { error: chErr } = await supabase
               .from('story_chapters')
               .insert({
                 story_id: storyId,
@@ -255,6 +331,33 @@ export default function StoryQuestManager() {
                 total_scenes: 5,
                 xp_reward: 100
               });
+
+            if (chErr) {
+              console.warn(`Seeding Chapter failed with all columns, trying fallback B (without total_scenes & xp_reward)...`, chErr);
+              // Fallback B: without total_scenes & xp_reward
+              const { error: chErrFallback } = await supabase
+                .from('story_chapters')
+                .insert({
+                  story_id: storyId,
+                  chapter_number: chap.chapter_number,
+                  title: chap.title,
+                  description: chap.description
+                });
+              if (chErrFallback) {
+                console.warn(`Seeding Chapter failed with fallback B, trying fallback C (minimal columns)...`, chErrFallback);
+                // Fallback C: bare minimum
+                const { error: chErrMin } = await supabase
+                  .from('story_chapters')
+                  .insert({
+                    story_id: storyId,
+                    chapter_number: chap.chapter_number,
+                    title: chap.title
+                  });
+                if (chErrMin) {
+                  throw new Error(`Story chapters creation failed: ${chErrMin.message || chErrMin}`);
+                }
+              }
+            }
           }
         }
       }
@@ -300,20 +403,50 @@ export default function StoryQuestManager() {
     setErrorMsg(null);
     try {
       // Fetch both numeric and string representations (Grade 7 vs 7)
-      const { data, error } = await supabase
-        .from('story_subjects')
-        .select(`
-          id,
-          name,
-          grade,
-          story_title,
-          story_characters (
-            character_name
-          )
-        `)
-        .or(`grade.eq.${gradeNum},grade.eq.Grade ${gradeNum}`);
+      // Enclose in double quotes to prevent Postgres numerical type mismatch casting error
+      let data = null;
+      let queryErr = null;
 
-      if (error) throw error;
+      try {
+        // Query option 1: If grade is stored as numeric/integer column in DB
+        const res = await supabase
+          .from('story_subjects')
+          .select(`
+            id,
+            name,
+            grade,
+            story_title,
+            story_characters (
+              character_name
+            )
+          `)
+          .eq('grade', gradeNum);
+        if (res.error) throw res.error;
+        data = res.data;
+      } catch (err: any) {
+        console.warn(`Querying subject matching integer grade ${gradeNum} failed, falling back to string query...`, err);
+        // Query option 2: If grade is TEXT/VARCHAR column in DB
+        try {
+          const res = await supabase
+            .from('story_subjects')
+            .select(`
+              id,
+              name,
+              grade,
+              story_title,
+              story_characters (
+                character_name
+              )
+            `)
+            .or(`grade.eq."${gradeNum}",grade.eq."Grade ${gradeNum}"`);
+          if (res.error) throw res.error;
+          data = res.data;
+        } catch (err2: any) {
+          queryErr = err2;
+        }
+      }
+
+      if (queryErr) throw queryErr;
 
       if (data && data.length > 0) {
         setSubjectsList(data as StorySubject[]);
@@ -338,49 +471,106 @@ export default function StoryQuestManager() {
     setErrorMsg(null);
     try {
       let dbChapters: any[] = [];
-      let fetchError: any = null;
+      let finalError: any = null;
 
-      // Try fetching modules/chapters through the 'stories' parent table relation
-      const { data: dbStories, error: storyErr } = await supabase
-        .from('stories')
-        .select('id')
-        .eq('subject_id', subjectId);
-
-      if (!storyErr && dbStories && dbStories.length > 0) {
-        const storyIds = dbStories.map(s => s.id);
+      // Pathway A: Direct subject_id query (Supporting user defined/migrated custom columns)
+      try {
         const { data, error } = await supabase
           .from('story_chapters')
-          .select('id, chapter_number, title')
-          .in('story_id', storyIds)
+          .select('id, chapter_number, title, topic_covered, subject_id, description, total_scenes, xp_reward')
+          .eq('subject_id', subjectId)
           .order('chapter_number', { ascending: true });
         
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           dbChapters = data;
-        } else {
-          fetchError = error;
+        } else if (error) {
+          throw error;
         }
-      } else {
-        // Fall back direct inquiry
-        const { data, error } = await supabase
-          .from('story_chapters')
-          .select('id, chapter_number, title')
-          .eq('story_id', subjectId)
-          .order('chapter_number', { ascending: true });
-        
-        if (!error && data) {
-          dbChapters = data;
-        } else {
-          fetchError = error;
+      } catch (e1) {
+        console.warn("Direct subject_id query with custom columns failed, trying direct select without extra columns...", e1);
+        try {
+          const { data, error } = await supabase
+            .from('story_chapters')
+            .select('id, chapter_number, title, description, total_scenes, xp_reward')
+            .eq('subject_id', subjectId)
+            .order('chapter_number', { ascending: true });
+          
+          if (!error && data && data.length > 0) {
+            dbChapters = data;
+          } else if (error) {
+            throw error;
+          }
+        } catch (e2) {
+          finalError = e2;
+        }
+      }
+
+      // Pathway B: Relational query through 'stories' if we don't have chapters yet
+      if (dbChapters.length === 0) {
+        try {
+          const { data: dbStories, error: storyErr } = await supabase
+            .from('stories')
+            .select('id')
+            .eq('subject_id', subjectId);
+
+          if (!storyErr && dbStories && dbStories.length > 0) {
+            const storyIds = dbStories.map(s => s.id);
+            // Try fetching with all standard columns
+            const { data, error } = await supabase
+              .from('story_chapters')
+              .select('id, chapter_number, title, description, total_scenes, xp_reward')
+              .in('story_id', storyIds)
+              .order('chapter_number', { ascending: true });
+            
+            if (!error && data) {
+              dbChapters = data;
+            } else if (error) {
+              throw error;
+            }
+          }
+        } catch (storyQueryErr) {
+          console.warn("Querying chapters through stories schema failed, trying fallback...", storyQueryErr);
+          finalError = storyQueryErr;
+        }
+      }
+
+      // Pathway C: Fallback to story_id direct comparison
+      if (dbChapters.length === 0) {
+        try {
+          const { data, error } = await supabase
+            .from('story_chapters')
+            .select('id, chapter_number, title, description, total_scenes, xp_reward')
+            .eq('story_id', subjectId)
+            .order('chapter_number', { ascending: true });
+          
+          if (!error && data) {
+            dbChapters = data;
+          } else if (error) {
+            throw error;
+          }
+        } catch (directStoryErr) {
+          console.warn("Direct story_id comparison query failed:", directStoryErr);
+          finalError = directStoryErr;
         }
       }
 
       if (dbChapters && dbChapters.length > 0) {
-        setChaptersList(dbChapters as StoryChapter[]);
-        setSelectedChapterId(dbChapters[0].id);
+        const parsedChaps = dbChapters.map(c => ({
+          id: c.id,
+          chapter_number: c.chapter_number,
+          title: c.title,
+          topic_covered: c.topic_covered || '',
+          description: c.description || '',
+          total_scenes: c.total_scenes || 3,
+          xp_reward: c.xp_reward || 100
+        }));
+        setChaptersList(parsedChaps);
+        setSelectedChapterId(parsedChaps[0].id);
       } else {
         setChaptersList([]);
         setSelectedChapterId('');
         setExistingScenes([]);
+        if (finalError) throw finalError;
       }
     } catch (err: any) {
       console.error('Error fetching chapters:', err);
@@ -410,14 +600,14 @@ export default function StoryQuestManager() {
   };
 
   // Run JSON parsing & validations
-  const validateAndParseJSON = (rawInput: string): boolean => {
+  const validateAndParseJSON = (rawInput: string): ParsedScene[] | null => {
     setValidationErrors([]);
     setSuccessMsg(null);
     setErrorMsg(null);
 
     if (!rawInput.trim()) {
       setValidationErrors(['JSON text area is empty!']);
-      return false;
+      return null;
     }
 
     try {
@@ -426,13 +616,13 @@ export default function StoryQuestManager() {
 
       if (!scenes || !Array.isArray(scenes)) {
         setValidationErrors(['Root JSON object must contain a "scenes" array.']);
-        return false;
+        return null;
       }
 
       const errors: string[] = [];
 
-      if (scenes.length !== 5) {
-        errors.push(`A story chapter must have exactly 5 scenes. Found ${scenes.length}.`);
+      if (scenes.length === 0) {
+        errors.push(`A story chapter must have at least 1 scene.`);
       }
 
       scenes.forEach((scene: any, idx: number) => {
@@ -469,7 +659,7 @@ export default function StoryQuestManager() {
 
       if (errors.length > 0) {
         setValidationErrors(errors);
-        return false;
+        return null;
       }
 
       // If valid, store parsed format
@@ -491,16 +681,16 @@ export default function StoryQuestManager() {
       }));
 
       setParsedScenes(formattedScenes);
-      return true;
+      return formattedScenes;
     } catch (e: any) {
       setValidationErrors([`Invalid JSON formatting: ${e.message || e}`]);
-      return false;
+      return null;
     }
   };
 
   const handlePreview = () => {
-    const isValid = validateAndParseJSON(jsonInput);
-    if (isValid) {
+    const scenes = validateAndParseJSON(jsonInput);
+    if (scenes) {
       setIsPreviewMode(true);
       setSuccessMsg('JSON parsed and validated successfully! See preview below.');
     } else {
@@ -542,8 +732,8 @@ export default function StoryQuestManager() {
 
   const handleUpload = async () => {
     // Re-verify validation
-    const isValid = validateAndParseJSON(jsonInput);
-    if (!isValid) {
+    const scenesToUpload = validateAndParseJSON(jsonInput);
+    if (!scenesToUpload) {
       setErrorMsg('Failed validation on upload. Please double check instructions.');
       return;
     }
@@ -561,25 +751,64 @@ export default function StoryQuestManager() {
       // Clean up previous scenes to avoid conflicts or duplications in ordering
       await clearExistingChapterScenes(selectedChapterId);
 
-      for (const scene of parsedScenes) {
+      for (const scene of scenesToUpload) {
         // 1. Insert Scene
-        const { data: insertedScene, error: sceneErr } = await supabase
-          .from('story_scenes')
-          .insert({
-            chapter_id: selectedChapterId,
-            scene_number: scene.scene_number,
-            narrative: scene.narrative,
-            setting_local: scene.setting_local || 'Kenyan Old Town'
-          })
-          .select('id')
-          .single();
+        let insertedSceneArr: any[] | null = null;
+        let sceneErr: any = null;
 
-        if (sceneErr) throw new Error(`Scene #${scene.scene_number} Insert Failed: ${sceneErr.message}`);
-        if (!insertedScene) throw new Error(`Scene #${scene.scene_number} Insert Failed: No ID returned`);
+        try {
+          // Option A: insert with setting_local
+          const res = await supabase
+            .from('story_scenes')
+            .insert({
+              chapter_id: selectedChapterId,
+              scene_number: scene.scene_number,
+              narrative: scene.narrative,
+              setting_local: scene.setting_local || 'Kenyan Old Town'
+            })
+            .select('id');
+          if (res.error) throw res.error;
+          insertedSceneArr = res.data;
+        } catch (err: any) {
+          console.warn(`Inserting scene with setting_local failed for scene #${scene.scene_number}, retrying without setting_local...`, err);
+          try {
+            // Option B: insert without setting_local
+            const res = await supabase
+              .from('story_scenes')
+              .insert({
+                chapter_id: selectedChapterId,
+                scene_number: scene.scene_number,
+                narrative: scene.narrative
+              })
+              .select('id');
+            if (res.error) throw res.error;
+            insertedSceneArr = res.data;
+          } catch (err2: any) {
+            sceneErr = err2;
+          }
+        }
+
+        if (sceneErr) throw new Error(`Scene #${scene.scene_number} Insert Failed: ${sceneErr.message || sceneErr}`);
+        
+        let sceneId = insertedSceneArr?.[0]?.id;
+        if (!sceneId) {
+          // Attempt fallback query to fetch the newly created scene ID
+          const { data: refetched } = await supabase
+            .from('story_scenes')
+            .select('id')
+            .eq('chapter_id', selectedChapterId)
+            .eq('scene_number', scene.scene_number)
+            .maybeSingle();
+          sceneId = refetched?.id;
+        }
+
+        if (!sceneId) {
+          throw new Error(`Scene #${scene.scene_number} Insert Failed: No ID returned or located`);
+        }
 
         // 2. Insert Question
         const questionPayload: any = {
-          scene_id: insertedScene.id,
+          scene_id: sceneId,
           question_text: scene.question.question_text,
           option_a: scene.question.option_a,
           option_b: scene.question.option_b,
@@ -610,7 +839,17 @@ export default function StoryQuestManager() {
         }
       }
 
-      setSuccessMsg(`🎉 Success! Chapter completed. 5 scenes and questions uploaded successfully for Chapter!`);
+      // Update the chapter's total_scenes count dynamically in the database
+      try {
+        await supabase
+          .from('story_chapters')
+          .update({ total_scenes: scenesToUpload.length })
+          .eq('id', selectedChapterId);
+      } catch (e) {
+        console.warn('Silent warning: Failed to sync total_scenes in story_chapters:', e);
+      }
+
+      setSuccessMsg(`🎉 Success! Chapter completed. ${scenesToUpload.length} scenes and questions uploaded successfully for Chapter!`);
       setJsonInput('');
       setParsedScenes([]);
       setIsPreviewMode(false);
@@ -833,13 +1072,76 @@ export default function StoryQuestManager() {
                 <FileJson size={14} className="text-[#FF6B00]" />
                 JSON Content Loader
               </h3>
-              <span className="text-[9px] bg-[#FF6B00]/10 text-[#FF6B00] px-2 py-0.5 rounded-lg font-black uppercase tracking-wide">
-                Strict Format
-              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sample = {
+                      scenes: [
+                        {
+                          scene_number: 1,
+                          setting_local: "Mombasa Old Town",
+                          narrative: "Zawadi is helping Cucu rearrange the vegetable shelves at her kiosk. She notices they sold 15 crates of tomatoes yesterday but their physical cash drawer shows a missing 1,200 KES. Zawadi picks up an old notebook and asks Cucu: 'Cucu, how did we record our payment receipts and daily expenses?'",
+                          question: {
+                            question_text: "What is the very first step Zawadi should take to restore physical and numerical audit accountability in the business?",
+                            option_a: "Buy more stock immediately to replace the lost money.",
+                            option_b: "Create a simple Ledger or Cash Receipts Record to log every penny in and out.",
+                            option_c: "Close the kiosk for three days to think about it.",
+                            option_d: "Borrow money from the neighbors without security.",
+                            correct_option: "B",
+                            explanation: "A cash receipt book tracks every transaction immediately to prevent inventory leakage and unexplained cash shortfalls.",
+                            response_correct: "Fabulous! Keeping standard accounting ledgers prevents errors and cash leakage.",
+                            response_wrong: "Wait! Without a record book, Cucu will keep losing track of daily sales and cashflow."
+                          }
+                        },
+                        {
+                          scene_number: 2,
+                          setting_local: "Nyali Market Place",
+                          narrative: "A wholesaler from Malindi arrives with 10 bags of onions. He offers Cucu the stock now to be paid in 30 days. Cucu is excited, but Zawadi reminds her that buying items to be paid later creates a specific financial obligation.",
+                          question: {
+                            question_text: "In standard business studies and basic bookkeeping, what is this type of credit obligation called?",
+                            option_a: "A fixed business asset",
+                            option_b: "An interest or financial revenue",
+                            option_c: "A liability (Accounts Payable)",
+                            option_d: "A capital investment injection",
+                            correct_option: "C",
+                            explanation: "Outstanding bills for inventory bought on credit represent liabilities, which are debts the business must settle in future.",
+                            response_correct: "Spot on! That is a liability. Highly enterprising!",
+                            response_wrong: "No, if the business owes money for goods delivered, it represents a debt or liability."
+                          }
+                        },
+                        {
+                          scene_number: 3,
+                          setting_local: "Zawadi's Desk",
+                          narrative: "In the evening, Zawadi sets down with a ledger. She sums up the total cash injected inside the business by Cucu, which was 5,000 KES for the initial stock. She explains to her Cucu that this is considered the initial capital value of the shop.",
+                          question: {
+                            question_text: "In the fundamental Accounting Equation, what relationship should always remain in balance?",
+                            option_a: "Assets = Liabilities + Owner's Equity (Capital)",
+                            option_b: "Assets = Liabilities - Expenses",
+                            option_c: "Liabilities = Assets + Capital",
+                            option_d: "Capital = Liabilities - Assets",
+                            correct_option: "A",
+                            explanation: "The accounting equation states that a company's total assets represent the sum of its liabilities and its owner's equity.",
+                            response_correct: "Incredible! Standard accounting equation balance achieved.",
+                            response_wrong: "Incorrect. Remember: Assets must always equal Liabilities plus Capital!"
+                          }
+                        }
+                      ]
+                    };
+                    setJsonInput(JSON.stringify(sample, null, 2));
+                  }}
+                  className="px-2 py-0.5 bg-[#FF6B00]/10 hover:bg-[#FF6B00] hover:text-white border border-[#FF6B00]/20 text-[#FF6B00] rounded text-[8.5px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  📁 Load Template
+                </button>
+                <span className="text-[9px] bg-[#1A2E44] text-[#A0AEC0] px-2 py-0.5 rounded font-black uppercase tracking-wide">
+                  Strict Format
+                </span>
+              </div>
             </div>
             
             <p className="text-[11px] text-[#A0AEC0] leading-relaxed">
-              Paster standard Chapter story JSON here. It must contain exactly <span className="text-white font-bold">5 scenes</span>. Make sure your question options, response narratives, and explainers match CBC syllabus guidelines.
+              Paste standard Chapter story JSON here. Support 1 or more scenes (typically 3-5). Make sure your question options, response narratives, and explainers match CBC syllabus guidelines.
             </p>
 
             <textarea

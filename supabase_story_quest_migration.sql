@@ -62,8 +62,14 @@ CREATE TABLE IF NOT EXISTS public.scene_questions (
     option_d TEXT NOT NULL,
     correct_option CHAR(1) NOT NULL CHECK (correct_option IN ('A', 'B', 'C', 'D')),
     explanation TEXT,
+    response_correct TEXT,
+    response_wrong TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Fail-safe column additions if table already exists without response_correct or response_wrong
+ALTER TABLE public.scene_questions ADD COLUMN IF NOT EXISTS response_correct TEXT;
+ALTER TABLE public.scene_questions ADD COLUMN IF NOT EXISTS response_wrong TEXT;
 
 CREATE TABLE IF NOT EXISTS public.student_story_progress (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -93,6 +99,14 @@ CREATE POLICY "Allow public select stories" ON public.stories FOR SELECT USING (
 CREATE POLICY "Allow public select story_chapters" ON public.story_chapters FOR SELECT USING (true);
 CREATE POLICY "Allow public select story_scenes" ON public.story_scenes FOR SELECT USING (true);
 CREATE POLICY "Allow public select scene_questions" ON public.scene_questions FOR SELECT USING (true);
+
+-- Allow public manage of content for admins/uploaders
+CREATE POLICY "Allow public manage story_subjects" ON public.story_subjects FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public manage story_characters" ON public.story_characters FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public manage stories" ON public.stories FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public manage story_chapters" ON public.story_chapters FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public manage story_scenes" ON public.story_scenes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public manage scene_questions" ON public.scene_questions FOR ALL USING (true) WITH CHECK (true);
 
 -- Allow student read-write for progress
 CREATE POLICY "Allow all student progress access" ON public.student_story_progress FOR ALL USING (true) WITH CHECK (true);
