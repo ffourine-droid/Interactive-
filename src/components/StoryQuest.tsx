@@ -848,6 +848,11 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     isChapComplete: boolean,
     xpGained: number
   ) => {
+    if (!studentProfile) {
+      console.warn('Anonymous or undefined student profile. Bypassing progress save.');
+      return;
+    }
+
     setSyncing(true);
     
     // Copy current mapping
@@ -1033,22 +1038,37 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     // Retrieve student progress for current subject
     const subProgress = progressMap[selectedSubject?.id || ''] || {
       current_chapter_id: chap.id,
-      current_scene_number: 1
+      current_scene_number: 1,
+      completed_chapters: []
     };
+
+    const isCompleted = (subProgress.completed_chapters || []).includes(chap.id);
 
     // Let's decide starting scene number
     let initialSceneNum = 1;
-    // If we are resumed into this selected chapter, grab completed scenes
-    if (subProgress.current_chapter_id === chap.id) {
+    // If we are resumed into this selected chapter and NOT completed, grab progress.
+    // If completed, we assume they clicked "Replay Quest" and thus we start fresh from scene 1.
+    if (subProgress.current_chapter_id === chap.id && !isCompleted) {
       initialSceneNum = Math.min(subProgress.current_scene_number, chap.total_scenes);
     }
 
     if (!isValidUUID(chap.id)) {
       const prebuilt = PREBUILT_SCENES[chap.id] || [];
-      setScenes(prebuilt);
-      const startIdx = Math.max(0, Math.min(initialSceneNum - 1, prebuilt.length - 1));
+      // Deduplicate prebuilt scenes by scene_number
+      const uniquePrebuilt: StoryScene[] = [];
+      const seenPrebuiltNums = new Set<number>();
+      for (const s of prebuilt) {
+        if (!seenPrebuiltNums.has(s.scene_number)) {
+          seenPrebuiltNums.add(s.scene_number);
+          uniquePrebuilt.push(s);
+        }
+      }
+      uniquePrebuilt.sort((a, b) => a.scene_number - b.scene_number);
+
+      setScenes(uniquePrebuilt);
+      const startIdx = Math.max(0, Math.min(initialSceneNum - 1, uniquePrebuilt.length - 1));
       setCurrentSceneIndex(startIdx);
-      setActiveScene(prebuilt[startIdx] || null);
+      setActiveScene(uniquePrebuilt[startIdx] || null);
       setSelectedOption(null);
       setWrongAttempts(0);
       setIsAnswerSubmitted(false);
@@ -1093,42 +1113,76 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
       }
 
       if (!error && dbScenes && dbScenes.length > 0) {
-        const formattedScenes: StoryScene[] = dbScenes.map((s: any) => ({
-          id: s.id,
-          scene_number: s.scene_number,
-          narrative: s.narrative,
-          setting_local: s.setting_local || 'Kenyan Setting',
-          question: s.scene_questions ? {
-            question_text: s.scene_questions.question_text,
-            option_a: s.scene_questions.option_a,
-            option_b: s.scene_questions.option_b,
-            option_c: s.scene_questions.option_c,
-            option_d: s.scene_questions.option_d,
-            correct_option: s.scene_questions.correct_option as 'A' | 'B' | 'C' | 'D',
-            explanation: s.scene_questions.explanation || '',
-            response_correct: s.scene_questions.response_correct || '',
-            response_wrong: s.scene_questions.response_wrong || ''
-          } : undefined
-        }));
+        const formattedScenes: StoryScene[] = dbScenes.map((s: any) => {
+          const q = s.scene_questions ? (Array.isArray(s.scene_questions) ? (s.scene_questions.length > 0 ? s.scene_questions[0] : null) : s.scene_questions) : null;
+          return {
+            id: s.id,
+            scene_number: s.scene_number,
+            narrative: s.narrative,
+            setting_local: s.setting_local || 'Kenyan Setting',
+            question: q ? {
+              question_text: q.question_text,
+              option_a: q.option_a,
+              option_b: q.option_b,
+              option_c: q.option_c,
+              option_d: q.option_d,
+              correct_option: q.correct_option as 'A' | 'B' | 'C' | 'D',
+              explanation: q.explanation || '',
+              response_correct: q.response_correct || '',
+              response_wrong: q.response_wrong || ''
+            } : undefined
+          };
+        });
         
-        setScenes(formattedScenes);
-        const startIdx = Math.max(0, initialSceneNum - 1);
+        // Filter out any potential duplicate database scenes with the same scene_number
+        const uniqueDbScenes: StoryScene[] = [];
+        const seenDbNums = new Set<number>();
+        for (const s of formattedScenes) {
+          if (!seenDbNums.has(s.scene_number)) {
+            seenDbNums.add(s.scene_number);
+            uniqueDbScenes.push(s);
+          }
+        }
+        uniqueDbScenes.sort((a, b) => a.scene_number - b.scene_number);
+
+        setScenes(uniqueDbScenes);
+        const startIdx = Math.max(0, Math.min(initialSceneNum - 1, uniqueDbScenes.length - 1));
         setCurrentSceneIndex(startIdx);
-        setActiveScene(formattedScenes[startIdx]);
+        setActiveScene(uniqueDbScenes[startIdx] || null);
       } else {
         // Fall back to prebuilt scenes
         const prebuilt = PREBUILT_SCENES[chap.id] || [];
-        setScenes(prebuilt);
-        const startIdx = Math.max(0, Math.min(initialSceneNum - 1, prebuilt.length - 1));
+        const uniquePrebuilt: StoryScene[] = [];
+        const seenPrebuiltNums = new Set<number>();
+        for (const s of prebuilt) {
+          if (!seenPrebuiltNums.has(s.scene_number)) {
+            seenPrebuiltNums.add(s.scene_number);
+            uniquePrebuilt.push(s);
+          }
+        }
+        uniquePrebuilt.sort((a, b) => a.scene_number - b.scene_number);
+
+        setScenes(uniquePrebuilt);
+        const startIdx = Math.max(0, Math.min(initialSceneNum - 1, uniquePrebuilt.length - 1));
         setCurrentSceneIndex(startIdx);
-        setActiveScene(prebuilt[startIdx] || null);
+        setActiveScene(uniquePrebuilt[startIdx] || null);
       }
     } catch (e) {
       const prebuilt = PREBUILT_SCENES[chap.id] || [];
-      setScenes(prebuilt);
-      const startIdx = Math.max(0, Math.min(initialSceneNum - 1, prebuilt.length - 1));
+      const uniquePrebuilt: StoryScene[] = [];
+      const seenPrebuiltNums = new Set<number>();
+      for (const s of prebuilt) {
+        if (!seenPrebuiltNums.has(s.scene_number)) {
+          seenPrebuiltNums.add(s.scene_number);
+          uniquePrebuilt.push(s);
+        }
+      }
+      uniquePrebuilt.sort((a, b) => a.scene_number - b.scene_number);
+
+      setScenes(uniquePrebuilt);
+      const startIdx = Math.max(0, Math.min(initialSceneNum - 1, uniquePrebuilt.length - 1));
       setCurrentSceneIndex(startIdx);
-      setActiveScene(prebuilt[startIdx] || null);
+      setActiveScene(uniquePrebuilt[startIdx] || null);
     } finally {
       setSelectedOption(null);
       setWrongAttempts(0);
@@ -1147,7 +1201,7 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
   const handleSubmitAnswer = () => {
     if (!selectedOption || !activeScene?.question) return;
 
-    const correctOpt = activeScene.question.correct_option;
+    const correctOpt = activeScene.question.correct_option?.trim().toUpperCase();
     const isCorrect = selectedOption === correctOpt;
 
     setIsAnswerSubmitted(true);
@@ -1174,25 +1228,18 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
       const gainedXp = wrongAttempts === 0 ? 30 : (wrongAttempts === 1 ? 15 : 5);
 
       if (nextIdx >= scenes.length) {
-        // Chapter fully finished! Go to celebration screen
+        // Chapter fully finished! Go to celebration screen immediately
+        setScreen('chapter_complete');
+        
         saveProgress(
           selectedSubject!.id, 
           selectedChapter!.id, 
           scenes.length, 
           true, 
           selectedChapter!.xp_reward
-        );
-        setScreen('chapter_complete');
+        ).catch(err => console.warn('Background chapter complete progress save bypassed:', err));
       } else {
-        // More scenes left in this chapter
-        saveProgress(
-          selectedSubject!.id, 
-          selectedChapter!.id, 
-          nextIdx + 1, 
-          false, 
-          gainedXp
-        );
-
+        // More scenes left in this chapter - Transition screen state synchronously and immediately (snappy!)
         setCurrentSceneIndex(nextIdx);
         setActiveScene(scenes[nextIdx]);
         
@@ -1202,6 +1249,15 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
         setIsAnswerSubmitted(false);
         setResultState(null);
         setScreen('scene');
+
+        // Fire asynchronous background progress sync, not blocking current screen
+        saveProgress(
+          selectedSubject!.id, 
+          selectedChapter!.id, 
+          nextIdx + 1, 
+          false, 
+          gainedXp
+        ).catch(err => console.warn('Background gameplay progress save bypassed:', err));
       }
     } else {
       // ─── WRONG ANSWER FLOW / TRY AGAIN ───────────────────────────────

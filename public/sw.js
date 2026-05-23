@@ -34,6 +34,11 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - Network first, fallback to cache for API, Cache first for assets
 self.addEventListener('fetch', (event) => {
+  // Only process standard GET requests
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   const url = new URL(event.request.url);
   
   // Handle Supabase/API calls - Network First

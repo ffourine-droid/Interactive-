@@ -1330,7 +1330,7 @@ export default function StoryQuestManager() {
         ) : (
           <div className="divide-y divide-[#1A2E44] text-[#A0AEC0] overflow-hidden rounded-2xl border border-[#1A2E44]">
             {existingScenes.map((s, idx) => {
-              const q = s.scene_questions?.[0] || s.scene_questions; // Supabase returns single or list
+              const q = s.scene_questions ? (Array.isArray(s.scene_questions) ? (s.scene_questions.length > 0 ? s.scene_questions[0] : null) : s.scene_questions) : null;
               const isExpanded = !!expandedScenes[s.id];
 
               return (

@@ -5,7 +5,7 @@ import SpeedRoundPage from './SpeedRoundPage';
 import ArenaLobby from '../components/ArenaLobby';
 import LiveGame from '../components/LiveGame';
 import LiveResults from '../components/LiveResults';
-import { StudentCompetitionLobby } from '../components/StudentCompetitionLobby';
+import CompetitionHub from '../components/CompetitionHub';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +58,7 @@ interface GroupWorkPageProps {
 
 export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
   const [view, setView] = useState<ArenaView>('hub');
+  const [compDefaultTab, setCompDefaultTab] = useState<'math_duel' | 'speed_round' | 'group_battle'>('math_duel');
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
 
@@ -89,11 +90,37 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
             <p className="text-xs font-bold text-brand-muted">Playing as <span className="text-brand-accent font-black">{username}</span></p>
           )}
 
+          {/* 1V1 MATH DUEL Card - EXTREMELY PROMINENT */}
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              setCompDefaultTab('math_duel');
+              setView('competitions');
+            }}
+            className="w-full bg-brand-surface border border-[#FF6B00]/40 rounded-[2rem] p-6 text-left space-y-3 hover:border-[#FF6B00] transition-all group shadow-lg shadow-[#FF6B00]/5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-14 h-14 bg-[#FF6B00]/10 rounded-2xl flex items-center justify-center group-hover:bg-[#FF6B00]/20 transition-colors">
+                <Swords size={28} className="text-[#FF6B00]" />
+              </div>
+              <span className="text-[9px] font-black text-[#FF6B00] uppercase tracking-widest px-2.5 py-1 bg-[#FF6B00]/10 rounded-full border border-[#FF6B00]/20">Live 1v1</span>
+            </div>
+            <div>
+              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">✏️ 1v1 Math Duel</h2>
+              <p className="text-xs font-bold text-brand-muted mt-0.5">Real-time arithmetic battle! Submit numeric answers instantly. Best of 5 rounds wins.</p>
+            </div>
+            <div className="flex gap-2">
+              {['Real-time', 'PvP', 'Arithmetic', '30 XP'].map(tag => (
+                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
+              ))}
+            </div>
+          </motion.button>
+
           {/* Speed Round */}
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => setView('speed')}
-            className="w-full bg-brand-surface border border-brand-accent/30 rounded-[2rem] p-6 text-left space-y-3 hover:border-brand-accent transition-all group"
+            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-brand-accent transition-all group"
           >
             <div className="flex items-center justify-between">
               <div className="w-14 h-14 bg-brand-accent/10 rounded-2xl flex items-center justify-center group-hover:bg-brand-accent/20 transition-colors">
@@ -102,58 +129,64 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               <span className="text-[9px] font-black text-brand-accent uppercase tracking-widest px-2 py-1 bg-brand-accent/10 rounded-full">Solo</span>
             </div>
             <div>
-              <h2 className="text-lg font-black text-brand-text tracking-tighter">Speed Round</h2>
+              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">⚡ Speed Round (Solo)</h2>
               <p className="text-xs font-bold text-brand-muted mt-0.5">60 seconds · answer as many as you can · leaderboard</p>
             </div>
             <div className="flex gap-2">
               {['Solo', 'Async', 'Leaderboard'].map(tag => (
-                <span key={tag} className="text-[9px] font-black text-brand-muted px-2 py-1 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
+                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
               ))}
             </div>
           </motion.button>
 
-          {/* Live Battle */}
+          {/* Live Battle (Host/Join Room) */}
           <motion.button
             whileTap={{ scale: 0.98 }}
-            onClick={() => setView('lobby')}
-            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-brand-accent transition-all group"
+            onClick={() => {
+              setCompDefaultTab('group_battle');
+              setView('competitions');
+            }}
+            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-emerald-400 transition-all group shadow-lg shadow-emerald-400/5"
           >
             <div className="flex items-center justify-between">
-              <div className="w-14 h-14 bg-brand-bg border border-brand-border rounded-2xl flex items-center justify-center group-hover:border-brand-accent group-hover:bg-brand-accent/5 transition-all">
-                <Swords size={28} className="text-brand-muted group-hover:text-brand-accent transition-colors" />
+              <div className="w-14 h-14 bg-emerald-400/10 rounded-2xl flex items-center justify-center group-hover:bg-emerald-400/20 transition-all">
+                <Users size={28} className="text-emerald-400 group-hover:text-emerald-500 transition-colors" />
               </div>
-              <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest px-2 py-1 bg-emerald-400/10 rounded-full border border-emerald-400/20">Live</span>
+              <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest px-2 py-1 bg-emerald-400/10 rounded-full border border-emerald-400/20">Class Multi</span>
             </div>
             <div>
-              <h2 className="text-lg font-black text-brand-text tracking-tighter">Live Battle</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">Host or join · 1v1, group, or team · real-time scores</p>
+              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">👥 Class Group Battle</h2>
+              <p className="text-xs font-bold text-brand-muted mt-0.5">Create room & invite up to 10 classmates. Answer same questions synchronously.</p>
             </div>
             <div className="flex gap-2">
-              {['1v1', 'Group', 'Team'].map(tag => (
-                <span key={tag} className="text-[9px] font-black text-brand-muted px-2 py-1 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
+              {['Lobby Room', 'Up to 10', 'CBC Questions'].map(tag => (
+                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
               ))}
             </div>
           </motion.button>
 
-          {/* Class Battles */}
+          {/* Alternative 1v1 Option */}
           <motion.button
             whileTap={{ scale: 0.98 }}
-            onClick={() => setView('competitions')}
-            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-brand-accent transition-all group shadow-lg shadow-amber-500/5"
+            onClick={() => {
+              setCompDefaultTab('speed_round');
+              setView('competitions');
+            }}
+            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-blue-400 transition-all group shadow-lg shadow-blue-500/5"
           >
             <div className="flex items-center justify-between">
-              <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center group-hover:bg-amber-500/20 transition-colors">
-                <Users size={28} className="text-amber-500" />
+              <div className="w-14 h-14 bg-blue-500/10 rounded-2xl flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                <Zap size={28} className="text-blue-500" />
               </div>
-              <span className="text-[9px] font-black text-brand-accent uppercase tracking-widest px-2 py-1 bg-brand-accent/10 rounded-full">School</span>
+              <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest px-2 py-1 bg-blue-400/10 rounded-full">Live PvP</span>
             </div>
             <div>
-              <h2 className="text-lg font-black text-brand-text tracking-tighter">Group Projects</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">Teacher-led collaborative work · real-time teaming</p>
+              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">⚡ Live 1v1 Speed Round</h2>
+              <p className="text-xs font-bold text-brand-muted mt-0.5">Simultaneous general knowledge challenge with classmate. 60s max limit.</p>
             </div>
             <div className="flex gap-2">
-              {['Project', 'Collab', 'Trophies'].map(tag => (
-                <span key={tag} className="text-[9px] font-black text-brand-muted px-2 py-1 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
+              {['Simultaneous', 'Syllabus Quiz', 'Leaderboard'].map(tag => (
+                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
               ))}
             </div>
           </motion.button>
@@ -234,9 +267,8 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
   if (view === 'competitions') {
     return (
       <motion.div key="competitions" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-        <StudentCompetitionLobby
-          username={username}
-          grade={player?.grade ? `Grade ${player.grade}` : 'Grade 7'}
+        <CompetitionHub
+          defaultTab={compDefaultTab}
           onBack={() => setView('hub')}
         />
       </motion.div>
