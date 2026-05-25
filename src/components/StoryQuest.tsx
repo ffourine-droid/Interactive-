@@ -2059,7 +2059,7 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                           <button
                             key={opt.label}
                             onClick={() => handleOptionSelect(opt.label as any)}
-                            className={`w-full p-4 sm:p-4.5 rounded-xl border text-left flex items-start gap-4 transition-all active:scale-[0.98] ${
+                            className={`w-full p-4 sm:p-4.5 rounded-xl border text-left flex items-start gap-4 transition-all active:scale-[0.98] !whitespace-normal h-auto ${
                               isChosen 
                                 ? 'border-[#FF6B00] bg-[#FF6B00]/10 text-white shadow-md' 
                                 : 'border-[#1A2E44] bg-[#0F223A] text-[#E2E8F0] hover:bg-[#122A48]'
@@ -2072,7 +2072,7 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                             }`}>
                               {opt.label}
                             </span>
-                            <span className="text-[14px] sm:text-[16px] leading-snug font-sans font-bold pt-[1px]">{opt.text}</span>
+                            <span className="flex-1 text-[14px] sm:text-[16px] leading-snug font-sans font-bold pt-[1px] whitespace-normal break-words overflow-visible">{opt.text}</span>
                           </button>
                         );
                       })}

@@ -20,13 +20,11 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// Hide the initial loading spinner
+// Hide the initial loading spinner instantly
 const loader = document.getElementById('app-loading');
 if (loader) {
-  loader.style.opacity = '0';
-  setTimeout(() => {
-    loader.remove();
-  }, 500);
+  loader.style.display = 'none';
+  loader.remove();
 }
 
 // Register Service Worker for Offline Support

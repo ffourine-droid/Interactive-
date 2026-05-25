@@ -6,30 +6,30 @@
 /**
  * AziLearn - Subscription-based study materials platform
  */
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Loader2, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ToastProvider, useToast } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Page } from './types';
 
-// Lazy load all pages
-const Home = lazy(() => import('./pages/Home'));
-const TeacherAssignmentCreator = lazy(() => import('./components/TeacherAssignmentCreator'));
-const StudentAssignmentView = lazy(() => import('./components/StudentAssignmentView'));
-const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard'));
-const TeacherSignup = lazy(() => import('./pages/TeacherSignup'));
-const TeacherLogin = lazy(() => import('./pages/TeacherLogin'));
-const TeacherClassView = lazy(() => import('./pages/TeacherClassView'));
-const ParentPage = lazy(() => import('./pages/ParentPage'));
-const LandingPage = lazy(() => import('./components/LandingPage'));
-const StudentExamsPage = lazy(() => import('./pages/StudentExamsPage'));
-const TakeExamPage = lazy(() => import('./pages/TakeExamPage'));
-const CreateExamPage = lazy(() => import('./pages/CreateExamPage'));
-const ExamResultsPage = lazy(() => import('./pages/ExamResultsPage'));
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
-const GroupWorkPage = lazy(() => import('./pages/GroupWorkPage'));
-const StoryQuest = lazy(() => import('./components/StoryQuest'));
+// Static load all pages to eliminate chunk load delay and make all navigation instantaneous
+import Home from './pages/Home';
+import TeacherAssignmentCreator from './components/TeacherAssignmentCreator';
+import StudentAssignmentView from './components/StudentAssignmentView';
+import TeacherDashboard from './pages/TeacherDashboard';
+import TeacherSignup from './pages/TeacherSignup';
+import TeacherLogin from './pages/TeacherLogin';
+import TeacherClassView from './pages/TeacherClassView';
+import ParentPage from './pages/ParentPage';
+import LandingPage from './components/LandingPage';
+import StudentExamsPage from './pages/StudentExamsPage';
+import TakeExamPage from './pages/TakeExamPage';
+import CreateExamPage from './pages/CreateExamPage';
+import ExamResultsPage from './pages/ExamResultsPage';
+import AdminDashboard from './pages/AdminDashboard';
+import GroupWorkPage from './pages/GroupWorkPage';
+import StoryQuest from './components/StoryQuest';
 
 import { examService } from './services/examService';
 
