@@ -721,61 +721,13 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
   const [currentReadingText, setCurrentReadingText] = useState<string>('');
 
   // User Reading Comfort and Sound Settings
-  const [readingMode, setReadingMode] = useState<'animate-speed' | 'static-audio' | 'silent'>(() => {
+  const [readingMode, setReadingMode] = useState<'static-audio' | 'silent'>(() => {
     const saved = localStorage.getItem('azilearn_reading_mode');
-    return (saved as any) || 'animate-speed';
-  });
-  const [speechRate, setSpeechRate] = useState<number>(() => {
-    const saved = localStorage.getItem('azilearn_speech_rate');
-    return saved ? parseFloat(saved) : 0.9;
+    if (saved === 'animate-speed') return 'static-audio';
+    return (saved as any) || 'static-audio';
   });
 
-  const startVisualHighlight = (text: string, startIndex: number = 0) => {
-    if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current);
-    if (safetyStartTimeoutRef.current) clearTimeout(safetyStartTimeoutRef.current);
-    if (visualDelayTimeoutRef.current) clearTimeout(visualDelayTimeoutRef.current);
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-
-    setIsReading(true);
-    setIsPaused(false);
-    setCurrentReadingText(text);
-
-    const sentences = getSentencesWithIndices(text);
-    let currentSentenceIndex = 0;
-    if (startIndex > 0) {
-      const foundIndex = sentences.findIndex(s => s.start >= startIndex);
-      if (foundIndex !== -1) {
-        currentSentenceIndex = foundIndex;
-      }
-    }
-
-    const runVisualPace = () => {
-      if (currentSentenceIndex >= sentences.length) {
-        setIsReading(false);
-        setIsPaused(false);
-        setCurrentCharIndex(null);
-        setCurrentReadingText('');
-        return;
-      }
-
-      const currentSentence = sentences[currentSentenceIndex];
-      setCurrentCharIndex(currentSentence.start);
-
-      const wordCount = currentSentence.text.trim().split(/\s+/).filter(Boolean).length;
-      const paceFactor = 0.9 / speechRate;
-      
-      const baseDelayPerWord = 380 * paceFactor;
-      const sentenceDelay = 350 * paceFactor;
-      const delay = Math.max(800, (wordCount * baseDelayPerWord) + sentenceDelay);
-
-      currentSentenceIndex++;
-      fallbackTimeoutRef.current = setTimeout(runVisualPace, delay);
-    };
-
-    fallbackTimeoutRef.current = setTimeout(runVisualPace, currentSentenceIndex === 0 ? 100 : 0);
-  };
-
-  const changeReadingMode = (mode: 'animate-speed' | 'static-audio' | 'silent') => {
+  const changeReadingMode = (mode: 'static-audio' | 'silent') => {
     setReadingMode(mode);
     localStorage.setItem('azilearn_reading_mode', mode);
     if (mode === 'silent') {
@@ -784,16 +736,6 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
       // Re-trigger speak to apply immediately if playing
       setTimeout(() => {
         speakText(currentReadingText);
-      }, 50);
-    }
-  };
-
-  const changeSpeechRate = (rate: number) => {
-    setSpeechRate(rate);
-    localStorage.setItem('azilearn_speech_rate', rate.toString());
-    if (isReading && readingMode === 'animate-speed') {
-      setTimeout(() => {
-        startVisualHighlight(currentReadingText, currentCharIndex || 0);
       }, 50);
     }
   };
@@ -811,12 +753,6 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
     // Stop any current action first
     stopSpeech();
-
-    // Word tracking visual animation mode (fully silent)
-    if (readingMode === 'animate-speed') {
-      startVisualHighlight(text, 0);
-      return;
-    }
 
     // Google TTS audio only mode (no word highlight)
     if (!window.speechSynthesis) return;
@@ -897,6 +833,23 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
       stopSpeech();
     };
   }, [activeScene]);
+
+  // Read response text aloud when entering results screen
+  useEffect(() => {
+    if (screen === 'result' && activeScene?.question) {
+      const isCorrect = resultState === 'correct';
+      const textToSpeak = isCorrect 
+        ? (activeScene.question.response_correct || 'Hakuna Matata! Correct Answer! Excellent job.')
+        : (activeScene.question.response_wrong || 'Not quite right, let’s study our choices and try again!');
+      
+      if (readingMode !== 'silent') {
+        const timer = setTimeout(() => {
+          speakText(textToSpeak);
+        }, 150);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [screen, resultState, activeScene, readingMode]);
 
   // ─── INITIALIZATION ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1473,17 +1426,11 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     if (isCorrect) {
       setResultState('correct');
       showToast('Hakuna Matata! Correct Answer! 🌟', 'success');
-      if (readingMode !== 'silent') {
-        speakText(activeScene.question.response_correct || 'Hakuna Matata! Correct Answer! Excellent job.');
-      }
     } else {
       setResultState('wrong');
       const updatedWrong = wrongAttempts + 1;
       setWrongAttempts(updatedWrong);
       showToast('Not quite right, let’s study our choices! 🧐', 'error');
-      if (readingMode !== 'silent') {
-        speakText(activeScene.question.response_wrong || 'Not quite right, let’s study our choices and try again!');
-      }
     }
 
     setScreen('result');
@@ -1985,21 +1932,8 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                     <span className="text-[8px] font-mono text-[#CBD5E0]/60">Customize sensory pace</span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {/* OPTION 1: Word highlight & speed control */}
-                    <button
-                      onClick={() => changeReadingMode('animate-speed')}
-                      className={`py-1.5 px-1 rounded-xl border text-[8.5px] font-black uppercase tracking-wider text-center flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.97] cursor-pointer ${
-                        readingMode === 'animate-speed'
-                          ? 'border-[#FF6B00]/80 bg-[#FF6B00]/10 text-white shadow-md shadow-[#FF6B00]/5'
-                          : 'border-[#1A2E44]/60 bg-[#0F223A]/30 text-[#A0AEC0] hover:text-white hover:bg-[#0F223A]/50'
-                      }`}
-                    >
-                      <Sparkles size={12} className={readingMode === 'animate-speed' ? 'text-[#FF6B00]' : ''} />
-                      <span>Highlight & Speed</span>
-                    </button>
-
-                    {/* OPTION 2: Pure Google TTS with NO word highlight */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {/* OPTION 1: Pure Google TTS with NO word highlight */}
                     <button
                       onClick={() => changeReadingMode('static-audio')}
                       className={`py-1.5 px-1 rounded-xl border text-[8.5px] font-black uppercase tracking-wider text-center flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.97] cursor-pointer ${
@@ -2012,7 +1946,7 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                       <span>Smooth Audio Only</span>
                     </button>
 
-                    {/* OPTION 3: Silent Reading */}
+                    {/* OPTION 2: Silent Reading */}
                     <button
                       onClick={() => changeReadingMode('silent')}
                       className={`py-1.5 px-1 rounded-xl border text-[8.5px] font-black uppercase tracking-wider text-center flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.97] cursor-pointer ${
@@ -2025,38 +1959,6 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                       <span>Normal Silent</span>
                     </button>
                   </div>
-
-                  {/* Speed options if highlighted reading mode is active */}
-                  {readingMode === 'animate-speed' && (
-                    <div className="bg-[#0F223A]/40 rounded-xl px-2.5 py-1.5 border border-[#1A2E44]/50 flex items-center justify-between flex-wrap gap-1.5">
-                      <div className="flex items-center gap-1 text-[8px] font-black text-[#CBD5E0]/80 uppercase tracking-widest">
-                        <Sliders size={10} className="text-[#FF6B00]" />
-                        Reading Rate:
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {[
-                          { val: 0.65, label: 'Slow 🐢' },
-                          { val: 0.9, label: 'Normal 🧑' },
-                          { val: 1.2, label: 'Fast 🚀' },
-                        ].map((pace) => {
-                          const isSel = Math.abs(speechRate - pace.val) < 0.1;
-                          return (
-                            <button
-                              key={pace.val}
-                              onClick={() => changeSpeechRate(pace.val)}
-                              className={`px-2 py-0.5 rounded text-[8px] font-sans font-black transition-all cursor-pointer ${
-                                isSel
-                                  ? 'bg-[#FF6B00] text-white'
-                                  : 'bg-[#1A2E44]/60 text-[#CBD5E0]/60 hover:bg-[#1A2E44]/80'
-                              }`}
-                            >
-                              {pace.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
 
                   {readingMode === 'static-audio' && (
                     <div className="bg-[#0F223A]/40 rounded-xl px-2.5 py-1 border border-[#1A2E44]/50 text-center">
@@ -2077,140 +1979,57 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
                 {/* Middle Section: Narrative Text in Styled Story Card (Looks like a Book Page) */}
                 <div className="flex-1 my-3 flex flex-col justify-center">
-                  <div className="bg-[#FFFDF5] text-[#1A2530] p-5 rounded-2xl border border-[#E2E8F0] shadow-xl relative overflow-hidden flex flex-col justify-between" style={{ minHeight: '180px' }}>
+                  <div className="bg-[#FFFDF5] text-[#1A2530] p-6 sm:p-8 rounded-3xl border border-[#CBD5E0]/80 shadow-2xl relative overflow-hidden flex flex-col justify-between" style={{ minHeight: '260px' }}>
                     {/* Corner Page Accents to simulate book */}
                     <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-bl from-[#E2E8F0] to-[#FFFDF5] rounded-bl-xl border-l border-b border-[#E2E8F0]/80 shadow-inner" />
                     
                     {/* Story Content */}
-                    <div className="font-serif text-[13.5px] leading-relaxed select-text pr-2 py-1 text-slate-800 tracking-wide">
-                      {(() => {
-                        const sentences = getSentencesWithIndices(activeScene.narrative);
-                        const isAnySentenceActive = isReading && currentReadingText === activeScene.narrative && readingMode === 'animate-speed';
-                        return (
-                          <span>
-                            {sentences.map((item, idx) => {
-                              const isSentenceActive = isReading && 
-                                                   currentReadingText === activeScene.narrative && 
-                                                   readingMode === 'animate-speed' &&
-                                                   currentCharIndex !== null && 
-                                                   currentCharIndex >= item.start && 
-                                                   currentCharIndex < item.end;
-                              return (
-                                <motion.span
-                                  key={idx}
-                                  className={`inline mr-1 px-1 rounded-md transition-all duration-300 ${
-                                    isSentenceActive 
-                                      ? 'bg-[#FF6B00]/20 text-[#FF6B00] font-bold border-l-2 border-[#FF6B00] shadow-sm' 
-                                      : isAnySentenceActive
-                                        ? 'opacity-40 text-slate-400 font-normal'
-                                        : 'text-[#1A2530] font-medium'
-                                  }`}
-                                  animate={isSentenceActive ? { 
-                                    scale: [1, 1.01, 1],
-                                  } : { 
-                                    scale: 1,
-                                  }}
-                                  transition={{ duration: 0.3 }}
-                                >
-                                  {item.text}
-                                </motion.span>
-                              );
-                            })}
-                          </span>
-                        );
-                      })()}
+                    <div className="font-serif text-[18px] sm:text-[22px] leading-relaxed select-text pr-2 py-2 text-slate-900 tracking-wide font-medium">
+                      {activeScene.narrative}
                     </div>
 
                     {readingMode !== 'silent' && (
-                      <div className="w-full flex items-center justify-between pt-3 border-t border-[#E2E8F0]/40 mt-3 flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                          {readingMode === 'animate-speed' ? (
-                            // Pure visual tracker guide buttons (completely silent)
-                            <>
-                              <button
-                                onClick={() => {
-                                  if (!isReading) {
-                                    startVisualHighlight(activeScene.narrative);
-                                  } else if (isPaused) {
-                                    setIsPaused(false);
-                                    startVisualHighlight(activeScene.narrative, currentCharIndex || 0);
-                                  } else {
-                                    setIsPaused(true);
-                                    if (fallbackTimeoutRef.current) {
-                                      clearTimeout(fallbackTimeoutRef.current);
-                                      fallbackTimeoutRef.current = null;
-                                    }
-                                  }
-                                }}
-                                className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer ${
-                                  isReading 
-                                    ? isPaused 
-                                      ? 'bg-amber-500 text-white' 
-                                      : 'bg-indigo-600 text-white animate-pulse' 
-                                    : 'bg-[#FF6B00] text-white hover:bg-orange-600 shadow-[#FF6B00]/10'
-                                }`}
-                              >
-                                <span>
-                                  {isReading 
-                                    ? isPaused 
-                                      ? '▶️ Resume Guide' 
-                                      : '⏸️ Pause Guide' 
-                                    : '🎬 Play Visual Guide'
-                                  }
-                                </span>
-                              </button>
+                      <div className="w-full flex items-center justify-between pt-4 border-t border-[#E2E8F0] mt-4 flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => {
+                              if (!isReading) {
+                                speakText(activeScene.narrative);
+                              } else if (isPaused) {
+                                if (window.speechSynthesis) window.speechSynthesis.resume();
+                                setIsPaused(false);
+                              } else {
+                                if (window.speechSynthesis) window.speechSynthesis.pause();
+                                setIsPaused(true);
+                              }
+                            }}
+                            className={`px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wide flex items-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer ${
+                              isReading 
+                                ? isPaused 
+                                  ? 'bg-amber-500 text-white animate-pulse' 
+                                  : 'bg-red-500 text-white' 
+                                : 'bg-[#FF6B00] text-white hover:bg-orange-600 shadow-[#FF6B00]/10'
+                            }`}
+                          >
+                            <span>
+                              {isReading 
+                                ? isPaused 
+                                  ? '▶️ Resume Audio' 
+                                  : '⏸️ Pause Audio' 
+                                : '🔊 Read Aloud'
+                              }
+                            </span>
+                          </button>
 
-                              <button
-                                onClick={stopSpeech}
-                                className="px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide bg-[#0A1628] text-white border border-[#1A2E44]/30 hover:bg-slate-900 transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
-                              >
-                                <span>⏹ Stop Guide</span>
-                              </button>
-                            </>
-                          ) : (
-                            // Pure Google TTS controllers with audio labels & sound icon
-                            <>
-                              <button
-                                onClick={() => {
-                                  if (!isReading) {
-                                    speakText(activeScene.narrative);
-                                  } else if (isPaused) {
-                                    if (window.speechSynthesis) window.speechSynthesis.resume();
-                                    setIsPaused(false);
-                                  } else {
-                                    if (window.speechSynthesis) window.speechSynthesis.pause();
-                                    setIsPaused(true);
-                                  }
-                                }}
-                                className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer ${
-                                  isReading 
-                                    ? isPaused 
-                                      ? 'bg-amber-500 text-white' 
-                                      : 'bg-red-500 text-white animate-pulse' 
-                                    : 'bg-[#FF6B00] text-white hover:bg-orange-600 shadow-[#FF6B00]/10'
-                                }`}
-                              >
-                                <span>
-                                  {isReading 
-                                    ? isPaused 
-                                      ? '▶️ Resume Audio' 
-                                      : '⏸️ Pause Audio' 
-                                    : '🔊 Read Aloud'
-                                  }
-                                </span>
-                              </button>
-
-                              <button
-                                onClick={stopSpeech}
-                                className="px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide bg-[#0A1628] text-white border border-[#1A2E44]/30 hover:bg-slate-900 transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
-                              >
-                                <span>⏹ Stop Audio</span>
-                              </button>
-                            </>
-                          )}
+                          <button
+                            onClick={stopSpeech}
+                            className="px-3.5 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wide bg-[#0A1628] text-white border border-[#1A2E44]/40 hover:bg-slate-900 transition-colors flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                          >
+                            <span>⏹ Stop Audio</span>
+                          </button>
                         </div>
-                        <span className="text-[8.5px] font-black uppercase tracking-wider text-[#A0AEC0] font-mono">
-                          {readingMode === 'animate-speed' ? 'Visual Tracker Guide' : 'Speech Synthesis'}
+                        <span className="text-[9px] font-black uppercase tracking-wider text-[#A0AEC0] font-mono">
+                          Speech Synthesis
                         </span>
                       </div>
                     )}
@@ -2219,15 +2038,15 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
                 {/* Bottom Section: Multiple Choice Questions (A B C D) */}
                 {activeScene.question && (
-                  <div className="space-y-3">
-                    <div className="bg-[#0F223A] border border-[#1A2E44] p-3.5 rounded-2xl space-y-2">
-                      <div className="flex items-start gap-1.5">
-                        <HelpCircle size={15} className="text-[#FF6B00] shrink-0 mt-0.5" />
-                        <h4 className="text-[11.5px] font-extrabold text-white leading-normal pr-1">{activeScene.question.question_text}</h4>
+                  <div className="space-y-4">
+                    <div className="bg-[#0F223A] border border-[#1A2E44] p-5 sm:p-6 rounded-2xl space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <HelpCircle size={20} className="text-[#FF6B00] shrink-0 mt-0.5" />
+                        <h4 className="text-[15px] sm:text-[17px] font-extrabold text-white leading-normal pr-1">{activeScene.question.question_text}</h4>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2">
+                    <div className="grid grid-cols-1 gap-3">
                       {[
                         { label: 'A', text: activeScene.question.option_a },
                         { label: 'B', text: activeScene.question.option_b },
@@ -2240,20 +2059,20 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                           <button
                             key={opt.label}
                             onClick={() => handleOptionSelect(opt.label as any)}
-                            className={`w-full p-3 rounded-xl border text-left flex items-start gap-3 transition-all active:scale-[0.98] ${
+                            className={`w-full p-4 sm:p-4.5 rounded-xl border text-left flex items-start gap-4 transition-all active:scale-[0.98] ${
                               isChosen 
                                 ? 'border-[#FF6B00] bg-[#FF6B00]/10 text-white shadow-md' 
                                 : 'border-[#1A2E44] bg-[#0F223A] text-[#E2E8F0] hover:bg-[#122A48]'
                             }`}
                           >
-                            <span className={`w-5 h-5 rounded-lg font-black text-[10px] flex items-center justify-center shrink-0 border ${
+                            <span className={`w-7 h-7 rounded-lg font-black text-[12px] sm:text-[13px] flex items-center justify-center shrink-0 border ${
                               isChosen 
                                 ? 'bg-[#FF6B00] border-[#FF6B00] text-white' 
                                 : 'bg-[#1A2E44] border-[#2D3748] text-[#A0AEC0]'
                             }`}>
                               {opt.label}
                             </span>
-                            <span className="text-[11px] leading-tight font-sans font-bold pt-[2px]">{opt.text}</span>
+                            <span className="text-[14px] sm:text-[16px] leading-snug font-sans font-bold pt-[1px]">{opt.text}</span>
                           </button>
                         );
                       })}
@@ -2263,14 +2082,14 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                     <button
                       disabled={!selectedOption}
                       onClick={handleSubmitAnswer}
-                      className={`w-full py-3.5 rounded-full font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 ${
+                      className={`w-full py-4 sm:py-4.5 rounded-full font-black text-xs sm:text-sm uppercase tracking-widest shadow-lg flex items-center justify-center gap-2.5 transition-transform active:scale-95 ${
                         selectedOption 
                           ? 'bg-[#FF6B00] text-white shadow-[#FF6B00]/10' 
                           : 'bg-[#1A2E44] text-[#A0AEC0] cursor-not-allowed'
                       }`}
                     >
                       <span>Submit Answer</span>
-                      <ArrowRight size={14} />
+                      <ArrowRight size={16} />
                     </button>
                   </div>
                 )}
@@ -2305,45 +2124,9 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
                       <div className="space-y-1">
                         <span className="text-[9px] uppercase font-black text-[#A0AEC0] tracking-widest block">Studied & Solved</span>
-                        <h2 className="text-xl font-sans font-black text-white uppercase tracking-tight">Kazi safi! Excellent Job!</h2>
-                        <div className="text-[#CBD5E0] text-[13px] px-6 leading-relaxed mt-2 italic bg-[#0F223A] border border-[#1A2E44] py-3.5 rounded-2xl select-text tracking-wide">
-                          {(() => {
-                            const responseText = activeScene.question.response_correct || 'Hakuna Matata! Correct Answer! Excellent job.';
-                            const sentences = getSentencesWithIndices(responseText);
-                            const isAnySentenceActive = isReading && currentReadingText === responseText && readingMode === 'animate-speed';
-                            return (
-                              <span>
-                                {sentences.map((item, idx) => {
-                                  const isSentenceActive = isReading && 
-                                                       currentReadingText === responseText && 
-                                                       readingMode === 'animate-speed' &&
-                                                       currentCharIndex !== null && 
-                                                       currentCharIndex >= item.start && 
-                                                       currentCharIndex < item.end;
-                                  return (
-                                    <motion.span
-                                      key={idx}
-                                      className={`inline mr-1 px-1 rounded-md transition-all duration-300 ${
-                                        isSentenceActive 
-                                          ? 'bg-[#FF6B00]/30 text-[#FFA04D] font-bold border-l-2 border-[#FF6B00] shadow-sm' 
-                                          : isAnySentenceActive
-                                            ? 'opacity-40 text-slate-500 font-normal'
-                                            : 'text-[#CBD5E0] font-medium'
-                                      }`}
-                                      animate={isSentenceActive ? { 
-                                        scale: [1, 1.01, 1],
-                                      } : { 
-                                        scale: 1,
-                                      }}
-                                      transition={{ duration: 0.3 }}
-                                    >
-                                      {item.text}
-                                    </motion.span>
-                                  );
-                                })}
-                              </span>
-                            );
-                          })()}
+                        <h2 className="text-xl sm:text-2xl font-sans font-black text-white uppercase tracking-tight">Kazi safi! Excellent Job!</h2>
+                        <div className="text-[#CBD5E0] text-[15px] sm:text-[17px] px-6 sm:px-8 leading-relaxed mt-2 italic bg-[#0F223A] border border-[#1A2E44] py-4.5 rounded-2xl select-text tracking-wide font-medium">
+                          {activeScene.question.response_correct || 'Hakuna Matata! Correct Answer! Excellent job.'}
                         </div>
                       </div>
 
@@ -2362,45 +2145,9 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
                       <div className="space-y-1">
                         <span className="text-[9px] uppercase font-black text-[#A0AEC0] tracking-widest block">Wrong Answer</span>
-                        <h2 className="text-xl font-sans font-black text-white uppercase tracking-tight">Let's Try Again!</h2>
-                        <div className="text-[#CBD5E0] text-[13px] px-6 leading-relaxed mt-2 italic bg-[#1A2E44]/30 border border-[#2D3748] py-3.5 rounded-2xl select-text tracking-wide">
-                          {(() => {
-                            const responseText = activeScene.question.response_wrong || 'Not quite right, let’s study our choices and try again!';
-                            const sentences = getSentencesWithIndices(responseText);
-                            const isAnySentenceActive = isReading && currentReadingText === responseText && readingMode === 'animate-speed';
-                            return (
-                              <span>
-                                {sentences.map((item, idx) => {
-                                  const isSentenceActive = isReading && 
-                                                       currentReadingText === responseText && 
-                                                       readingMode === 'animate-speed' &&
-                                                       currentCharIndex !== null && 
-                                                       currentCharIndex >= item.start && 
-                                                       currentCharIndex < item.end;
-                                  return (
-                                    <motion.span
-                                      key={idx}
-                                      className={`inline mr-1 px-1 rounded-md transition-all duration-300 ${
-                                        isSentenceActive 
-                                          ? 'bg-red-500/30 text-red-400 font-bold border-l-2 border-red-500 shadow-sm' 
-                                          : isAnySentenceActive
-                                            ? 'opacity-40 text-slate-500 font-normal'
-                                            : 'text-[#CBD5E0] font-medium'
-                                      }`}
-                                      animate={isSentenceActive ? { 
-                                        scale: [1, 1.01, 1],
-                                      } : { 
-                                        scale: 1,
-                                      }}
-                                      transition={{ duration: 0.3 }}
-                                    >
-                                      {item.text}
-                                    </motion.span>
-                                  );
-                                })}
-                              </span>
-                            );
-                          })()}
+                        <h2 className="text-xl sm:text-2xl font-sans font-black text-white uppercase tracking-tight">Let's Try Again!</h2>
+                        <div className="text-[#CBD5E0] text-[15px] sm:text-[17px] px-6 sm:px-8 leading-relaxed mt-2 italic bg-[#1A2E44]/30 border border-[#2D3748] py-4.5 rounded-2xl select-text tracking-wide font-medium">
+                          {activeScene.question.response_wrong || 'Not quite right, let’s study our choices and try again!'}
                         </div>
                       </div>
 
