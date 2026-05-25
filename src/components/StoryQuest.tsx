@@ -4,7 +4,8 @@ import {
   BookOpen, Lock, Unlock, Award, CheckCircle2, XCircle, 
   ChevronLeft, ArrowRight, ShieldAlert, Sparkles, Star, 
   HelpCircle, Compass, Smile, Flame, ShieldCheck, Trophy, 
-  Check, PlayCircle, Loader2, RefreshCw
+  Check, PlayCircle, Loader2, RefreshCw, Volume2, VolumeX,
+  Sliders, Settings
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -260,6 +261,44 @@ const PREBUILT_CHAPTERS: Record<string, StoryChapter[]> = {
   ]
 };
 
+const getMatchingPrebuiltSubjectId = (sub: StorySubject | null | undefined): string => {
+  if (!sub) return 'subj-business';
+  const name = (sub.name || sub.subject_name || '').toLowerCase();
+  
+  if (name.includes('bus') || name.includes('commerce') || name.includes('mboga')) return 'subj-business';
+  if (name.includes('agri') || name.includes('farm') || name.includes('shamba') || name.includes('water')) return 'subj-agriculture';
+  if (name.includes('math') || name.includes('calc') || name.includes('sewing') || name.includes('ratio')) return 'subj-maths';
+  if (name.includes('scie') || name.includes('tech') || name.includes('river') || name.includes('litmus')) return 'subj-science';
+  if (name.includes('art') || name.includes('music') || name.includes('shaker')) return 'subj-arts';
+  if (name.includes('soc') || name.includes('hist') || name.includes('island') || name.includes('fort') || name.includes('wind')) return 'subj-social';
+  
+  const char = getCharacter(sub);
+  const charName = (char.character_name || '').toLowerCase();
+  if (charName.includes('amani')) return 'subj-business';
+  if (charName.includes('karanja')) return 'subj-agriculture';
+  if (charName.includes('wanjiku')) return 'subj-maths';
+  if (charName.includes('mutua')) return 'subj-science';
+  if (charName.includes('nekesa')) return 'subj-arts';
+  if (charName.includes('juma')) return 'subj-social';
+
+  if (sub.id === 'subj-business' || sub.id === 'subj-agriculture' || sub.id === 'subj-maths' || sub.id === 'subj-science' || sub.id === 'subj-arts' || sub.id === 'subj-social') {
+    return sub.id;
+  }
+
+  if (sub.id && PREBUILT_CHAPTERS && PREBUILT_CHAPTERS[sub.id]) {
+    return sub.id;
+  }
+
+  return 'subj-business';
+};
+
+const getMatchingPrebuiltChapterId = (sub: StorySubject | null | undefined, chapNumber: number): string => {
+  const subId = getMatchingPrebuiltSubjectId(sub);
+  const chaps = PREBUILT_CHAPTERS[subId] || [];
+  const found = chaps.find(c => c.chapter_number === chapNumber) || chaps[0];
+  return found ? found.id : 'chap-biz-1';
+};
+
 const PREBUILT_SCENES: Record<string, StoryScene[]> = {
   'chap-biz-1': [
     {
@@ -274,7 +313,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'To carefully track income, register expenses, and prevent cash leakage',
         option_d: 'To calculate how many hours the stall workers spend on site',
         correct_option: 'C',
-        explanation: 'Financial bookkeeping tracks every single penny flowing in (income) and out (expenses). This clarifies exactly where cash goes, avoiding sudden unexplained shortages and helping a business evaluate actual margins.'
+        explanation: 'Financial bookkeeping tracks every single penny flowing in (income) and out (expenses). This clarifies exactly where cash goes, avoiding sudden unexplained shortages and helping a business evaluate actual margins.',
+        response_correct: 'Vizuri sana! Keeping accurate records ensures Cucu can track every single Shilling. This avoids unexplained cash shortages and builds a strong, profitable business!',
+        response_wrong: 'Let’s check our notebooks again. Council inspections are important, but tracking cash is the secret to keeping our kiosk profitable!'
       }
     },
     {
@@ -289,7 +330,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'Expenses: 2,300 KES; Profit: 3,100 KES',
         option_d: 'Expenses: 3,100 KES; Profit: 0 KES',
         correct_option: 'B',
-        explanation: 'Total cost comprises the product cost (2,000 KES) + transportation utility (300 KES) = 2,300 KES. Net Profit = Revenue (3,100 KES) - Expenses (2,300 KES) = 800 KES.'
+        explanation: 'Total cost comprises the product cost (2,000 KES) + transportation utility (300 KES) = 2,300 KES. Net Profit = Revenue (3,100 KES) - Expenses (2,300 KES) = 800 KES.',
+        response_correct: 'Perfect math! The direct expenses add up to 2,300 KES, leaving us with an actual profit of 800 KES. Cucu is so proud of your quick thinking!',
+        response_wrong: 'Not quite! Remember to add the transporter’s 300 KES to the tomato crate price of 2,000 KES first to find the total expense.'
       }
     },
     {
@@ -304,7 +347,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'They receive the potatoes now and must pay Baba Mwangi’s company later',
         option_d: 'They are renting the potatoes and must return them if unsold',
         correct_option: 'C',
-        explanation: 'Buying on credit represents an accounts payable liability. The merchant is allowed to take possession of the goods immediately and agrees to pay the supplier at a specified later date.'
+        explanation: 'Buying on credit represents an accounts payable liability. The merchant is allowed to take possession of the goods immediately and agrees to pay the supplier at a specified later date.',
+        response_correct: 'Superb understanding! Buying stock on credit means taking delivery immediately but promising to clear the amount later. It is a real business liability that must be managed carefully!',
+        response_wrong: 'Careful, explorer! Credit is never free stock. We must eventually pay back what we owe, which creates a business liability.'
       }
     }
   ],
@@ -321,7 +366,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'Implementing targeted drip/container irrigation directly at root level',
         option_d: 'Watering the garden only at direct midday when the plants are hottest',
         correct_option: 'C',
-        explanation: 'Drip container irrigation feeds minimal quantities of water drop-by-drop right at the root zone where the plant needs it, mitigating soil runoff and evaporation losses.'
+        explanation: 'Drip container irrigation feeds minimal quantities of water drop-by-drop right at the root zone where the plant needs it, mitigating soil runoff and evaporation losses.',
+        response_correct: 'Excellent job! Drip irrigation delivers water drop-by-drop right where the roots can absorb it, wasting zero moisture and beating the Karatina drought!',
+        response_wrong: 'That’s not it! Watering at direct midday or splashing the yard causes immediate evaporation. Try another approach to save water and feed the roots!'
       }
     },
     {
@@ -336,7 +383,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'Dry grass, fallen leaves, or crop residues',
         option_d: 'Old newspapers and crushed plastic bottles',
         correct_option: 'C',
-        explanation: 'Organic mulches (like dry grass, leaves, straw, and coconut husks) protect soil from solar heat, block moisture evaporation, limit weed growth, and eventually decay, providing nutrients.'
+        explanation: 'Organic mulches (like dry grass, leaves, straw, and coconut husks) protect soil from solar heat, block moisture evaporation, limit weed growth, and eventually decay, providing nutrients.',
+        response_correct: 'Wonderful! Mulching with dry grass, leaves, or crop remnants locks soil moisture in like an eye-safe blanket, allowing Karanja’s soil to stay cool and moist!',
+        response_wrong: 'Wait! Non-porous or non-natural materials won’t fertilize or insulate the soil correctly. Think of organic materials we can gather around our shamba.'
       }
     },
     {
@@ -351,7 +400,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'It forces the vegetables to grow larger because they are closer to the sky',
         option_d: 'It changes the flavor of sukuma wiki, making them sweet',
         correct_option: 'A',
-        explanation: 'Multistorey sack/container gardens make clever use of vertical space, enabling households with tiny yards or concrete balconies to achieve food security in urban areas.'
+        explanation: 'Multistorey sack/container gardens make clever use of vertical space, enabling households with tiny yards or concrete balconies to achieve food security in urban areas.',
+        response_correct: 'Safi sana! Multistorey gardening enables urban households to stack crops upwards, reusing compost, saving space, and ensuring community food security!',
+        response_wrong: 'Not quite. Vertical sack bags save space and recycle soil nutrients, but they don’t change crop flavors or block all pests. Choose the spacing answer!'
       }
     }
   ],
@@ -368,7 +419,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: '12 meters',
         option_d: '18 meters',
         correct_option: 'A',
-        explanation: 'Total parts = 5 + 3 = 8 parts. Total fabric = 24m. One part = 24 / 8 = 3m. Large role gets 5 parts: 5 * 3 = 15m. Medium role gets 3 parts: 3 * 3 = 9m.'
+        explanation: 'Total parts = 5 + 3 = 8 parts. Total fabric = 24m. One part = 24 / 8 = 3m. Large role gets 5 parts: 5 * 3 = 15m. Medium role gets 3 parts: 3 * 3 = 9m.',
+        response_correct: 'Brilliant! Since 5 parts out of 8 parts total equals 15 meters, the large shuka roll is perfectly measured. Well calculated, Wanjiku!',
+        response_wrong: 'Let’s review our ratio division. Add the ratio parts 5 plus 3 first to get 8, then divide 24 by that sum to find the value of one share!'
       }
     },
     {
@@ -383,7 +436,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: '800 KES',
         option_d: '725 KES',
         correct_option: 'B',
-        explanation: 'Markup amount = 25% of 600 KES = 0.25 * 600 = 150 KES. Final Price = Cost Price + Markup = 600 + 150 = 750 KES.'
+        explanation: 'Markup amount = 25% of 600 KES = 0.25 * 600 = 150 KES. Final Price = Cost Price + Markup = 600 + 150 = 750 KES.',
+        response_correct: 'Absolutely correct! Adding a 25 percent markup of 150 KES brings our selling price to 750 KES, helping mom earn a sustainable profit and build her Gikomba shop!',
+        response_wrong: 'Look closely at the markup! A 25 percent markup means we must add one quarter of the 600 KES cost on top of the base price. Check the math!'
       }
     },
     {
@@ -398,7 +453,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'New price: 6,000 KES; no, they break even with 0 KES profit',
         option_d: 'New price: 6,500 KES; yes, they earn 500 KES profit',
         correct_option: 'A',
-        explanation: 'Discount = 10% of 7,500 = 750 KES. New selling value = 7,500 - 750 = 6,750 KES. Total cost price = 10 * 600 = 6,000 KES. Residual profit = 6,750 - 6,000 = 750 KES.'
+        explanation: 'Discount = 10% of 7,500 = 750 KES. New selling value = 7,500 - 750 = 6,750 KES. Total cost price = 10 * 600 = 6,000 KES. Residual profit = 6,750 - 6,000 = 750 KES.',
+        response_correct: 'Excellent trade skills! The discounted price is 6,750 KES, securing an order of 10 pieces while still retaining a wonderful profit of 750 KES!',
+        response_wrong: 'Check your subtraction. A 10 percent discount on 7,500 is 750 KES. Subtract that from the total to find the correct transaction value!'
       }
     }
   ],
@@ -415,7 +472,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'The blue litmus paper will turn bright red or warm pink',
         option_d: 'The blue litmus paper will turn deep purple',
         correct_option: 'C',
-        explanation: 'Acidic substances react with blue litmus dye indicator, turning it red. A pH of less than 7 indicates acidity, which is toxic to river fish.'
+        explanation: 'Acidic substances react with blue litmus dye indicator, turning it red. A pH of less than 7 indicates acidity, which is toxic to river fish.',
+        response_correct: 'Fantastic science! Acidic river water turns blue litmus paper into a bright pinkish red, alerting Mutua to the toxic pH shift in the stream!',
+        response_wrong: 'Remember your chemical indicators! Acids cause a chemical shift that turns blue litmus paper a bright alarm red. Blue or neutral remains unchanged!'
       }
     },
     {
@@ -430,7 +489,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'It makes the water too hot during the afternoon',
         option_d: 'It makes the river plants invisible to insects',
         correct_option: 'B',
-        explanation: 'Riverbed flora need solar rays to run photosynthesis. In photosynthesis, carbon dioxide and water are transformed into sugars and oxygen. Without light, oxygen drops, causing fish suffocation.'
+        explanation: 'Riverbed flora need solar rays to run photosynthesis. In photosynthesis, carbon dioxide and water are transformed into sugars and oxygen. Without light, oxygen drops, causing fish suffocation.',
+        response_correct: 'Magnificent explanation! Shaded riverbed plants cannot perform photosynthesis, leading to direct oxygen depletion which suffocates the river fish.',
+        response_wrong: 'That’s not it. Think of how plants breathe and manufacture food. Cloudy water blocks sunlight, stopping photosynthesis and making vital dissolved oxygen disappear!'
       }
     },
     {
@@ -445,7 +506,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'Thermal condensation',
         option_d: 'Salinization',
         correct_option: 'B',
-        explanation: 'Phytoremediation is the bio-technological use of plants (such as wetland reeds) to clean up, hyperaccumulate, or neutralize toxins from aquatic systems and soil.'
+        explanation: 'Phytoremediation is the bio-technological use of plants (such as wetland reeds) to clean up, hyperaccumulate, or neutralize toxins from aquatic systems and soil.',
+        response_correct: 'Safi sana! Phytoremediation uses natural reeds and gravel filters to extract, hyperaccumulate, and neutralize toxic heavy metals directly from water runoff!',
+        response_wrong: 'Not sedimentation or salinity! Think of the biological root word "phyto" which translates directly to plant-based environmental cleanup.'
       }
     }
   ],
@@ -462,7 +525,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'Vibrant Sunflower Yellow',
         option_d: 'Forest Emerald Green',
         correct_option: 'A',
-        explanation: 'Blue and orange are complementary colors. On the color wheel, complementary colors face each other directly, offering maximum warmth-vs-cool visual contrast.'
+        explanation: 'Blue and orange are complementary colors. On the color wheel, complementary colors face each other directly, offering maximum warmth-vs-cool visual contrast.',
+        response_correct: 'Stunning artistic sense! Deep cobalt blue lies directly opposite orange, providing a gorgeous complementary contrast that makes the Kayamba beads stand out beautifully!',
+        response_wrong: 'Check the color relationships! Orange is a warm secondary tone. To find its counterpart, look directly across the color wheel for the coldest primary hue.'
       }
     },
     {
@@ -477,7 +542,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'Aerophone (wind-blown tube)',
         option_d: 'Membranophone (stretched skin drum)',
         correct_option: 'B',
-        explanation: 'The Kayamba is an idiophone shaker. Vibrations are created by shaking hard seeds or beads against its reed body mesh without requiring a stretched membrane or string.'
+        explanation: 'The Kayamba is an idiophone shaker. Vibrations are created by shaking hard seeds or beads against its reed body mesh without requiring a stretched membrane or string.',
+        response_correct: 'Spot on! The Kayamba is an idiophone. Its sound is produced by the vibration of its entire reed body filled with red seeds when shaken!',
+        response_wrong: 'Think about how a Kayamba is built! It doesn’t use stretched drum skins or hollow air pipes. Re-examine how its dry reeds vibrate when shaken.'
       }
     },
     {
@@ -492,7 +559,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'A copyright registration',
         option_d: 'A title deed of land ownership',
         correct_option: 'C',
-        explanation: 'Copyright shields original audio masterworks, giving the creators absolute command over reproduction, performance, and commercial broadcasts.'
+        explanation: 'Copyright shields original audio masterworks, giving the creators absolute command over reproduction, performance, and commercial broadcasts.',
+        response_correct: 'Excellent creative rights awareness! Registering a copyright protects Nekesa’s audio files from unauthorized copycats, securing her musical royalties.',
+        response_wrong: 'Think about artistic works! Land deeds protect shambas, and patents safeguard industrial inventions. We need a protection tailored to original lyrics and audio tracks!'
       }
     }
   ],
@@ -509,7 +578,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'High-altitude Jet streams',
         option_d: 'The Westerlies',
         correct_option: 'B',
-        explanation: 'Monsoon winds change directions seasonally. The Kaskazi blows from the northeast toward Kenya, while the Kusi blows from the southwest, enabling sailboats to travel back and forth.'
+        explanation: 'Monsoon winds change directions seasonally. The Kaskazi blows from the northeast toward Kenya, while the Kusi blows from the southwest, enabling sailboats to travel back and forth.',
+        response_correct: 'Brilliant! The seasonal Monsoon winds, known locally as Kaskazi and Kusi, carried ancient trade dhows across the Indian Ocean to Mombasa harbor!',
+        response_wrong: 'Not mountain breezes or altitude streams! Historically, sea traders relied on the seasonal winds of the Indian Ocean to sail back and forth.'
       }
     },
     {
@@ -524,7 +595,9 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'Regional tribal division',
         option_d: 'Economic protectionism and closing trade routes',
         correct_option: 'B',
-        explanation: 'National integration (Umoja) and community cohesion promote mutual respect, celebrate cultural heritage diversity, and build economic partnerships across Kenya.'
+        explanation: 'National integration (Umoja) and community cohesion promote mutual respect, celebrate cultural heritage diversity, and build economic partnerships across Kenya.',
+        response_correct: 'Kazi nzuri! Living in harmony under Umoja, celebrating national integration, and respecting communities makes our country resilient and prosperous!',
+        response_wrong: 'No, division and exclusion weaken society. Lean towards the beautiful Swahili value of Umoja, representing national integration and active cooperation.'
       }
     },
     {
@@ -539,11 +612,70 @@ const PREBUILT_SCENES: Record<string, StoryScene[]> = {
         option_c: 'It absorbs canon impacts without shattering and hardens securely over time when exposed to air',
         option_d: 'It acts as a natural magnet that repels iron canon balls',
         correct_option: 'C',
-        explanation: 'Coral limestone contains marine minerals. When exposed to air, it hardens over centuries. Its porous, layered matrix absorbs shock better than granite blocks, which easily splinter under impact.'
+        explanation: 'Coral limestone contains marine minerals. When exposed to air, it hardens over centuries. Its porous, layered matrix absorbs shock better than granite blocks, which easily splinter under impact.',
+        response_correct: 'Remarkable! Coral limestone hardens when exposed to air over time, and its porous matrix naturally absorbs high-speed impacts without fracturing!',
+        response_wrong: 'Careful! Stone does not float on waves or act as a magnet. Think about how porous ocean coral handles powerful kinetic impacts.'
       }
     }
   ]
 };
+
+// Helper to split text into words while keeping exactly all spaces and punctuation
+function getWordsWithIndices(text: string | null | undefined) {
+  if (!text) return [];
+  const words: { token: string; start: number; end: number; isWord: boolean }[] = [];
+  try {
+    const regex = /(\s+)|([\w\d'’-]+)|([^\s\w\d'’-]+)/gi;
+    let match;
+    let safety = 0;
+    while ((match = regex.exec(text)) !== null) {
+      safety++;
+      if (safety > 5000) {
+        console.warn("Infinite loop safety cap reached in getWordsWithIndices");
+        break;
+      }
+      const token = match[0];
+      const start = match.index;
+      const end = start + token.length;
+      const isWord = /[\w\d'’-]+/i.test(token);
+      words.push({ token, start, end, isWord });
+    }
+  } catch (err) {
+    console.error("Error splitting words in getWordsWithIndices:", err);
+  }
+  return words;
+}
+
+interface StorySentence {
+  text: string;
+  start: number;
+  end: number;
+}
+
+function getSentencesWithIndices(text: string | null | undefined): StorySentence[] {
+  if (!text) return [];
+  const sentences: StorySentence[] = [];
+  try {
+    // Splits at sentence ending punctuation (. ? !) or newlines, keeping trailing spaces and punctuation
+    const regex = /[^.!?\n]+([.!?\n]+)?(\s*)?/gi;
+    let match;
+    let safety = 0;
+    while ((match = regex.exec(text)) !== null) {
+      safety++;
+      if (safety > 1000) break;
+      const sentenceText = match[0];
+      if (!sentenceText.trim()) continue;
+      sentences.push({
+        text: sentenceText,
+        start: match.index,
+        end: match.index + sentenceText.length
+      });
+    }
+  } catch (err) {
+    console.error("Error splitting sentences in getSentencesWithIndices:", err);
+  }
+  return sentences;
+}
 
 interface StoryQuestProps {
   onBack: () => void;
@@ -584,21 +716,118 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
   const { showToast } = useToast();
 
   const [isReading, setIsReading] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [currentCharIndex, setCurrentCharIndex] = useState<number | null>(null);
+  const [currentReadingText, setCurrentReadingText] = useState<string>('');
+
+  // User Reading Comfort and Sound Settings
+  const [readingMode, setReadingMode] = useState<'animate-speed' | 'static-audio' | 'silent'>(() => {
+    const saved = localStorage.getItem('azilearn_reading_mode');
+    return (saved as any) || 'animate-speed';
+  });
+  const [speechRate, setSpeechRate] = useState<number>(() => {
+    const saved = localStorage.getItem('azilearn_speech_rate');
+    return saved ? parseFloat(saved) : 0.9;
+  });
+
+  const startVisualHighlight = (text: string, startIndex: number = 0) => {
+    if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current);
+    if (safetyStartTimeoutRef.current) clearTimeout(safetyStartTimeoutRef.current);
+    if (visualDelayTimeoutRef.current) clearTimeout(visualDelayTimeoutRef.current);
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+    setIsReading(true);
+    setIsPaused(false);
+    setCurrentReadingText(text);
+
+    const sentences = getSentencesWithIndices(text);
+    let currentSentenceIndex = 0;
+    if (startIndex > 0) {
+      const foundIndex = sentences.findIndex(s => s.start >= startIndex);
+      if (foundIndex !== -1) {
+        currentSentenceIndex = foundIndex;
+      }
+    }
+
+    const runVisualPace = () => {
+      if (currentSentenceIndex >= sentences.length) {
+        setIsReading(false);
+        setIsPaused(false);
+        setCurrentCharIndex(null);
+        setCurrentReadingText('');
+        return;
+      }
+
+      const currentSentence = sentences[currentSentenceIndex];
+      setCurrentCharIndex(currentSentence.start);
+
+      const wordCount = currentSentence.text.trim().split(/\s+/).filter(Boolean).length;
+      const paceFactor = 0.9 / speechRate;
+      
+      const baseDelayPerWord = 380 * paceFactor;
+      const sentenceDelay = 350 * paceFactor;
+      const delay = Math.max(800, (wordCount * baseDelayPerWord) + sentenceDelay);
+
+      currentSentenceIndex++;
+      fallbackTimeoutRef.current = setTimeout(runVisualPace, delay);
+    };
+
+    fallbackTimeoutRef.current = setTimeout(runVisualPace, currentSentenceIndex === 0 ? 100 : 0);
+  };
+
+  const changeReadingMode = (mode: 'animate-speed' | 'static-audio' | 'silent') => {
+    setReadingMode(mode);
+    localStorage.setItem('azilearn_reading_mode', mode);
+    if (mode === 'silent') {
+      stopSpeech();
+    } else if (isReading) {
+      // Re-trigger speak to apply immediately if playing
+      setTimeout(() => {
+        speakText(currentReadingText);
+      }, 50);
+    }
+  };
+
+  const changeSpeechRate = (rate: number) => {
+    setSpeechRate(rate);
+    localStorage.setItem('azilearn_speech_rate', rate.toString());
+    if (isReading && readingMode === 'animate-speed') {
+      setTimeout(() => {
+        startVisualHighlight(currentReadingText, currentCharIndex || 0);
+      }, 50);
+    }
+  };
 
   // Google TTS functions
+  const boundaryEventCountRef = React.useRef<number>(0);
+  const fallbackTimeoutRef = React.useRef<any>(null);
+  const safetyStartTimeoutRef = React.useRef<any>(null);
+  const visualDelayTimeoutRef = React.useRef<any>(null);
+
   const speakText = (text: string) => {
+    if (readingMode === 'silent') {
+      return;
+    }
+
+    // Stop any current action first
+    stopSpeech();
+
+    // Word tracking visual animation mode (fully silent)
+    if (readingMode === 'animate-speed') {
+      startVisualHighlight(text, 0);
+      return;
+    }
+
+    // Google TTS audio only mode (no word highlight)
     if (!window.speechSynthesis) return;
     
-    // Stop any current speech first
-    window.speechSynthesis.cancel();
-
     // Clean up html tags or any odd double character strings
     const cleanText = text.replace(/<\/?[^>]+(>|$)/g, "");
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     
-    // Settings
-    utterance.rate = 0.9;      // slightly slower — easier for students
+    // Setted to comfortable, slow voice for pupils
+    utterance.rate = 0.9;      
     utterance.pitch = 1.0;     
     utterance.volume = 1.0;    
 
@@ -610,35 +839,62 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
       utterance.lang = 'en-GB';  // British English sounds cleaner than US
     }
 
+    boundaryEventCountRef.current = 0;
+    setCurrentReadingText(text);
+
     utterance.onstart = () => {
       setIsReading(true);
+      setIsPaused(false);
+      // We explicitly DO NOT set currentCharIndex so that the text remains fully static
+      setCurrentCharIndex(null);
     };
 
     utterance.onend = () => {
-      setIsReading(false);
+      stopSpeech();
     };
 
     utterance.onerror = () => {
-      setIsReading(false);
+      stopSpeech();
+    };
+
+    utterance.onpause = () => {
+      setIsPaused(true);
+    };
+
+    utterance.onresume = () => {
+      setIsPaused(false);
     };
 
     window.speechSynthesis.speak(utterance);
   };
 
   const stopSpeech = () => {
+    if (fallbackTimeoutRef.current) {
+      clearTimeout(fallbackTimeoutRef.current);
+      fallbackTimeoutRef.current = null;
+    }
+    if (safetyStartTimeoutRef.current) {
+      clearTimeout(safetyStartTimeoutRef.current);
+      safetyStartTimeoutRef.current = null;
+    }
+    if (visualDelayTimeoutRef.current) {
+      clearTimeout(visualDelayTimeoutRef.current);
+      visualDelayTimeoutRef.current = null;
+    }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
-      setIsReading(false);
     }
+    setIsReading(false);
+    setIsPaused(false);
+    setCurrentCharIndex(null);
+    setCurrentReadingText('');
   };
 
   // Stop speech when scene transitions or unmounts
   useEffect(() => {
     stopSpeech();
     return () => {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      stopSpeech();
     };
   }, [activeScene]);
 
@@ -1019,12 +1275,14 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
         })));
       } else {
         // Fall back to prebuilt
-        const fallbackChaps = PREBUILT_CHAPTERS[sub.id] || [];
+        const matchedSubId = getMatchingPrebuiltSubjectId(sub);
+        const fallbackChaps = PREBUILT_CHAPTERS[matchedSubId] || [];
         setChapters(fallbackChaps);
       }
     } catch (e) {
       console.warn('Supabase query failed for chapters:', e);
-      setChapters(PREBUILT_CHAPTERS[sub.id] || []);
+      const matchedSubId = getMatchingPrebuiltSubjectId(sub);
+      setChapters(PREBUILT_CHAPTERS[matchedSubId] || []);
     } finally {
       setLoading(false);
       setScreen('story_home');
@@ -1151,7 +1409,10 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
         setActiveScene(uniqueDbScenes[startIdx] || null);
       } else {
         // Fall back to prebuilt scenes
-        const prebuilt = PREBUILT_SCENES[chap.id] || [];
+        const matchedChapId = isValidUUID(chap.id) 
+          ? getMatchingPrebuiltChapterId(selectedSubject, chap.chapter_number)
+          : chap.id;
+        const prebuilt = PREBUILT_SCENES[matchedChapId] || [];
         const uniquePrebuilt: StoryScene[] = [];
         const seenPrebuiltNums = new Set<number>();
         for (const s of prebuilt) {
@@ -1168,7 +1429,10 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
         setActiveScene(uniquePrebuilt[startIdx] || null);
       }
     } catch (e) {
-      const prebuilt = PREBUILT_SCENES[chap.id] || [];
+      const matchedChapId = isValidUUID(chap.id) 
+        ? getMatchingPrebuiltChapterId(selectedSubject, chap.chapter_number)
+        : chap.id;
+      const prebuilt = PREBUILT_SCENES[matchedChapId] || [];
       const uniquePrebuilt: StoryScene[] = [];
       const seenPrebuiltNums = new Set<number>();
       for (const s of prebuilt) {
@@ -1209,13 +1473,17 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     if (isCorrect) {
       setResultState('correct');
       showToast('Hakuna Matata! Correct Answer! 🌟', 'success');
-      speakText(activeScene.question.response_correct || 'Hakuna Matata! Correct Answer! Excellent job.');
+      if (readingMode !== 'silent') {
+        speakText(activeScene.question.response_correct || 'Hakuna Matata! Correct Answer! Excellent job.');
+      }
     } else {
       setResultState('wrong');
       const updatedWrong = wrongAttempts + 1;
       setWrongAttempts(updatedWrong);
       showToast('Not quite right, let’s study our choices! 🧐', 'error');
-      speakText(activeScene.question.response_wrong || 'Not quite right, let’s study our choices and try again!');
+      if (readingMode !== 'silent') {
+        speakText(activeScene.question.response_wrong || 'Not quite right, let’s study our choices and try again!');
+      }
     }
 
     setScreen('result');
@@ -1298,7 +1566,8 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     if (!prevProj) return false;
     
     // Look up chapters for previous chapter completion
-    const chapList = PREBUILT_CHAPTERS[subjId] || [];
+    const matchedSubId = isValidUUID(subjId) ? getMatchingPrebuiltSubjectId(selectedSubject) : subjId;
+    const chapList = PREBUILT_CHAPTERS[matchedSubId] || chapters || [];
     const prevChap = chapList.find(c => c.chapter_number === chap.chapter_number - 1);
     
     if (!prevChap) return true;
@@ -1706,6 +1975,106 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                   )}
                 </div>
 
+                {/* Reading Comfort and Audio Speed Settings Panel */}
+                <div className="bg-[#0A1628]/80 backdrop-blur border border-[#1A2E44]/80 p-3 rounded-2xl space-y-2 select-none shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-black tracking-widest text-[#A0AEC0] flex items-center gap-1.5 font-sans">
+                      <Settings size={11} className="text-[#FF6B00]" />
+                      Reading Comfort Settings
+                    </span>
+                    <span className="text-[8px] font-mono text-[#CBD5E0]/60">Customize sensory pace</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {/* OPTION 1: Word highlight & speed control */}
+                    <button
+                      onClick={() => changeReadingMode('animate-speed')}
+                      className={`py-1.5 px-1 rounded-xl border text-[8.5px] font-black uppercase tracking-wider text-center flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.97] cursor-pointer ${
+                        readingMode === 'animate-speed'
+                          ? 'border-[#FF6B00]/80 bg-[#FF6B00]/10 text-white shadow-md shadow-[#FF6B00]/5'
+                          : 'border-[#1A2E44]/60 bg-[#0F223A]/30 text-[#A0AEC0] hover:text-white hover:bg-[#0F223A]/50'
+                      }`}
+                    >
+                      <Sparkles size={12} className={readingMode === 'animate-speed' ? 'text-[#FF6B00]' : ''} />
+                      <span>Highlight & Speed</span>
+                    </button>
+
+                    {/* OPTION 2: Pure Google TTS with NO word highlight */}
+                    <button
+                      onClick={() => changeReadingMode('static-audio')}
+                      className={`py-1.5 px-1 rounded-xl border text-[8.5px] font-black uppercase tracking-wider text-center flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.97] cursor-pointer ${
+                        readingMode === 'static-audio'
+                          ? 'border-amber-500/80 bg-amber-500/10 text-white shadow-md'
+                          : 'border-[#1A2E44]/60 bg-[#0F223A]/30 text-[#A0AEC0] hover:text-white hover:bg-[#0F223A]/50'
+                      }`}
+                    >
+                      <Volume2 size={12} className={readingMode === 'static-audio' ? 'text-amber-400' : ''} />
+                      <span>Smooth Audio Only</span>
+                    </button>
+
+                    {/* OPTION 3: Silent Reading */}
+                    <button
+                      onClick={() => changeReadingMode('silent')}
+                      className={`py-1.5 px-1 rounded-xl border text-[8.5px] font-black uppercase tracking-wider text-center flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.97] cursor-pointer ${
+                        readingMode === 'silent'
+                          ? 'border-emerald-500/80 bg-emerald-500/10 text-white shadow-md'
+                          : 'border-[#1A2E44]/60 bg-[#0F223A]/30 text-[#A0AEC0] hover:text-white hover:bg-[#0F223A]/50'
+                      }`}
+                    >
+                      <BookOpen size={12} className={readingMode === 'silent' ? 'text-emerald-400' : ''} />
+                      <span>Normal Silent</span>
+                    </button>
+                  </div>
+
+                  {/* Speed options if highlighted reading mode is active */}
+                  {readingMode === 'animate-speed' && (
+                    <div className="bg-[#0F223A]/40 rounded-xl px-2.5 py-1.5 border border-[#1A2E44]/50 flex items-center justify-between flex-wrap gap-1.5">
+                      <div className="flex items-center gap-1 text-[8px] font-black text-[#CBD5E0]/80 uppercase tracking-widest">
+                        <Sliders size={10} className="text-[#FF6B00]" />
+                        Reading Rate:
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {[
+                          { val: 0.65, label: 'Slow 🐢' },
+                          { val: 0.9, label: 'Normal 🧑' },
+                          { val: 1.2, label: 'Fast 🚀' },
+                        ].map((pace) => {
+                          const isSel = Math.abs(speechRate - pace.val) < 0.1;
+                          return (
+                            <button
+                              key={pace.val}
+                              onClick={() => changeSpeechRate(pace.val)}
+                              className={`px-2 py-0.5 rounded text-[8px] font-sans font-black transition-all cursor-pointer ${
+                                isSel
+                                  ? 'bg-[#FF6B00] text-white'
+                                  : 'bg-[#1A2E44]/60 text-[#CBD5E0]/60 hover:bg-[#1A2E44]/80'
+                              }`}
+                            >
+                              {pace.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {readingMode === 'static-audio' && (
+                    <div className="bg-[#0F223A]/40 rounded-xl px-2.5 py-1 border border-[#1A2E44]/50 text-center">
+                      <span className="text-[8px] font-sans font-bold text-[#CBD5E0]/70 tracking-wide block">
+                        🔊 Google Read-Aloud is active. Text remains fully readable & static.
+                      </span>
+                    </div>
+                  )}
+
+                  {readingMode === 'silent' && (
+                    <div className="bg-[#0F223A]/40 rounded-xl px-2.5 py-1 border border-[#1A2E44]/50 text-center">
+                      <span className="text-[8px] font-sans font-bold text-emerald-400/80 tracking-wide block">
+                        📖 Silent Mode. Read the paragraph comfortably at your own pace.
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 {/* Middle Section: Narrative Text in Styled Story Card (Looks like a Book Page) */}
                 <div className="flex-1 my-3 flex flex-col justify-center">
                   <div className="bg-[#FFFDF5] text-[#1A2530] p-5 rounded-2xl border border-[#E2E8F0] shadow-xl relative overflow-hidden flex flex-col justify-between" style={{ minHeight: '180px' }}>
@@ -1713,38 +2082,138 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                     <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-bl from-[#E2E8F0] to-[#FFFDF5] rounded-bl-xl border-l border-b border-[#E2E8F0]/80 shadow-inner" />
                     
                     {/* Story Content */}
-                    <p className="font-serif text-[12.5px] leading-relaxed select-text pr-2">
-                      {activeScene.narrative}
-                    </p>
-
-                    <div className="w-full flex items-center justify-between pt-3 border-t border-[#E2E8F0]/40 mt-3 flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            if (isReading) {
-                              stopSpeech();
-                            } else {
-                              speakText(activeScene.narrative);
-                            }
-                          }}
-                          className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer ${
-                            isReading 
-                              ? 'bg-red-500 text-white animate-pulse' 
-                              : 'bg-[#FF6B00] text-white hover:bg-orange-600 shadow-[#FF6B00]/10'
-                          }`}
-                        >
-                          <span>🔊 Read Aloud</span>
-                        </button>
-
-                        <button
-                          onClick={stopSpeech}
-                          className="px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide bg-[#0A1628] text-white border border-[#1A2E44]/30 hover:bg-slate-900 transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
-                        >
-                          <span>⏹ Stop</span>
-                        </button>
-                      </div>
-                      <span className="text-[8.5px] font-black uppercase tracking-wider text-[#A0AEC0] font-mono">Study Quest Scroll</span>
+                    <div className="font-serif text-[13.5px] leading-relaxed select-text pr-2 py-1 text-slate-800 tracking-wide">
+                      {(() => {
+                        const sentences = getSentencesWithIndices(activeScene.narrative);
+                        const isAnySentenceActive = isReading && currentReadingText === activeScene.narrative && readingMode === 'animate-speed';
+                        return (
+                          <span>
+                            {sentences.map((item, idx) => {
+                              const isSentenceActive = isReading && 
+                                                   currentReadingText === activeScene.narrative && 
+                                                   readingMode === 'animate-speed' &&
+                                                   currentCharIndex !== null && 
+                                                   currentCharIndex >= item.start && 
+                                                   currentCharIndex < item.end;
+                              return (
+                                <motion.span
+                                  key={idx}
+                                  className={`inline mr-1 px-1 rounded-md transition-all duration-300 ${
+                                    isSentenceActive 
+                                      ? 'bg-[#FF6B00]/20 text-[#FF6B00] font-bold border-l-2 border-[#FF6B00] shadow-sm' 
+                                      : isAnySentenceActive
+                                        ? 'opacity-40 text-slate-400 font-normal'
+                                        : 'text-[#1A2530] font-medium'
+                                  }`}
+                                  animate={isSentenceActive ? { 
+                                    scale: [1, 1.01, 1],
+                                  } : { 
+                                    scale: 1,
+                                  }}
+                                  transition={{ duration: 0.3 }}
+                                >
+                                  {item.text}
+                                </motion.span>
+                              );
+                            })}
+                          </span>
+                        );
+                      })()}
                     </div>
+
+                    {readingMode !== 'silent' && (
+                      <div className="w-full flex items-center justify-between pt-3 border-t border-[#E2E8F0]/40 mt-3 flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          {readingMode === 'animate-speed' ? (
+                            // Pure visual tracker guide buttons (completely silent)
+                            <>
+                              <button
+                                onClick={() => {
+                                  if (!isReading) {
+                                    startVisualHighlight(activeScene.narrative);
+                                  } else if (isPaused) {
+                                    setIsPaused(false);
+                                    startVisualHighlight(activeScene.narrative, currentCharIndex || 0);
+                                  } else {
+                                    setIsPaused(true);
+                                    if (fallbackTimeoutRef.current) {
+                                      clearTimeout(fallbackTimeoutRef.current);
+                                      fallbackTimeoutRef.current = null;
+                                    }
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer ${
+                                  isReading 
+                                    ? isPaused 
+                                      ? 'bg-amber-500 text-white' 
+                                      : 'bg-indigo-600 text-white animate-pulse' 
+                                    : 'bg-[#FF6B00] text-white hover:bg-orange-600 shadow-[#FF6B00]/10'
+                                }`}
+                              >
+                                <span>
+                                  {isReading 
+                                    ? isPaused 
+                                      ? '▶️ Resume Guide' 
+                                      : '⏸️ Pause Guide' 
+                                    : '🎬 Play Visual Guide'
+                                  }
+                                </span>
+                              </button>
+
+                              <button
+                                onClick={stopSpeech}
+                                className="px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide bg-[#0A1628] text-white border border-[#1A2E44]/30 hover:bg-slate-900 transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                              >
+                                <span>⏹ Stop Guide</span>
+                              </button>
+                            </>
+                          ) : (
+                            // Pure Google TTS controllers with audio labels & sound icon
+                            <>
+                              <button
+                                onClick={() => {
+                                  if (!isReading) {
+                                    speakText(activeScene.narrative);
+                                  } else if (isPaused) {
+                                    if (window.speechSynthesis) window.speechSynthesis.resume();
+                                    setIsPaused(false);
+                                  } else {
+                                    if (window.speechSynthesis) window.speechSynthesis.pause();
+                                    setIsPaused(true);
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer ${
+                                  isReading 
+                                    ? isPaused 
+                                      ? 'bg-amber-500 text-white' 
+                                      : 'bg-red-500 text-white animate-pulse' 
+                                    : 'bg-[#FF6B00] text-white hover:bg-orange-600 shadow-[#FF6B00]/10'
+                                }`}
+                              >
+                                <span>
+                                  {isReading 
+                                    ? isPaused 
+                                      ? '▶️ Resume Audio' 
+                                      : '⏸️ Pause Audio' 
+                                    : '🔊 Read Aloud'
+                                  }
+                                </span>
+                              </button>
+
+                              <button
+                                onClick={stopSpeech}
+                                className="px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wide bg-[#0A1628] text-white border border-[#1A2E44]/30 hover:bg-slate-900 transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                              >
+                                <span>⏹ Stop Audio</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-[#A0AEC0] font-mono">
+                          {readingMode === 'animate-speed' ? 'Visual Tracker Guide' : 'Speech Synthesis'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1837,9 +2306,45 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                       <div className="space-y-1">
                         <span className="text-[9px] uppercase font-black text-[#A0AEC0] tracking-widest block">Studied & Solved</span>
                         <h2 className="text-xl font-sans font-black text-white uppercase tracking-tight">Kazi safi! Excellent Job!</h2>
-                        <p className="text-[#CBD5E0] text-xs px-6 leading-relaxed mt-2 italic bg-[#0F223A] border border-[#1A2E44] py-3 rounded-2xl">
-                          "Success in studies matches success in deeds! Continue the quest explorer!"
-                        </p>
+                        <div className="text-[#CBD5E0] text-[13px] px-6 leading-relaxed mt-2 italic bg-[#0F223A] border border-[#1A2E44] py-3.5 rounded-2xl select-text tracking-wide">
+                          {(() => {
+                            const responseText = activeScene.question.response_correct || 'Hakuna Matata! Correct Answer! Excellent job.';
+                            const sentences = getSentencesWithIndices(responseText);
+                            const isAnySentenceActive = isReading && currentReadingText === responseText && readingMode === 'animate-speed';
+                            return (
+                              <span>
+                                {sentences.map((item, idx) => {
+                                  const isSentenceActive = isReading && 
+                                                       currentReadingText === responseText && 
+                                                       readingMode === 'animate-speed' &&
+                                                       currentCharIndex !== null && 
+                                                       currentCharIndex >= item.start && 
+                                                       currentCharIndex < item.end;
+                                  return (
+                                    <motion.span
+                                      key={idx}
+                                      className={`inline mr-1 px-1 rounded-md transition-all duration-300 ${
+                                        isSentenceActive 
+                                          ? 'bg-[#FF6B00]/30 text-[#FFA04D] font-bold border-l-2 border-[#FF6B00] shadow-sm' 
+                                          : isAnySentenceActive
+                                            ? 'opacity-40 text-slate-500 font-normal'
+                                            : 'text-[#CBD5E0] font-medium'
+                                      }`}
+                                      animate={isSentenceActive ? { 
+                                        scale: [1, 1.01, 1],
+                                      } : { 
+                                        scale: 1,
+                                      }}
+                                      transition={{ duration: 0.3 }}
+                                    >
+                                      {item.text}
+                                    </motion.span>
+                                  );
+                                })}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </div>
 
                       {/* XP Badge */}
@@ -1858,9 +2363,45 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                       <div className="space-y-1">
                         <span className="text-[9px] uppercase font-black text-[#A0AEC0] tracking-widest block">Wrong Answer</span>
                         <h2 className="text-xl font-sans font-black text-white uppercase tracking-tight">Let's Try Again!</h2>
-                        <p className="text-[#CBD5E0] text-xs px-6 leading-relaxed mt-1">
-                          The choices on ancient maps aren’t always clear. Review of studies is the secret to knowledge!
-                        </p>
+                        <div className="text-[#CBD5E0] text-[13px] px-6 leading-relaxed mt-2 italic bg-[#1A2E44]/30 border border-[#2D3748] py-3.5 rounded-2xl select-text tracking-wide">
+                          {(() => {
+                            const responseText = activeScene.question.response_wrong || 'Not quite right, let’s study our choices and try again!';
+                            const sentences = getSentencesWithIndices(responseText);
+                            const isAnySentenceActive = isReading && currentReadingText === responseText && readingMode === 'animate-speed';
+                            return (
+                              <span>
+                                {sentences.map((item, idx) => {
+                                  const isSentenceActive = isReading && 
+                                                       currentReadingText === responseText && 
+                                                       readingMode === 'animate-speed' &&
+                                                       currentCharIndex !== null && 
+                                                       currentCharIndex >= item.start && 
+                                                       currentCharIndex < item.end;
+                                  return (
+                                    <motion.span
+                                      key={idx}
+                                      className={`inline mr-1 px-1 rounded-md transition-all duration-300 ${
+                                        isSentenceActive 
+                                          ? 'bg-red-500/30 text-red-400 font-bold border-l-2 border-red-500 shadow-sm' 
+                                          : isAnySentenceActive
+                                            ? 'opacity-40 text-slate-500 font-normal'
+                                            : 'text-[#CBD5E0] font-medium'
+                                      }`}
+                                      animate={isSentenceActive ? { 
+                                        scale: [1, 1.01, 1],
+                                      } : { 
+                                        scale: 1,
+                                      }}
+                                      transition={{ duration: 0.3 }}
+                                    >
+                                      {item.text}
+                                    </motion.span>
+                                  );
+                                })}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </div>
 
                       {/* Show Explanation immediately or after 2nd wrong attempt */}

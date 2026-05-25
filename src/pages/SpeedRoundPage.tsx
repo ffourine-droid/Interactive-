@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { playTick, playHurry, playSuccess, playFailure } from '../utils/soundEffects';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -280,6 +281,17 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
     return () => clearInterval(timerRef.current!);
   }, [phase]);
 
+  // Audio Transaction Tick trigger on countdown intervals
+  useEffect(() => {
+    if (phase === 'playing' && timeLeft > 0) {
+      if (timeLeft <= 5) {
+        playHurry();
+      } else {
+        playTick();
+      }
+    }
+  }, [timeLeft, phase]);
+
   // ── Countdown ──
   useEffect(() => {
     if (phase !== 'countdown') return;
@@ -325,9 +337,11 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
         return next;
       });
       setFeedback('correct');
+      playSuccess();
     } else {
       setStreak(0);
       setFeedback('wrong');
+      playFailure();
     }
 
     // Move to next question after brief flash

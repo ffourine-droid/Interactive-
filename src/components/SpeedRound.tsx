@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Zap, AlertCircle, Award, Trophy, Timer, ChevronLeft, Swords, Check, ArrowRight, CornerDownLeft, RefreshCw, Star, Play } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { playTick, playHurry, playSuccess, playFailure } from '../utils/soundEffects';
 
 interface SpeedRoundProps {
   roomCode: string;
@@ -79,6 +80,17 @@ export default function SpeedRound({ roomCode, isHost, player, onBack }: SpeedRo
     return () => clearInterval(timerIntervalRef.current);
   }, [status]);
 
+  // Audio Transaction Tick trigger on countdown intervals
+  useEffect(() => {
+    if (status === 'active' && timerLeft > 0) {
+      if (timerLeft <= 5) {
+        playHurry();
+      } else {
+        playTick();
+      }
+    }
+  }, [timerLeft, status]);
+
   const getOpponentUsername = () => {
     if (!room) return 'Opponent';
     return isHost ? room.player2_username || 'Opponent' : room.player1_username || 'Opponent';
@@ -147,6 +159,7 @@ export default function SpeedRound({ roomCode, isHost, player, onBack }: SpeedRo
 
     if (isCorrect) {
       setFeedback('correct');
+      playSuccess();
       setCorrectCount(prev => prev + 1);
       
       // Update score in local hook and database immediately
@@ -169,6 +182,7 @@ export default function SpeedRound({ roomCode, isHost, player, onBack }: SpeedRo
 
     } else {
       setFeedback('wrong');
+      playFailure();
       setWrongCount(prev => prev + 1);
     }
 
@@ -229,14 +243,17 @@ export default function SpeedRound({ roomCode, isHost, player, onBack }: SpeedRo
           .maybeSingle();
 
         if (stdRecord) {
-          await supabase
-            .from('arena_players')
-            .update({
-              total_score: (stdRecord.total_score || 0) + xpNum,
-              total_games: (stdRecord.total_games || 0) + 1,
-              best_score: Math.max(stdRecord.best_score || 0, xpNum)
-            })
-            .eq('id', stdRecord.id);
+          const updateObj: any = {};
+          if ('total_score' in stdRecord) updateObj.total_score = (stdRecord.total_score || 0) + xpNum;
+          if ('total_games' in stdRecord) updateObj.total_games = (stdRecord.total_games || 0) + 1;
+          if ('best_score' in stdRecord) updateObj.best_score = Math.max(stdRecord.best_score || 0, xpNum);
+
+          if (Object.keys(updateObj).length > 0) {
+            await supabase
+              .from('arena_players')
+              .update(updateObj)
+              .eq('id', stdRecord.id);
+          }
         }
       }
     } catch (e) {

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Zap, AlertCircle, Award, Trophy, Timer, ChevronLeft, Users, Check, ArrowRight, CornerDownLeft, RefreshCw, Star, Play, PlayCircle, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { playTick, playHurry, playSuccess, playFailure } from '../utils/soundEffects';
 
 interface GroupBattleProps {
   roomCode: string;
@@ -74,6 +75,17 @@ export default function GroupBattle({ roomCode, isHost, player, onBack }: GroupB
     }
     return () => clearInterval(timerIntervalRef.current);
   }, [status, currentQIndex, isTimeOut]);
+
+  // Audio Transaction Tick trigger on countdown intervals
+  useEffect(() => {
+    if (status === 'active' && !isTimeOut && timerLeft > 0) {
+      if (timerLeft <= 5) {
+        playHurry();
+      } else {
+        playTick();
+      }
+    }
+  }, [timerLeft, status, isTimeOut]);
 
   const cleanupChannelsAndTimers = () => {
     if (roomChannelRef.current) supabase.removeChannel(roomChannelRef.current);
@@ -221,9 +233,11 @@ export default function GroupBattle({ roomCode, isHost, player, onBack }: GroupB
 
     if (isCorrect) {
       setFeedback('correct');
+      playSuccess();
       pointsEarned = 10; // +10 points per correct answer
     } else {
       setFeedback('wrong');
+      playFailure();
     }
 
     setIsTimeOut(true); // Disable further input since submitted this question
@@ -293,14 +307,17 @@ export default function GroupBattle({ roomCode, isHost, player, onBack }: GroupB
           .maybeSingle();
 
         if (stdRecord) {
-          await supabase
-            .from('arena_players')
-            .update({
-              total_score: (stdRecord.total_score || 0) + xpNum,
-              total_games: (stdRecord.total_games || 0) + 1,
-              best_score: Math.max(stdRecord.best_score || 0, xpNum)
-            })
-            .eq('id', stdRecord.id);
+          const updateObj: any = {};
+          if ('total_score' in stdRecord) updateObj.total_score = (stdRecord.total_score || 0) + xpNum;
+          if ('total_games' in stdRecord) updateObj.total_games = (stdRecord.total_games || 0) + 1;
+          if ('best_score' in stdRecord) updateObj.best_score = Math.max(stdRecord.best_score || 0, xpNum);
+
+          if (Object.keys(updateObj).length > 0) {
+            await supabase
+              .from('arena_players')
+              .update(updateObj)
+              .eq('id', stdRecord.id);
+          }
         }
       }
     } catch (e) {

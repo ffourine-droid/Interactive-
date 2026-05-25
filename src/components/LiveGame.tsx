@@ -5,6 +5,7 @@ import {
   Crown, Trophy, RotateCcw, Loader2, Check, Swords
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { playTick, playHurry, playSuccess, playFailure } from '../utils/soundEffects';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -179,6 +180,17 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
     return () => clearInterval(timerRef.current!);
   }, [isFinished]);
 
+  // Audio Transaction Tick trigger on countdown intervals
+  useEffect(() => {
+    if (!isFinished && timeLeft > 0) {
+      if (timeLeft <= 5) {
+        playHurry();
+      } else {
+        playTick();
+      }
+    }
+  }, [timeLeft, isFinished]);
+
   // ── Push score update to Supabase ──
   const pushScore = useCallback(async (
     newCorrect: number, newAnswered: number, newBestStreak: number, finished = false
@@ -241,10 +253,12 @@ export default function LiveGame({ room, initialPlayers, username, onFinish }: L
       setStreak(newStreak);
       setBestStreak(newBestStreak);
       setFeedback('correct');
+      playSuccess();
     } else {
       newStreak = 0;
       setStreak(0);
       setFeedback('wrong');
+      playFailure();
     }
     setAnswered(newAnswered);
 

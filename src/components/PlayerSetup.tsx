@@ -50,17 +50,15 @@ export default function PlayerSetup({ onComplete }: PlayerSetupProps) {
         return;
       }
 
-      // If it doesn't exist, create it
+      // If it doesn't exist, create it. Insert and select only guaranteed keys (username, grade)
+      // to let any optional columns default automatically and prevent schema cache errors.
       const { data: inserted, error: insertError } = await supabase
         .from('arena_players')
         .insert({
           username: cleanUsername,
-          grade: gradeNum,
-          total_games: 0,
-          total_score: 0,
-          best_score: 0
+          grade: gradeNum
         })
-        .select()
+        .select('id, username, grade')
         .single();
 
       if (insertError) throw insertError;

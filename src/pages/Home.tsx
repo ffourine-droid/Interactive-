@@ -443,30 +443,7 @@ export default function Home({
                     </button>
                   </div>
 
-                  {/* STORIES TO LEARN */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-[#FF6B00]/10 rounded-lg flex items-center justify-center text-[#FF6B00]">
-                        <BookOpen size={14} />
-                      </div>
-                      <h2 className="text-[11px] font-black uppercase tracking-[0.12em] text-brand-muted">Game-Based Learning</h2>
-                    </div>
-                    <button
-                      onClick={(e) => { rippleEffect(e); onStoriesClick(); }}
-                      className="relative overflow-hidden w-full bg-brand-surface border border-[#FF6B00]/30 rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm bg-gradient-to-r from-[#FF6B00]/10 to-transparent"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 bg-[#FF6B00] text-white rounded-xl flex items-center justify-center shadow-lg shadow-[#FF6B00]/25">
-                          <BookOpen size={20} />
-                        </div>
-                        <div className="text-left">
-                          <h3 className="text-base font-black text-[#FF6B00] tracking-tight">STORIES TO LEARN</h3>
-                          <p className="text-[9px] font-black uppercase tracking-wider text-brand-muted/60 whitespace-nowrap">Story Quest CBC Adventures</p>
-                        </div>
-                      </div>
-                      <ChevronRight size={18} className="text-[#FF6B00] shrink-0" />
-                    </button>
-                  </div>
+
                 </div>
               </motion.div>
             ) : (
