@@ -30,6 +30,9 @@ import ExamResultsPage from './pages/ExamResultsPage';
 import AdminDashboard from './pages/AdminDashboard';
 import GroupWorkPage from './pages/GroupWorkPage';
 import StoryQuest from './components/StoryQuest';
+import CommunityPage from './pages/CommunityPage';
+import ForumPage from './pages/ForumPage';
+import ModerationPage from './pages/ModerationPage';
 
 import { examService } from './services/examService';
 
@@ -408,6 +411,34 @@ function AppContent() {
             </motion.div>
           </Suspense>
         );
+      case 'community':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading community forum..." />}>
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              key="community"
+              className="max-w-[420px] mx-auto min-h-screen font-sans"
+            >
+              <ForumPage onBack={() => setCurrentPage('home')} />
+            </motion.div>
+          </Suspense>
+        );
+      case 'moderation':
+        return (
+          <Suspense fallback={<LoadingFallback text="Opening moderation panel..." />}>
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              key="moderation"
+              className="max-w-[420px] mx-auto min-h-screen font-sans"
+            >
+              <ModerationPage onBack={() => setCurrentPage('home')} />
+            </motion.div>
+          </Suspense>
+        );
       case 'home':
       default:
         return (
@@ -437,6 +468,7 @@ function AppContent() {
                 onArenaClick={() => setCurrentPage('groupwork')}
                 onParentClick={() => setCurrentPage('parent')}
                 onStoriesClick={() => setCurrentPage('story-quest')}
+                onCommunityClick={() => setCurrentPage('community')}
                 selectedClass={selectedClass}
                 setSelectedClass={setSelectedClass}
                 theme={theme}

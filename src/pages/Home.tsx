@@ -25,6 +25,7 @@ interface HomeProps {
   onAdminTerminalClick: () => void;
   onParentClick: () => void;
   onStoriesClick: () => void;
+  onCommunityClick: () => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   selectedClass: string | null;
@@ -33,7 +34,8 @@ interface HomeProps {
 
 export default function Home({ 
   onBack, onAdminClick, onAdminTerminalClick, onTeacherClick, onTeacherDashboardClick, 
-  onAssignmentsClick, onExamsClick, onArenaClick, onParentClick, onStoriesClick, theme, setTheme,
+  onAssignmentsClick, onExamsClick, onArenaClick, onParentClick, onStoriesClick,
+  onCommunityClick, theme, setTheme,
   selectedClass, setSelectedClass
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -293,6 +295,7 @@ export default function Home({
                   { id: 'assignments', label: 'My Classes', icon: FileText, action: () => { onAssignmentsClick(); setIsSidebarOpen(false); } },
                   { id: 'groupwork', label: 'My Work', icon: Users, action: () => { onArenaClick(); setIsSidebarOpen(false); } },
                   { id: 'exams', label: 'Timed Exams', icon: Clock, action: () => { onExamsClick(); setIsSidebarOpen(false); } },
+                  { id: 'community', label: 'School Forum', icon: Users, action: () => { onCommunityClick(); setIsSidebarOpen(false); } },
                   { id: 'parent', label: 'Parent Portal', icon: ShieldCheck, action: () => { onParentClick(); setIsSidebarOpen(false); } },
                   { id: 'settings', label: 'App Settings', icon: Settings, action: () => { setActiveTab('settings'); setIsSidebarOpen(false); } },
                 ].map(item => (
@@ -440,6 +443,30 @@ export default function Home({
                         </div>
                       </div>
                       <ChevronRight size={18} className="text-brand-muted shrink-0" />
+                    </button>
+                  </div>
+
+                  {/* CBC COMMUNITY FORUM */}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-brand-accent/10 rounded-lg flex items-center justify-center text-brand-accent">
+                        <Users size={14} />
+                      </div>
+                      <h2 className="text-[11px] font-black uppercase tracking-[0.12em] text-brand-muted">AziLearn Forums</h2>
+                    </div>
+
+                    {/* Community Button */}
+                    <button
+                      onClick={onCommunityClick}
+                      className="w-full relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-[#FF6B35]/20 rounded-2xl p-4 flex items-center gap-4 text-left active:scale-[0.97] transition-all shadow-sm group"
+                    >
+                      <div className="w-9 h-9 bg-[#FF6B35]/10 rounded-xl flex items-center justify-center text-[#FF6B35] shrink-0">
+                        <Users size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-black text-brand-text group-hover:text-[#FF6B35] transition-colors leading-tight">School Forum</h3>
+                        <p className="text-[9px] font-semibold text-brand-muted mt-0.5 leading-snug">Connect & discuss with classmates</p>
+                      </div>
                     </button>
                   </div>
 

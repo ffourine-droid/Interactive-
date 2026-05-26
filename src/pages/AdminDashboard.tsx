@@ -29,6 +29,9 @@ import { ArenaQuestionCreator } from '../components/ArenaQuestionCreator';
 import { QuestionManager } from '../components/QuestionManager';
 import { MaterialManager } from '../components/MaterialManager';
 import StoryQuestManager from '../components/StoryQuestManager';
+import { forumService } from '../services/forumService';
+import { attachmentService } from '../services/attachmentService';
+import { ShieldAlert, Pin, Heart, MessageSquare, Repeat } from 'lucide-react';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -37,9 +40,18 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation'>('overview');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
+
+  // Forum Moderation Parameters
+  const [unresolvedFlags, setUnresolvedFlags] = useState<any[]>([]);
+  const [warningsList, setWarningsList] = useState<any[]>([]);
+  const [forumPosts, setForumPosts] = useState<any[]>([]);
+  const [forumSubTab, setForumSubTab] = useState<'flags' | 'warnings' | 'posts'>('flags');
+  const [studentSearchUsername, setStudentSearchUsername] = useState('');
+  const [searchWarningText, setSearchWarningText] = useState('');
+  const [flagActionLoading, setFlagActionLoading] = useState(false);
   
   // Daily clock representation for an immersive control CLI feel
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -110,7 +122,111 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
     else if (activeTab === 'system') fetchExperiments();
     else if (activeTab === 'teachers') fetchTeachersList();
     else if (activeTab === 'requests') fetchRequests();
+    else if (activeTab === 'forum_moderation') fetchForumData();
   }, [activeTab]);
+
+  const fetchForumData = async () => {
+    setLoading(true);
+    try {
+      const [flags, warnings, posts] = await Promise.all([
+        forumService.getUnresolvedFlags(),
+        forumService.getWarnings(),
+        forumService.getFeed()
+      ]);
+      setUnresolvedFlags(flags || []);
+      setWarningsList(warnings || []);
+      setForumPosts(posts || []);
+    } catch (err: any) {
+      showToast('Error loading forum moderation assets', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResolveFlag = async (flagId: string) => {
+    setFlagActionLoading(true);
+    try {
+      await forumService.resolveFlag(flagId);
+      showToast('Flag resolved successfully ✅', 'success');
+      fetchForumData();
+    } catch (err) {
+      showToast('Action failed', 'error');
+    } finally {
+      setFlagActionLoading(false);
+    }
+  };
+
+  const handleDeletePostFromFlag = async (flagId: string, postId: string) => {
+    setFlagActionLoading(true);
+    try {
+      await forumService.deletePost(postId);
+      await forumService.resolveFlag(flagId);
+      await attachmentService.deleteAttachmentsForPost(postId);
+      showToast('Post removed and file storage purged 🗑️', 'success');
+      fetchForumData();
+    } catch (err) {
+      showToast('Failed to purge post', 'error');
+    } finally {
+      setFlagActionLoading(false);
+    }
+  };
+
+  const handleWarnSearchAndCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!studentSearchUsername.trim()) {
+      showToast('Type student handle first', 'error');
+      return;
+    }
+    if (!searchWarningText.trim()) {
+      showToast('Enter warning text reason', 'error');
+      return;
+    }
+
+    setFlagActionLoading(true);
+    try {
+      const prof = await forumService.getProfileByUsername(studentSearchUsername);
+      if (!prof) {
+        showToast(`Could not find profile for student @${studentSearchUsername.replace('@','')}`, 'error');
+        return;
+      }
+      await forumService.warnStudent(prof.id, 'admin-1', searchWarningText.trim());
+      showToast(`⚠️ warning issued to student @${prof.username}`, 'success');
+      setStudentSearchUsername('');
+      setSearchWarningText('');
+      fetchForumData();
+    } catch (err) {
+      showToast('Error issuing student warning', 'error');
+    } finally {
+      setFlagActionLoading(false);
+    }
+  };
+
+  const handleTogglePinInPosts = async (postId: string, pinStatus: boolean) => {
+    setFlagActionLoading(true);
+    try {
+      await forumService.togglePin(postId, !pinStatus);
+      showToast(!pinStatus ? 'Post pinned on student boards! 📌' : 'Post unpinned', 'success');
+      fetchForumData();
+    } catch (err) {
+      showToast('Action failed', 'error');
+    } finally {
+      setFlagActionLoading(false);
+    }
+  };
+
+  const handleDeletePostInPosts = async (postId: string) => {
+    setFlagActionLoading(true);
+    try {
+      await forumService.deletePost(postId);
+      await attachmentService.deleteAttachmentsForPost(postId);
+      showToast('Post removed and storage purged', 'success');
+      fetchForumData();
+    } catch (err) {
+      showToast('Failed to remove post', 'error');
+    } finally {
+      setFlagActionLoading(false);
+    }
+  };
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -408,7 +524,8 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             { id: 'arena' as const, icon: Zap, label: 'Arena & Qns', badge: 0 },
             { id: 'stories' as const, icon: BookOpen, label: 'Story Quest', badge: 0 },
             { id: 'requests' as const, icon: MessageCircle, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
-            { id: 'teachers' as const, icon: Users, label: 'Teachers', badge: 0 }
+            { id: 'teachers' as const, icon: Users, label: 'Teachers', badge: 0 },
+            { id: 'forum_moderation' as const, icon: ShieldAlert, label: 'Forum Mod', badge: unresolvedFlags.length }
           ].map(tab => {
             const isSelected = activeTab === tab.id;
             return (
@@ -471,7 +588,8 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                 { id: 'arena' as const, label: 'Arena', badge: 0 },
                 { id: 'stories' as const, label: 'Story Quest', badge: 0 },
                 { id: 'requests' as const, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
-                { id: 'teachers' as const, label: 'Teachers', badge: 0 }
+                { id: 'teachers' as const, label: 'Teachers', badge: 0 },
+                { id: 'forum_moderation' as const, label: 'Forum Mod', badge: unresolvedFlags.length }
               ].map(tab => {
                 const isSelected = activeTab === tab.id;
                 return (
@@ -1034,6 +1152,263 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
           {!loading && activeTab === 'stories' && (
             <div className="animate-in fade-in duration-300">
               <StoryQuestManager />
+            </div>
+          )}
+
+          {/* ────── TABS: FORUM MODERATION SUITE ────── */}
+          {!loading && activeTab === 'forum_moderation' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              
+              {/* Header slate */}
+              <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-black uppercase text-brand-text leading-tight tracking-tight">Public Forum Moderation Suite</h2>
+                  <p className="text-[10px] text-brand-muted font-semibold mt-1">Manage warning notes, pin highlighted threads, and review customer flagging actions from a single administrative panel.</p>
+                </div>
+                
+                {/* Forum sub-tab controls */}
+                <div className="flex gap-1.5 bg-brand-bg p-1 rounded-2xl border border-brand-border/40 shrink-0">
+                  {[
+                    { id: 'flags' as const, label: `🚩 Flags (${unresolvedFlags.length})` },
+                    { id: 'warnings' as const, label: `⚠️ Warnings (${warningsList.length})` },
+                    { id: 'posts' as const, label: '📌 Posts Hub' }
+                  ].map(stab => {
+                    const active = forumSubTab === stab.id;
+                    return (
+                      <button
+                        key={stab.id}
+                        type="button"
+                        onClick={() => setForumSubTab(stab.id)}
+                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+                          active 
+                            ? 'bg-[#FF6B35] text-white shadow-sm'
+                            : 'text-brand-muted hover:text-brand-text'
+                        }`}
+                      >
+                        {stab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Loader overlay inside action */}
+              {flagActionLoading && (
+                <div className="bg-brand-surface border border-dashed border-[#FF6B35]/40 py-4 text-center rounded-2xl animate-pulse">
+                  <p className="text-[10px] font-black uppercase text-[#FF6B35] tracking-widest flex items-center justify-center gap-2">
+                    <RefreshCw className="animate-spin" size={12} />
+                    Processing Administrative Action...
+                  </p>
+                </div>
+              )}
+
+              {/* SUB-TAB: FLAGGED POSTS CONTAINER */}
+              {forumSubTab === 'flags' && (
+                <div className="space-y-4">
+                  {unresolvedFlags.length === 0 ? (
+                    <div className="text-center py-16 bg-brand-surface border border-brand-border/30 rounded-3xl p-6">
+                      <p className="text-xs font-black text-brand-muted uppercase tracking-wider">No unresolved flags found</p>
+                      <p className="text-[9px] text-[#FF6B35] mt-1 font-semibold leading-relaxed">Student board postings are currently fully pristine!</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                      {unresolvedFlags.map((flag) => (
+                        <div key={flag.id} className="bg-brand-surface border border-brand-border rounded-[2rem] p-5 space-y-3.5 shadow-sm text-left">
+                          <div className="flex justify-between items-start flex-wrap gap-2">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] font-black uppercase text-red-500 tracking-wider bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/15">
+                                Flagged Concern
+                              </span>
+                              <p className="text-[10px] font-bold text-brand-muted mt-1">
+                                Flagged by Student <span className="text-[#FF6B35] font-black">@{flag.flagger_username}</span>
+                              </p>
+                            </div>
+                            <span className="text-[9px] font-semibold text-brand-muted">
+                              {new Date(flag.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+
+                          <div className="p-3 bg-brand-bg/50 border border-brand-border/40 rounded-2xl">
+                            <span className="text-[8px] font-black uppercase tracking-widest text-[#FF6B35] block mb-1">Stated Reason:</span>
+                            <p className="text-xs font-semibold text-brand-text leading-relaxed italic">"{flag.reason}"</p>
+                          </div>
+
+                          <div className="p-3 bg-brand-bg border border-brand-border/30 rounded-2xl space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted block">Post Reference Title:</span>
+                            </div>
+                            <h4 className="text-xs font-black text-brand-text">{flag.post_title}</h4>
+                            <p className="text-[10.5px] font-medium text-brand-muted leading-relaxed break-words line-clamp-3">{flag.post_content}</p>
+                          </div>
+
+                          {/* Action controls */}
+                          <div className="flex gap-2.5 pt-1.5">
+                            <button
+                              onClick={() => handleResolveFlag(flag.id)}
+                              disabled={flagActionLoading}
+                              className="flex-1 bg-brand-bg hover:bg-emerald-500/5 text-brand-muted hover:text-emerald-500 text-[9px] font-black uppercase tracking-widest py-3 border border-brand-border hover:border-emerald-500/25 rounded-xl transition-all active:scale-95"
+                            >
+                              Ignore & Resolve Flag
+                            </button>
+                            <button
+                              onClick={() => handleDeletePostFromFlag(flag.id, flag.post_id)}
+                              disabled={flagActionLoading}
+                              className="flex-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-black uppercase tracking-widest py-3 border border-red-500/20 hover:border-transparent rounded-xl transition-all active:scale-95 shadow-sm"
+                            >
+                              Delete Offending Post
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SUB-TAB: ISSUE STUDENT WARNINGS TAB */}
+              {forumSubTab === 'warnings' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
+                  
+                  {/* Warning Dispatch block */}
+                  <div className="lg:col-span-1 space-y-4">
+                    <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-5 space-y-4">
+                      <div>
+                        <h3 className="text-sm font-black uppercase tracking-tight text-brand-text">Issue Official Warning</h3>
+                        <p className="text-[10px] text-brand-muted font-bold leading-snug mt-1">Dispatches a direct warning notice alert to the student account and marks their record.</p>
+                      </div>
+
+                      <form onSubmit={handleWarnSearchAndCreate} className="space-y-4 pt-1">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black tracking-wider uppercase text-brand-muted font-bold">Target Student Username</label>
+                          <input
+                            type="text"
+                            required
+                            value={studentSearchUsername}
+                            onChange={(e) => setStudentSearchUsername(e.target.value)}
+                            placeholder="E.g., kiprop_sam (without @)"
+                            className="w-full bg-brand-bg border border-brand-border rounded-xl px-3 py-2 text-[11px] font-semibold text-brand-text outline-none focus:border-[#FF6B35]/40 transition-all"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black tracking-wider uppercase text-brand-muted font-bold">Notice Reason</label>
+                          <textarea
+                            required
+                            value={searchWarningText}
+                            onChange={(e) => setSearchWarningText(e.target.value)}
+                            placeholder="Describe guideline violation (e.g., spam comments, sharing homework solutions...)"
+                            rows={3}
+                            className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 text-[11px] font-medium text-brand-text outline-none focus:border-[#FF6B35]/40 resize-none leading-relaxed"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={flagActionLoading}
+                          className="w-full bg-[#FF6B35] text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-[#FF6B35]/15 hover:brightness-110 active:scale-95 transition-all"
+                        >
+                          Dispatch Official Notice
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  {/* Warning Logs history list */}
+                  <div className="lg:col-span-2 space-y-4">
+                    <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-5 space-y-4">
+                      <div>
+                        <h3 className="text-sm font-black uppercase tracking-tight text-brand-text">Administrative Notice History</h3>
+                        <p className="text-[10px] text-brand-muted font-bold">List of all formal academic community warning logs dispatched dynamically.</p>
+                      </div>
+
+                      {warningsList.length === 0 ? (
+                        <div className="text-center py-12 border border-dashed border-brand-border/40 rounded-2xl p-6 bg-brand-bg/20">
+                          <p className="text-[10px] font-black text-brand-muted uppercase tracking-wider">Empty Notice Logs</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 max-h-[420px] overflow-y-auto no-scrollbar pr-1">
+                          {warningsList.map((warn) => (
+                            <div key={warn.id} className="p-3.5 bg-brand-bg border border-brand-border/30 rounded-2xl flex flex-col md:flex-row md:items-start justify-between gap-3 text-left animate-in fade-in">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10.5px] font-black text-brand-text">{warn.student_full_name}</span>
+                                  <span className="text-[9px] text-[#FF6B35] font-black bg-brand-surface border border-brand-border/40 px-1.5 py-0.5 rounded">@{warn.student_username}</span>
+                                </div>
+                                <p className="text-[10.5px] font-bold text-brand-muted leading-relaxed italic">"{warn.reason}"</p>
+                              </div>
+                              <div className="text-right shrink-0 space-y-1 md:self-stretch flex flex-row md:flex-col justify-between md:justify-around items-end">
+                                <span className="text-[8px] font-bold text-brand-muted block">
+                                  {new Date(warn.created_at).toLocaleDateString()}
+                                </span>
+                                <span className="bg-red-500/10 text-red-500 border border-red-500/20 text-[7px] font-black uppercase tracking-widest px-1 rounded-sm">
+                                  Dispatched
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {/* SUB-TAB: ALL POSTS HUB (PINNABLES & OVERRIDES) */}
+              {forumSubTab === 'posts' && (
+                <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-5 space-y-4 max-h-[600px] overflow-y-auto no-scrollbar text-left">
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-tight text-brand-text">AziLearn Forum Dashboard Feed</h3>
+                    <p className="text-[10px] text-brand-muted font-bold font-bold">Unify override controls. Pin critical study materials to the top, highlight announcements, or purge spam instantly.</p>
+                  </div>
+
+                  {forumPosts.length === 0 ? (
+                    <div className="text-center py-10 text-brand-muted animate-pulse">
+                      <p className="text-[10px] font-black uppercase">No Posts synced</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5">
+                      {forumPosts.map(post => (
+                        <div key={post.id} className="p-4 bg-brand-bg border border-brand-border/40 rounded-2xl flex flex-col md:flex-row justify-between gap-4">
+                          <div className="space-y-1 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-black text-brand-text">{post.author_full_name}</span>
+                              <span className="text-[9px] font-bold text-[#FF6B35]">@{post.username}</span>
+                              <span className="text-[8px] bg-brand-surface px-1.5 py-0.5 border border-brand-border rounded font-black text-brand-muted uppercase shrink-0">{post.tag}</span>
+                              {post.is_pinned && <span className="text-[8px] bg-amber-500/15 text-amber-500 border border-amber-500/20 px-1.5 py-0.2 rounded font-black uppercase shrink-0">📌 Pinned</span>}
+                            </div>
+                            <h4 className="text-[11px] font-black text-brand-text leading-tight pt-1">{post.title}</h4>
+                            <p className="text-[10.5px] font-medium text-brand-muted leading-relaxed break-words line-clamp-2">{post.content}</p>
+                          </div>
+
+                          {/* Action controls */}
+                          <div className="flex md:flex-col justify-end gap-2 shrink-0 md:min-w-[120px]">
+                            <button
+                              onClick={() => handleTogglePinInPosts(post.id, post.is_pinned)}
+                              disabled={flagActionLoading}
+                              className={`py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-center border transition-all active:scale-95 ${
+                                post.is_pinned 
+                                  ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-transparent hover:text-brand-muted'
+                                  : 'bg-brand-surface text-brand-muted border-brand-border/50 hover:bg-brand-bg hover:text-brand-text'
+                              }`}
+                            >
+                              {post.is_pinned ? 'Unpin Post' : 'Pin to Top'}
+                            </button>
+                            <button
+                              onClick={() => handleDeletePostInPosts(post.id)}
+                              disabled={flagActionLoading}
+                              className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-center border border-red-500/20 hover:border-transparent transition-all active:scale-95"
+                            >
+                              Purge Post
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           )}
         </main>

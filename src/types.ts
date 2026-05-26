@@ -30,7 +30,9 @@ export type Page =
   | 'admin-assignment-creator'
   | 'groupwork'
   | 'exam-results'
-  | 'story-quest';
+  | 'story-quest'
+  | 'community'
+  | 'moderation';
 
 export interface Question {
   index: number;

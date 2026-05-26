@@ -15,7 +15,8 @@ import {
   Download,
   Clock,
   Check,
-  Trophy
+  Trophy,
+  Shield
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -24,6 +25,7 @@ import { QuestionRequestForm } from '../components/QuestionRequestForm';
 import { MaterialCard } from '../components/MaterialCard';
 import { SlidesViewer } from '../components/SlidesViewer';
 import { Experiment } from '../types';
+import ModerationPage from './ModerationPage';
 
 interface Assignment {
   id: string;
@@ -72,7 +74,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [newClassName, setNewClassName] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
-  const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions'>('classes');
+  const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions' | 'forum_moderation'>('classes');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [importCode, setImportCode] = useState('');
@@ -525,31 +527,42 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <Trophy size={12} /> Groups
               {activeView === 'competitions' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
             </button>
+            <button
+              onClick={() => setActiveView('forum_moderation')}
+              className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 pb-2 transition-all relative shrink-0 ${
+                activeView === 'forum_moderation' ? 'text-brand-accent' : 'text-brand-muted'
+              }`}
+            >
+              <Shield size={12} /> Forum Mod
+              {activeView === 'forum_moderation' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
+            </button>
           </div>
 
           {/* Action buttons — scroll horizontally, never wrap */}
-          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-            {activeView === 'classes' ? (
-              <>
-                <ActionBtn onClick={() => setIsAddingClass(true)} icon={<Plus size={12} />} label="New Class" />
-                <ActionBtn onClick={() => onCreateAssignment()} icon={<Plus size={12} />} label="Assignment" accent />
-                <ActionBtn onClick={onExamsClick} icon={<Plus size={12} />} label="Assessment" />
-                <ActionBtn onClick={() => setShowImportModal(true)} icon={<Download size={12} />} label="Import" />
-                <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
-              </>
-            ) : activeView === 'exams' ? (
-              <>
-                <ActionBtn onClick={onExamsClick} icon={<Plus size={12} />} label="New Assessment" accent />
-                <ActionBtn onClick={() => setShowImportModal(true)} icon={<Download size={12} />} label="Import" />
-                <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
-              </>
-            ) : (
-              <>
-                <ActionBtn onClick={() => {}} icon={<Plus size={12} />} label="New Group" accent />
-                <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
-              </>
-            )}
-          </div>
+          {activeView !== 'forum_moderation' && (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              {activeView === 'classes' ? (
+                <>
+                  <ActionBtn onClick={() => setIsAddingClass(true)} icon={<Plus size={12} />} label="New Class" />
+                  <ActionBtn onClick={() => onCreateAssignment()} icon={<Plus size={12} />} label="Assignment" accent />
+                  <ActionBtn onClick={onExamsClick} icon={<Plus size={12} />} label="Assessment" />
+                  <ActionBtn onClick={() => setShowImportModal(true)} icon={<Download size={12} />} label="Import" />
+                  <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
+                </>
+              ) : activeView === 'exams' ? (
+                <>
+                  <ActionBtn onClick={onExamsClick} icon={<Plus size={12} />} label="New Assessment" accent />
+                  <ActionBtn onClick={() => setShowImportModal(true)} icon={<Download size={12} />} label="Import" />
+                  <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
+                </>
+              ) : (
+                <>
+                  <ActionBtn onClick={() => {}} icon={<Plus size={12} />} label="New Group" accent />
+                  <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {recentActivity.length > 0 && (
@@ -763,8 +776,10 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               ))
             )}
           </div>
-        ) : (
+        ) : activeView === 'competitions' ? (
           <TeacherCompetitionManager teacherId={teacher?.id || ''} />
+        ) : (
+          <ModerationPage embedMode={true} />
         )}
       </main>
 
