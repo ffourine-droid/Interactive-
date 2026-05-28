@@ -121,7 +121,7 @@ export const StudentAssignmentView: React.FC<{
         setStep('success'); // Show the success/result screen
       } else {
         setStep('taking');
-        showToast("Classwork joined! Good luck! 🎉", "success");
+        showToast("Assignment joined! Good luck! 🎉", "success");
       }
     } catch (err: any) {
       showToast(err.message, "error");
@@ -450,7 +450,7 @@ export const StudentAssignmentView: React.FC<{
             >
               <ChevronLeft size={20} className="text-brand-accent" />
             </button>
-            <h1 className="font-sans font-bold text-xl text-brand-text">Classwork</h1>
+            <h1 className="font-sans font-bold text-xl text-brand-text">Assignments</h1>
           </div>
         </div>
       </div>
@@ -533,7 +533,7 @@ export const StudentAssignmentView: React.FC<{
               </div>
               <div className="space-y-1">
                  <p className="font-bold text-brand-text">Find Your Assignment</p>
-                 <p className="text-xs text-brand-muted max-w-[200px]">Enter details above to find your classwork.</p>
+                 <p className="text-xs text-brand-muted max-w-[200px]">Enter details above to find your assignments.</p>
               </div>
            </div>
         ) : assignments.length > 0 ? (

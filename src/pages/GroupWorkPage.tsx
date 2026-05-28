@@ -78,8 +78,8 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               <Users size={16} className="text-white" />
             </div>
             <div>
-              <h1 className="text-base font-black text-brand-text uppercase tracking-tighter leading-none">My Work</h1>
-              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Tasks & Projects</p>
+              <h1 className="text-base font-black text-brand-text uppercase tracking-tighter leading-none">Games</h1>
+              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">Championships & Duels</p>
             </div>
           </div>
           <div className="w-10" />

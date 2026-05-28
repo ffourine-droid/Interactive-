@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { Experiment } from '../types';
 import { MaterialCard, SkeletonCard } from '../components/MaterialCard';
+import { MaterialsList } from '../components/MaterialsList';
 import { SlidesViewer } from '../components/SlidesViewer';
 
 interface HomeProps {
@@ -90,6 +91,26 @@ export default function Home({
   const middleSearchRef = useRef<HTMLInputElement>(null);
   const lastRequestId = useRef(0);
   const { showToast } = useToast();
+
+  const [student, setStudent] = useState<any>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('azilearn_student');
+    try {
+      setStudent(saved ? JSON.parse(saved) : null);
+    } catch {
+      setStudent(null);
+    }
+  }, [isSidebarOpen, activeTab]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('azilearn_student');
+    localStorage.removeItem('azilearn_student_profile');
+    localStorage.removeItem('azilearn_arena_player');
+    sessionStorage.removeItem('azilearn_student_name');
+    setStudent(null);
+    showToast('Logged out successfully! 👋', 'success');
+  };
 
   const handleClassSelect = (grade: string) => {
     setSelectedClass(grade);
@@ -268,63 +289,140 @@ export default function Home({
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-[280px] z-[301] bg-brand-surface border-r border-brand-border p-6 shadow-2xl flex flex-col"
+              className="fixed inset-y-0 left-0 w-[310px] z-[301] bg-brand-surface border-r border-brand-border p-5 shadow-2xl flex flex-col"
             >
-              <div className="flex items-center justify-between mb-10">
+              {/* Sidebar Header */}
+              <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#FF6B2C] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#FF6B2C]/20">
-                    <FlaskConical size={20} />
+                  <div className="w-9 h-9 bg-[#FF6B2C] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#FF6B2C]/20">
+                    <FlaskConical size={18} />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black tracking-tight leading-none text-brand-text">AziLearn</h2>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted mt-1">Student Portal</p>
+                    <h2 className="text-base font-black tracking-tight leading-none text-brand-text">AziLearn</h2>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-brand-muted mt-1">Student Portal</p>
                   </div>
                 </div>
                 <button 
                    onClick={() => setIsSidebarOpen(false)}
                    className="w-8 h-8 rounded-full bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted active:text-brand-accent transition-colors"
                 >
-                  <X size={16} />
+                  <X size={14} />
                 </button>
               </div>
 
-              <div className="flex-1 space-y-2 overflow-y-auto no-scrollbar pr-1">
-                {[
-                  { id: 'home', label: 'Home Hub', icon: HomeIcon, action: () => { setActiveTab('home'); setIsSidebarOpen(false); setSelectedClass(null); } },
-                  { id: 'stories', label: 'Stories to Learn', icon: BookOpen, action: () => { onStoriesClick(); setIsSidebarOpen(false); } },
-                  { id: 'assignments', label: 'My Classes', icon: FileText, action: () => { onAssignmentsClick(); setIsSidebarOpen(false); } },
-                  { id: 'groupwork', label: 'My Work', icon: Users, action: () => { onArenaClick(); setIsSidebarOpen(false); } },
-                  { id: 'exams', label: 'Timed Exams', icon: Clock, action: () => { onExamsClick(); setIsSidebarOpen(false); } },
-                  { id: 'community', label: 'School Forum', icon: Users, action: () => { onCommunityClick(); setIsSidebarOpen(false); } },
-                  { id: 'parent', label: 'Parent Portal', icon: ShieldCheck, action: () => { onParentClick(); setIsSidebarOpen(false); } },
-                  { id: 'settings', label: 'App Settings', icon: Settings, action: () => { setActiveTab('settings'); setIsSidebarOpen(false); } },
-                ].map(item => (
-                  <button
-                    key={item.id}
-                    onClick={item.action}
-                    className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-brand-accent/5 transition-all group active:scale-95 text-left"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-brand-surface border border-brand-border flex items-center justify-center text-brand-muted group-hover:text-brand-accent group-hover:border-brand-accent/30 transition-colors shadow-sm">
-                      <item.icon size={18} />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-brand-text group-hover:text-brand-accent transition-colors block">{item.label}</span>
-                      <p className="text-[8px] font-bold text-brand-muted uppercase tracking-[0.1em]">Access {item.label.toLowerCase()}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="pt-6 border-t border-brand-border mt-auto">
-                <button 
-                   onClick={() => onBack()}
-                   className="w-full flex items-center gap-4 p-4 rounded-2xl text-red-500 hover:bg-red-500/5 transition-all font-black text-xs uppercase tracking-widest active:scale-95"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
-                    <LogOut size={18} />
+              {/* Sidebar Content */}
+              <div className="flex-1 space-y-5 overflow-y-auto no-scrollbar pr-1 pb-6">
+                {/* Profile Card */}
+                <div className="relative overflow-hidden bg-brand-bg/50 border border-brand-border rounded-[20px] p-4 flex items-center gap-3">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#FF6B2C] to-purple-500" />
+                  <div className="w-11 h-11 rounded-xl bg-orange-500/10 flex items-center justify-center text-xl shrink-0 border border-orange-500/25">
+                    🎓
                   </div>
-                  Exit Portal
-                </button>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-display text-xs font-bold text-brand-text truncate leading-tight mb-0.5">
+                      {student ? student.name : 'Student Name'}
+                    </h3>
+                    <p className="text-[9px] text-brand-muted font-bold truncate leading-none">
+                      {student ? `${student.grade || 'Grade 9'} • Student ID` : 'Guest Profile • Primary'}
+                    </p>
+                  </div>
+                  <span className="text-[8px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">
+                    ● Active
+                  </span>
+                </div>
+
+                {/* Navigation Groups */}
+                {[
+                  {
+                    label: 'Navigate',
+                    items: [
+                      { title: 'Home Hub', subtitle: 'Your learning dashboard', icon: '🏠', color: 'o', action: () => { setActiveTab('home'); setIsSidebarOpen(false); setSelectedClass(null); } },
+                      { title: 'Stories to Learn', subtitle: 'Engaging reading content', icon: '📖', color: 'b', action: () => { onStoriesClick(); setIsSidebarOpen(false); } },
+                      { title: 'My Classes', subtitle: 'All your subjects', icon: '📄', color: 'g', action: () => { setActiveTab('home'); setIsSidebarOpen(false); setSelectedClass(null); } },
+                      { title: 'My Work', subtitle: 'Assignments & submissions', icon: '💼', color: 'p', action: () => { onAssignmentsClick(); setIsSidebarOpen(false); } }
+                    ]
+                  },
+                  {
+                    label: 'Assessment',
+                    items: [
+                      { title: 'Timed Exams', subtitle: 'Practice under time pressure', icon: '⏱️', color: 'y', action: () => { onExamsClick(); setIsSidebarOpen(false); } },
+                      { title: 'School Forum', subtitle: 'Discuss with classmates', icon: '💬', color: 'b', action: () => { onCommunityClick(); setIsSidebarOpen(false); } }
+                    ]
+                  },
+                  {
+                    label: 'Account',
+                    items: [
+                      { title: 'Parent Portal', subtitle: 'Guardian access & reports', icon: '🛡️', color: 'g', action: () => { onParentClick(); setIsSidebarOpen(false); } },
+                      { title: 'App Settings', subtitle: 'Preferences & display', icon: '⚙️', color: 'gray', action: () => { setActiveTab('settings'); setIsSidebarOpen(false); } }
+                    ]
+                  }
+                ].map((group) => (
+                  <div key={group.label} className="space-y-2">
+                    <h3 className="text-[9px] font-black text-brand-muted uppercase tracking-[0.12em] pl-1">{group.label}</h3>
+                    <div className="space-y-1.5">
+                      {group.items.map((item) => {
+                        const colors: Record<string, { bg: string, text: string }> = {
+                          o: { bg: 'bg-orange-500/10 dark:bg-orange-500/15', text: 'text-orange-500' },
+                          b: { bg: 'bg-blue-500/10 dark:bg-blue-500/15', text: 'text-blue-500' },
+                          g: { bg: 'bg-emerald-500/10 dark:bg-emerald-500/15', text: 'text-emerald-500' },
+                          p: { bg: 'bg-purple-500/10 dark:bg-purple-500/15', text: 'text-purple-500' },
+                          y: { bg: 'bg-yellow-500/10 dark:bg-yellow-500/15', text: 'text-yellow-600 dark:text-yellow-500' },
+                          gray: { bg: 'bg-slate-500/10 dark:bg-slate-500/15', text: 'text-slate-500' }
+                        };
+                        const clr = colors[item.color] || colors.gray;
+                        return (
+                          <button
+                            key={item.title}
+                            onClick={item.action}
+                            className="w-full text-left flex items-center gap-3 p-3 rounded-[16px] border border-brand-border/40 bg-brand-surface hover:border-brand-accent/20 active:scale-[0.98] transition-all"
+                          >
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base shrink-0 ${clr.bg} ${clr.text}`}>
+                              {item.icon}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-display text-xs font-bold leading-tight text-brand-text">{item.title}</h4>
+                              <p className="text-[9px] text-brand-muted font-medium mt-0.5 truncate leading-none">{item.subtitle}</p>
+                            </div>
+                            <span className="text-base font-bold text-brand-muted/70 shrink-0">›</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Exit Actions */}
+                <div className="space-y-1.5 pt-2 border-t border-brand-border/40">
+                  {student && (
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left flex items-center gap-3 p-3 rounded-[16px] border border-red-500/10 bg-brand-surface hover:border-red-500/20 active:scale-[0.98] transition-all"
+                    >
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base shrink-0 bg-red-500/10 text-red-500">
+                        🚪
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-display text-xs font-bold leading-tight text-red-500">Exit Profile</h4>
+                        <p className="text-[9px] text-red-400 mt-0.5 truncate leading-none">Unlink student identification</p>
+                      </div>
+                      <span className="text-base font-bold text-red-500/70 shrink-0">›</span>
+                    </button>
+                  )}
+                  
+                  <button
+                    onClick={() => { setIsSidebarOpen(false); onBack(); }}
+                    className="w-full text-left flex items-center gap-3 p-3 rounded-[16px] border border-red-500/10 bg-brand-surface hover:border-red-500/20 active:scale-[0.98] transition-all"
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base shrink-0 bg-red-500/10 text-red-500">
+                      🚪
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-display text-xs font-bold leading-tight text-red-500">Exit Portal</h4>
+                      <p className="text-[9px] text-red-400 mt-0.5 truncate leading-none">Logout of student portal</p>
+                    </div>
+                    <span className="text-base font-bold text-red-500/70 shrink-0">›</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>
@@ -391,85 +489,162 @@ export default function Home({
                       </div>
                     </div>
                   </div>
-                  <div className="bg-brand-surface border border-brand-border px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold text-brand-text">Welcome!</span>
-                    <span className="text-sm">👋</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="bg-brand-surface border border-brand-border px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 max-w-[140px] truncate">
+                      <span className="text-[10px] font-bold text-brand-text truncate">
+                        {student ? student.name : 'Welcome!'}
+                      </span>
+                      <span className="text-sm shrink-0">🧠</span>
+                    </div>
+                    {student && (
+                      <button
+                        onClick={handleLogout}
+                        className="w-8 h-8 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 flex items-center justify-center active:scale-90 transition-all shrink-0"
+                        title="Logout Profile"
+                      >
+                        <LogOut size={14} />
+                      </button>
+                    )}
                   </div>
                 </header>
 
-                {/* Grades */}
-                <div className="space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-brand-accent/10 rounded-lg flex items-center justify-center text-brand-accent">
-                        <GraduationCap size={14} />
+
+
+                {/* Grades sections */}
+                <div className="space-y-5">
+                  
+                  {/* Primary School (Gr 1-6) */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-3.5 bg-emerald-500 rounded-full" />
+                        <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Primary School</h2>
                       </div>
-                      <h2 className="text-[11px] font-black uppercase tracking-[0.12em] text-brand-muted">Primary & Junior School</h2>
+                      <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 1 – 6</span>
                     </div>
-                    {/* 3-col grid, aspect-square cells that scale with viewport */}
+                    
                     <div className="grid grid-cols-3 gap-2">
-                      {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((grade, i) => (
-                        <button
-                          key={grade}
-                          onClick={(e) => { rippleEffect(e); handleClassSelect(grade); }}
-                          className="relative overflow-hidden aspect-square bg-brand-surface border border-brand-border/40 rounded-2xl flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-sm"
-                        >
-                          <span className="text-xl font-black text-brand-text">{i + 1}</span>
-                          <span className="text-[8px] font-black uppercase tracking-wider text-brand-muted/60 whitespace-nowrap">Grade</span>
-                        </button>
-                      ))}
+                      {Array.from({ length: 6 }, (_, i) => {
+                        const gradeVal = i + 1;
+                        const gradeStr = `Grade ${gradeVal}`;
+                        return (
+                          <button
+                            key={gradeStr}
+                            onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
+                            className="group relative overflow-hidden py-3 px-1 bg-brand-surface border border-brand-border/40 hover:border-emerald-500/30 rounded-[16px] flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-sm"
+                          >
+                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-emerald-500 transition-colors">{gradeVal}</span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade</span>
+                            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-emerald-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* KCSE */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-brand-accent/10 rounded-lg flex items-center justify-center text-brand-accent">
-                        <FileText size={14} />
+                  {/* Junior Secondary (Gr 7-9) */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-3.5 bg-brand-accent rounded-full" />
+                        <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Junior Secondary</h2>
                       </div>
-                      <h2 className="text-[11px] font-black uppercase tracking-[0.12em] text-brand-muted">National Assessments</h2>
+                      <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 7 – 9</span>
                     </div>
+                    
+                    <div className="grid grid-cols-3 gap-2">
+                      {Array.from({ length: 3 }, (_, i) => {
+                        const gradeVal = i + 7;
+                        const gradeStr = `Grade ${gradeVal}`;
+                        return (
+                          <button
+                            key={gradeStr}
+                            onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
+                            className="group relative overflow-hidden py-3 px-1 bg-brand-surface border border-brand-border/40 hover:border-brand-accent/30 rounded-[16px] flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-sm"
+                          >
+                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-brand-accent transition-colors">{gradeVal}</span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade</span>
+                            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand-accent scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Senior Secondary (Gr 10-12) */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-3.5 bg-purple-500 rounded-full" />
+                        <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Senior Secondary</h2>
+                      </div>
+                      <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 10 – 12</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-2">
+                      {Array.from({ length: 3 }, (_, i) => {
+                        const gradeVal = i + 10;
+                        const gradeStr = `Grade ${gradeVal}`;
+                        return (
+                          <button
+                            key={gradeStr}
+                            onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
+                            className="group relative overflow-hidden py-3 px-1 bg-brand-surface border border-brand-border/40 hover:border-purple-500/30 rounded-[16px] flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-sm"
+                          >
+                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-purple-500 transition-colors">{gradeVal}</span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade</span>
+                            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-purple-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Quick Access Horizon Cards */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-3.5 bg-blue-500 rounded-full" />
+                      <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted font-black">Quick Access</h2>
+                    </div>
+
+                    {/* KCSE Revision Card */}
                     <button
                       onClick={(e) => { rippleEffect(e); handleClassSelect('KCSE'); }}
-                      className="relative overflow-hidden w-full bg-brand-surface border border-brand-border/40 rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm"
+                      className="relative overflow-hidden w-full bg-brand-surface border border-brand-border/40 hover:border-yellow-500/20 rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm group text-left"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent">
-                          <CheckCircle2 size={22} />
+                      {/* Left vertical yellow accent bar */}
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500" />
+                      <div className="flex items-center gap-3 pl-1">
+                        <div className="w-11 h-11 bg-yellow-500/10 rounded-xl flex items-center justify-center text-yellow-500 text-xl font-bold shrink-0">
+                          📋
                         </div>
-                        <div className="text-left">
-                          <h3 className="text-base font-black text-[#FF6B2C] tracking-tight">KCSE REVISION</h3>
-                          <p className="text-[9px] font-black uppercase tracking-wider text-brand-muted/60 whitespace-nowrap">Secondary Level</p>
+                        <div>
+                          <h3 className="font-display text-xs font-bold text-brand-text group-hover:text-yellow-500 transition-colors leading-tight">KCSE Revision</h3>
+                          <p className="text-[10px] font-medium text-brand-muted mt-0.5 leading-snug">National Assessment · Secondary</p>
                         </div>
                       </div>
-                      <ChevronRight size={18} className="text-brand-muted shrink-0" />
+                      <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0">›</span>
                     </button>
-                  </div>
 
-                  {/* CBC COMMUNITY FORUM */}
-                  <div className="space-y-2 pt-1">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-brand-accent/10 rounded-lg flex items-center justify-center text-brand-accent">
-                        <Users size={14} />
-                      </div>
-                      <h2 className="text-[11px] font-black uppercase tracking-[0.12em] text-brand-muted">AziLearn Forums</h2>
-                    </div>
-
-                    {/* Community Button */}
+                    {/* School Forum Card */}
                     <button
                       onClick={onCommunityClick}
-                      className="w-full relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-[#FF6B35]/20 rounded-2xl p-4 flex items-center gap-4 text-left active:scale-[0.97] transition-all shadow-sm group"
+                      className="relative overflow-hidden w-full bg-brand-surface border border-brand-border/40 hover:border-blue-500/20 rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm group text-left"
                     >
-                      <div className="w-9 h-9 bg-[#FF6B35]/10 rounded-xl flex items-center justify-center text-[#FF6B35] shrink-0">
-                        <Users size={18} />
+                      {/* Left vertical blue accent bar */}
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />
+                      <div className="flex items-center gap-3 pl-1">
+                        <div className="w-11 h-11 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500 text-xl font-bold shrink-0">
+                          💬
+                        </div>
+                        <div>
+                          <h3 className="font-display text-xs font-bold text-brand-text group-hover:text-blue-500 transition-colors leading-tight">School Forum</h3>
+                          <p className="text-[10px] font-medium text-brand-muted mt-0.5 leading-snug">Connect & discuss with classmates</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-xs font-black text-brand-text group-hover:text-[#FF6B35] transition-colors leading-tight">School Forum</h3>
-                        <p className="text-[9px] font-semibold text-brand-muted mt-0.5 leading-snug">Connect & discuss with classmates</p>
-                      </div>
+                      <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0">›</span>
                     </button>
                   </div>
-
 
                 </div>
               </motion.div>
@@ -518,10 +693,123 @@ export default function Home({
                         {cat.label}
                       </button>
                     ))}
-                  </div>
+                </div>
                 </div>
 
-                <div className="px-4 pt-3">
+                <div className="px-4 pt-3 space-y-6">
+                  {/* Grade-Tailored Feature Grid / Launchers */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between px-2">
+                      <h3 className="text-[10px] uppercase font-black tracking-wider text-brand-muted flex items-center gap-1.5">
+                        <Users size={14} className="text-brand-accent animate-pulse" />
+                        Grade Features & Activities
+                      </h3>
+                      <span className="text-[8px] font-black uppercase tracking-wider bg-brand-surface border border-brand-border/40 px-2.5 py-0.5 rounded-full text-brand-muted">
+                        Tailored Hub
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {[
+                        {
+                          id: 'assignments',
+                          label: 'Homework Tasks',
+                          sub: 'Due assignments',
+                          icon: FileText,
+                          color: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/15',
+                          action: onAssignmentsClick
+                        },
+                        {
+                          id: 'exams',
+                          label: 'Assessments',
+                          sub: 'Timed exam papers',
+                          icon: Clock,
+                          color: 'text-rose-500 bg-rose-500/10 border-rose-500/15',
+                          action: onExamsClick
+                        },
+                        {
+                          id: 'arena',
+                          label: 'Student Arena',
+                          sub: 'Group game battles',
+                          icon: FlaskConical,
+                          color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/15',
+                          action: onArenaClick
+                        },
+                        {
+                          id: 'stories',
+                          label: 'Story Quest',
+                          sub: 'Adventure learning',
+                          icon: BookOpen,
+                          color: 'text-[#FF6B2C] bg-[#FF6B2C]/10 border-[#FF6B2C]/15',
+                          action: onStoriesClick
+                        }
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={(e) => { rippleEffect(e); item.action(); }}
+                          className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-brand-accent/25 rounded-2xl p-3.5 flex flex-col items-start gap-2.5 text-left active:scale-[0.97] transition-all shadow-sm w-full"
+                        >
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${item.color}`}>
+                            <item.icon size={16} />
+                          </div>
+                          <div>
+                            <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-brand-accent transition-colors leading-tight">
+                              {item.label}
+                            </h4>
+                            <p className="text-[9px] font-medium text-brand-muted leading-tight mt-0.5">
+                              {item.sub}
+                            </p>
+                          </div>
+                          {/* Chevron in bottom right */}
+                          <span className="absolute bottom-2.5 right-3 text-xs font-bold text-brand-muted/30 group-hover:text-brand-accent group-hover:translate-x-0.5 transition-all">›</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* All-Grades Combined Forum Shortcut inside Grade Hub for easy access */}
+                    <button
+                      onClick={(e) => { rippleEffect(e); onCommunityClick(); }}
+                      className="w-full bg-brand-surface border border-brand-border/40 hover:border-[#FF6B2C]/25 rounded-2xl p-3.5 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm text-left group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-[#FF6B2C]/10 border border-[#FF6B2C]/15 text-[#FF6B2C] rounded-xl flex items-center justify-center shrink-0">
+                          <Users size={16} />
+                        </div>
+                        <div>
+                          <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-[#FF6B2C] transition-colors leading-tight">
+                            All-Grades Combined Forum
+                          </h4>
+                          <p className="text-[9px] font-medium text-brand-muted mt-0.5">
+                            Learn from other students and ask questions
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-brand-muted group-hover:text-[#FF6B2C] group-hover:translate-x-0.5 transition-all">›</span>
+                    </button>
+                  </div>
+
+                  {/* Teacher Shared School-Specific Materials */}
+                  {selectedClass && (
+                    <div className="space-y-3 mb-1">
+                      <div className="flex items-center justify-between px-2">
+                        <h3 className="text-[10px] uppercase font-black tracking-wider text-brand-muted flex items-center gap-1.5">
+                          <GraduationCap size={14} className="text-[#FF6B2C]" />
+                          Teacher Shared Courseware
+                        </h3>
+                        {student && student.grade === selectedClass && (
+                          <span className="text-[8px] font-black uppercase tracking-wider bg-[#FF6B2C]/10 text-[#FF6B2C] border border-[#FF6B2C]/15 px-2 py-0.5 rounded-full">
+                            My Class
+                          </span>
+                        )}
+                      </div>
+                      <MaterialsList 
+                        grade={selectedClass}
+                        classId={student && student.grade === selectedClass ? student.class_id : null}
+                        isTeacher={false}
+                      />
+                    </div>
+                  )}
+
                   {/* Count */}
                   <div className="flex items-center justify-end mb-3">
                     <span className="text-[9px] font-black text-brand-muted uppercase tracking-wider whitespace-nowrap">
@@ -712,6 +1000,30 @@ export default function Home({
               </button>
 
               <div className="h-px bg-brand-border/50" />
+
+              {student && (
+                <>
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full flex items-center justify-between group text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center text-red-500">
+                        <LogOut size={20} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-brand-text text-sm group-hover:text-red-500 transition-colors">Logout Profile</p>
+                        <p className="text-[11px] text-brand-muted">Log out of student identity ({student.name})</p>
+                      </div>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-all">
+                      <LogOut size={16} />
+                    </div>
+                  </button>
+
+                  <div className="h-px bg-brand-border/50" />
+                </>
+              )}
             </div>
           </div>
         </motion.div>
@@ -726,12 +1038,11 @@ export default function Home({
             initial={{ y: 100 }}
             animate={{ y: 0 }}
             exit={{ y: 100 }}
-            className="fixed bottom-6 left-6 right-6 z-[200] bg-brand-surface/80 backdrop-blur-xl border border-brand-border/50 shadow-2xl rounded-[2rem]"
+            className="fixed bottom-6 left-6 right-6 z-[200] bg-brand-surface/90 backdrop-blur-xl border border-brand-border/45 shadow-2xl rounded-[2rem] p-1.5"
           >
-            <div className="flex justify-around items-center p-3">
+            <div className="flex justify-around items-center">
               {[
                 { id: 'home', label: 'Home', icon: HomeIcon, action: () => { setActiveTab('home'); setSelectedClass(null); } },
-                { id: 'menu', label: 'Menu', icon: MoreHorizontal, action: () => setIsSidebarOpen(true) },
                 { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
               ].map((tab) => (
                 <button
@@ -740,12 +1051,14 @@ export default function Home({
                     rippleEffect(e);
                     tab.action();
                   }}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all ${
-                    activeTab === tab.id ? 'bg-brand-accent text-white shadow-xl shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-text'
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-[22px] transition-all duration-200 border ${
+                    activeTab === tab.id 
+                      ? 'bg-[#FF6B2C]/10 border-[#FF6B2C]/20 text-[#FF6B2C] shadow-sm font-bold scale-[1.02]' 
+                      : 'text-brand-muted hover:text-brand-text border-transparent'
                   }`}
                 >
-                  <tab.icon size={16} />
-                  {activeTab === tab.id && <span className="text-[9px] font-black uppercase tracking-widest">{tab.label}</span>}
+                  <tab.icon size={15} />
+                  {activeTab === tab.id && <span className="text-[10px] font-bold uppercase tracking-wider font-display">{tab.label}</span>}
                 </button>
               ))}
             </div>

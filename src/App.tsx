@@ -399,7 +399,7 @@ function AppContent() {
         );
       case 'groupwork':
         return (
-          <Suspense fallback={<LoadingFallback text="Entering My Work..." />}>
+          <Suspense fallback={<LoadingFallback text="Entering Games..." />}>
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}

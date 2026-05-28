@@ -1150,8 +1150,8 @@ export const StudentCompetitionLobby: React.FC<{
           <ChevronRight className="rotate-180" size={20} />
         </button>
         <div>
-          <h2 className="text-xl font-bold uppercase tracking-tight">My Work</h2>
-          <p className="text-[10px] font-semibold text-brand-muted uppercase tracking-wider mt-1">View your assigned tasks and projects</p>
+          <h2 className="text-xl font-bold uppercase tracking-tight">Games</h2>
+          <p className="text-[10px] font-semibold text-brand-muted uppercase tracking-wider mt-1">View active duels, speed challenges, and fun tasks</p>
         </div>
       </div>
 
@@ -1203,7 +1203,7 @@ export const StudentCompetitionLobby: React.FC<{
           className="w-full bg-brand-text text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
         >
           {loading ? <Loader2 className="animate-spin" size={18} /> : <Users size={18} />}
-          Find My Work
+          Find Games
         </button>
       </div>
 
@@ -1213,12 +1213,12 @@ export const StudentCompetitionLobby: React.FC<{
         ) : !hasSearched ? (
           <div className="py-20 text-center bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] space-y-4">
             <Search size={48} className="mx-auto text-brand-muted/20" />
-            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">Search for your teacher's work</p>
+            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">Search for your teacher's games</p>
           </div>
         ) : competitions.length === 0 ? (
           <div className="py-20 text-center bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] space-y-4">
             <Sparkles size={48} className="mx-auto text-brand-muted/20" />
-            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">No active work found</p>
+            <p className="text-brand-muted font-bold text-xs uppercase tracking-wider">No active games found</p>
           </div>
         ) : (
           competitions.map(comp => (

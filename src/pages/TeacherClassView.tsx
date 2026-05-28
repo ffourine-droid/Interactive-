@@ -16,13 +16,16 @@ import {
   Settings,
   ListTodo,
   Save,
-  Swords
+  Swords,
+  FolderOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { ParentCodeTable } from '../components/ParentCodeTable';
 import { StudentManager } from '../components/StudentManager';
 import { TeacherCompetitionManager } from '../components/TeacherCompetitionManager';
+import { TeacherMaterialsUpload } from '../components/TeacherMaterialsUpload';
+import { MaterialsList } from '../components/MaterialsList';
 
 interface Assignment {
   id: string;
@@ -85,7 +88,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [exams, setExams] = useState<any[]>([]);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'groupwork'>('assignments');
+  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'groupwork' | 'materials'>('assignments');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [selectedExamAttempt, setSelectedExamAttempt] = useState<any | null>(null);
   const [gradingExam, setGradingExam] = useState(false);
   const [showParentCodes, setShowParentCodes] = useState(false);
@@ -309,6 +313,13 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                 Groups
               </button>
               <button 
+                onClick={() => setViewMode('materials')}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 whitespace-nowrap ${viewMode === 'materials' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <FolderOpen size={14} />
+                Materials
+              </button>
+              <button 
                 onClick={() => setViewMode('students')}
                 className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 whitespace-nowrap ${viewMode === 'students' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
               >
@@ -318,7 +329,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             </div>
           </div>
 
-          {viewMode !== 'students' && (
+          {viewMode !== 'students' && viewMode !== 'materials' && (
             <div className="flex bg-brand-surface border border-brand-border p-2 rounded-2xl justify-end gap-2 overflow-x-auto no-scrollbar">
               <button 
                 onClick={() => onAddAssignment(classId)}
@@ -482,6 +493,31 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                 );
               })
             )}
+          </div>
+        ) : viewMode === 'materials' ? (
+          <div className="space-y-6">
+            <TeacherMaterialsUpload 
+              teacherId={teacher?.id || ''}
+              classId={classId}
+              grade={assignments[0]?.grade || students[0]?.grade || 'Grade 7'}
+              subject={assignments[0]?.subject || 'General'}
+              onUploaded={() => setRefreshKey(prev => prev + 1)}
+            />
+            
+            <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6.5 md:p-8 shadow-sm">
+              <div className="flex items-center justify-between mb-6 px-1.5">
+                <div>
+                  <h3 className="font-display text-base font-bold text-brand-text">Shared Class Materials</h3>
+                  <p className="text-[10px] text-brand-muted font-bold uppercase tracking-wider mt-0.5">Documents visible to students in this class</p>
+                </div>
+              </div>
+              <MaterialsList 
+                teacherId={teacher?.id || ''}
+                classId={classId}
+                isTeacher={true}
+                refreshKey={refreshKey}
+              />
+            </div>
           </div>
         ) : (
           <>

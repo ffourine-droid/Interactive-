@@ -80,9 +80,8 @@ export default function CommunityPage({ onBack }: CommunityPageProps) {
     if (!student) return;
     setLoading(true);
     try {
-      // Find boards using student grade (e.g. "Grade 7") or class_id if explicitly mapped
-      const classKey = student.grade || 'Grade 7';
-      const fetched = await communityService.getBoards(classKey);
+      // Fetch all boards across all grades combined so students can learn from each other
+      const fetched = await communityService.getAllBoards();
       setBoards(fetched || []);
       if (fetched && fetched.length > 0) {
         setSelectedBoard(fetched[0]);
@@ -312,7 +311,7 @@ export default function CommunityPage({ onBack }: CommunityPageProps) {
               {selectedPost ? 'Post Discussion' : 'School Forum'}
             </h1>
             <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mt-1">
-              {selectedPost ? 'Back to Board' : `${student?.grade || 'AziLearn'} CBC Forum`}
+              {selectedPost ? 'Back to Board' : 'All-Grades Combined Forum'}
             </p>
           </div>
         </div>

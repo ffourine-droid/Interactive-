@@ -148,7 +148,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
     return (
       <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center">
         <Loader2 className="animate-spin text-brand-accent mb-4" size={40} />
-        <p className="text-xs font-black text-brand-muted uppercase tracking-widest">Loading Classwork Results...</p>
+        <p className="text-xs font-black text-brand-muted uppercase tracking-widest">Loading Assignment Results...</p>
       </div>
     );
   }
@@ -162,7 +162,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
           </button>
           <div>
             <h1 className="font-sans font-bold text-xl text-brand-text truncate">{assignment.title}</h1>
-            <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Classwork Results • {assignment.subject}</p>
+            <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Assignment Results • {assignment.subject}</p>
           </div>
         </div>
 
@@ -304,7 +304,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                   <button onClick={() => setSelectedSubmission(null)} className="p-2 hover:bg-brand-bg rounded-full text-brand-muted"><ArrowLeft size={20}/></button>
                   <div>
                     <h2 className="font-bold text-lg text-brand-text">{selectedSubmission.student_name}</h2>
-                    <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Reviewing Classwork</p>
+                    <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Reviewing Assignments</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
