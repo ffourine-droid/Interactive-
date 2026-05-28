@@ -46,6 +46,7 @@ export default function PlayerSetup({ onComplete }: PlayerSetupProps) {
           grade: `Grade ${existing.grade}`
         };
         localStorage.setItem('azilearn_player', JSON.stringify({ username: matchedPlayer.username, grade: matchedPlayer.grade, id: matchedPlayer.id }));
+        localStorage.setItem('azilearn_arena_player', JSON.stringify({ username: matchedPlayer.username, grade: existing.grade, id: matchedPlayer.id }));
         onComplete(matchedPlayer);
         return;
       }
@@ -70,6 +71,7 @@ export default function PlayerSetup({ onComplete }: PlayerSetupProps) {
           grade: `Grade ${inserted.grade}`
         };
         localStorage.setItem('azilearn_player', JSON.stringify({ username: newPlayer.username, grade: newPlayer.grade, id: newPlayer.id }));
+        localStorage.setItem('azilearn_arena_player', JSON.stringify({ username: newPlayer.username, grade: inserted.grade, id: newPlayer.id }));
         onComplete(newPlayer);
       }
     } catch (err: any) {

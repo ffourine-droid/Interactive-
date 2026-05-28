@@ -155,20 +155,21 @@ export default function GroupBattle({ roomCode, isHost, player, onBack }: GroupB
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
-        table: 'group_battle_rooms',
-        filter: `room_code=eq.${roomCode}`
+        table: 'group_battle_rooms'
       }, (payload: any) => {
         const updated = payload.new;
-        setRoom(updated);
-        setStatus(updated.status);
-        
-        // Reset timers and feedback when transitioning to next question index
-        if (updated.current_question_index !== currentQIndex) {
-          setCurrentQIndex(updated.current_question_index);
-          setTimerLeft(20);
-          setIsTimeOut(false);
-          setSelectedOpt(null);
-          setFeedback(null);
+        if (updated && updated.room_code === roomCode) {
+          setRoom(updated);
+          setStatus(updated.status);
+          
+          // Reset timers and feedback when transitioning to next question index
+          if (updated.current_question_index !== currentQIndex) {
+            setCurrentQIndex(updated.current_question_index);
+            setTimerLeft(20);
+            setIsTimeOut(false);
+            setSelectedOpt(null);
+            setFeedback(null);
+          }
         }
       })
       .subscribe();
@@ -179,10 +180,14 @@ export default function GroupBattle({ roomCode, isHost, player, onBack }: GroupB
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'group_battle_players',
-        filter: `room_code=eq.${roomCode}`
-      }, () => {
-        fetchParticipants();
+        table: 'group_battle_players'
+      }, (payload: any) => {
+        const updated = payload.new;
+        const oldVal = payload.old;
+        const isMatch = (updated && updated.room_code === roomCode) || (oldVal && oldVal.room_code === roomCode);
+        if (isMatch) {
+          fetchParticipants();
+        }
       })
       .subscribe();
   };

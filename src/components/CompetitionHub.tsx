@@ -34,11 +34,16 @@ export default function CompetitionHub({ onBack, defaultTab = 'math_duel' }: { o
   const [incomingChallenge, setIncomingChallenge] = useState<any>(null);
 
   useEffect(() => {
-    // 1. Get identity
-    const saved = localStorage.getItem('azilearn_player');
+    // 1. Get identity (fallback to azilearn_arena_player if azilearn_player doesn't exist)
+    const saved = localStorage.getItem('azilearn_player') || localStorage.getItem('azilearn_arena_player');
     if (saved) {
       try {
-        setPlayer(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setPlayer({
+          id: parsed.id || '',
+          username: parsed.username || '',
+          grade: typeof parsed.grade === 'number' ? `Grade ${parsed.grade}` : parsed.grade || 'Grade 6'
+        });
       } catch (e) {
         console.warn(e);
       }
@@ -49,23 +54,26 @@ export default function CompetitionHub({ onBack, defaultTab = 'math_duel' }: { o
   useEffect(() => {
     if (!player) return;
 
+    // Run first check immediately on load
+    checkForIncomingChallenges();
+
     const interval = setInterval(() => {
       checkForIncomingChallenges();
     }, 4000); // Poll challenges check every 4 seconds
 
     return () => clearInterval(interval);
-  }, [player]);
+  }, [player, activeMatch]);
 
   const checkForIncomingChallenges = async () => {
     if (!player || activeMatch) return;
 
     try {
-      // Look for waiting rooms where player2_username is this player's username
+      // Look for waiting rooms where player2_username is this player's username case-insensitively
       // Check math duel rooms
       const { data: mathChalls } = await supabase
         .from('math_duel_rooms')
         .select('*')
-        .eq('player2_username', player.username)
+        .ilike('player2_username', player.username)
         .eq('status', 'waiting')
         .limit(1);
 
@@ -81,7 +89,7 @@ export default function CompetitionHub({ onBack, defaultTab = 'math_duel' }: { o
       const { data: speedChalls } = await supabase
         .from('speed_round_rooms')
         .select('*')
-        .eq('player2_username', player.username)
+        .ilike('player2_username', player.username)
         .eq('status', 'waiting')
         .limit(1);
 

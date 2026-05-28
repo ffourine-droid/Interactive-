@@ -132,16 +132,17 @@ export default function SpeedRound({ roomCode, isHost, player, onBack }: SpeedRo
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
-        table: 'speed_round_rooms',
-        filter: `room_code=eq.${roomCode}`
+        table: 'speed_round_rooms'
       }, (payload: any) => {
         const updated = payload.new;
-        setRoom(updated);
-        setP1Score(updated.player1_score || 0);
-        setP2Score(updated.player2_score || 0);
-        
-        if (updated.status === 'finished' && status !== 'finished') {
-          setStatus('finished');
+        if (updated && updated.room_code === roomCode) {
+          setRoom(updated);
+          setP1Score(updated.player1_score || 0);
+          setP2Score(updated.player2_score || 0);
+          
+          if (updated.status === 'finished' && status !== 'finished') {
+            setStatus('finished');
+          }
         }
       })
       .subscribe();

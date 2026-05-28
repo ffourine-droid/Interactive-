@@ -302,7 +302,11 @@ export default function MatchmakingModal({ gameType, mode, player, onClose, onMa
         .limit(6);
 
       if (error) throw error;
-      setSearchResults(data || []);
+      // Filter out current user case-insensitively just in case casing differs
+      const filtered = (data || []).filter(
+        (opp) => opp.username.toLowerCase() !== player.username.toLowerCase()
+      );
+      setSearchResults(filtered);
     } catch (err) {
       console.error(err);
     } finally {
@@ -334,17 +338,16 @@ export default function MatchmakingModal({ gameType, mode, player, onClose, onMa
 
       if (error) throw error;
 
-      // Listen for acceptance
+      // Listen for acceptance - subscribe table-wide to bypass replica identity filter issues
       roomSubRef.current = supabase
         .channel(`challenge_accept:${code}`)
         .on('postgres_changes', {
           event: 'UPDATE',
           schema: 'public',
-          table: targetTable,
-          filter: `room_code=eq.${code}`
+          table: targetTable
         }, (payload: any) => {
           const updated = payload.new;
-          if (updated.status === 'active') {
+          if (updated && updated.room_code === code && updated.status === 'active') {
             setMatchedOpponent(challengedOpponent);
             triggerCountdown(code, true);
           }

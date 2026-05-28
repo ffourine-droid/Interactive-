@@ -30,7 +30,6 @@ export default function MathDuel({ roomCode, isHost, player, onBack }: MathDuelP
   const [playerInput, setPlayerInput] = useState('');
   const [isRoundOver, setIsRoundOver] = useState(false);
   const [roundWinner, setRoundWinner] = useState<string | null>(null);
-  const [roundTimer, setRoundTimer] = useState(30);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
 
@@ -38,7 +37,6 @@ export default function MathDuel({ roomCode, isHost, player, onBack }: MathDuelP
   const [xpAwarded, setXpAwarded] = useState(false);
 
   const channelRef = useRef<any>(null);
-  const timerIntervalRef = useRef<any>(null);
 
   const opponentRoleName = isHost ? 'player2_username' : 'player1_username';
   const myRoleName = isHost ? 'player1_username' : 'player2_username';
@@ -51,41 +49,8 @@ export default function MathDuel({ roomCode, isHost, player, onBack }: MathDuelP
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
       }
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-      }
     };
   }, [roomCode]);
-
-  // Synchronize timer counting
-  useEffect(() => {
-    if (status === 'active' && !isRoundOver) {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-
-      timerIntervalRef.current = setInterval(() => {
-        setRoundTimer((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerIntervalRef.current);
-            handleRoundTimeout();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(timerIntervalRef.current);
-  }, [status, currentRound, isRoundOver]);
-
-  // Audio Transaction Tick trigger on countdown intervals
-  useEffect(() => {
-    if (status === 'active' && !isRoundOver && roundTimer > 0) {
-      if (roundTimer <= 5) {
-        playHurry();
-      } else {
-        playTick();
-      }
-    }
-  }, [roundTimer, status, isRoundOver]);
 
   // Read current player values
   const getOpponentUsername = () => {
@@ -133,18 +98,19 @@ export default function MathDuel({ roomCode, isHost, player, onBack }: MathDuelP
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
-        table: 'math_duel_rooms',
-        filter: `room_code=eq.${roomCode}`
+        table: 'math_duel_rooms'
       }, (payload: any) => {
         const updated = payload.new;
-        setRoom(updated);
-        setQuestions(updated.questions || []);
-        setCurrentRound(updated.current_round || 1);
-        setP1Score(updated.player1_score || 0);
-        setP2Score(updated.player2_score || 0);
-        setStatus(updated.status);
-        
-        syncRoundState(updated);
+        if (updated && updated.room_code === roomCode) {
+          setRoom(updated);
+          setQuestions(updated.questions || []);
+          setCurrentRound(updated.current_round || 1);
+          setP1Score(updated.player1_score || 0);
+          setP2Score(updated.player2_score || 0);
+          setStatus(updated.status);
+          
+          syncRoundState(updated);
+        }
       })
       .subscribe();
   };
@@ -163,35 +129,9 @@ export default function MathDuel({ roomCode, isHost, player, onBack }: MathDuelP
       // Fresh Round
       setIsRoundOver(false);
       setRoundWinner(null);
-      setRoundTimer(30);
       setPlayerInput('');
       setFeedback(null);
     }
-  };
-
-  const handleRoundTimeout = async () => {
-    if (!isHost) return; // Host controls authoritative state increments
-    if (isRoundOver) return;
-
-    // Conclude round as a draw
-    const currentAnswers = [...(room?.answers || [])];
-    const rIdx = currentRound - 1;
-    currentAnswers[rIdx] = { round: currentRound, winner: 'Draw', correct_answer: questions[rIdx]?.correct_answer };
-
-    const payload: any = {
-      answers: currentAnswers
-    };
-
-    if (currentRound >= 5) {
-      payload.status = 'finished';
-    } else {
-      payload.current_round = currentRound + 1;
-    }
-
-    await supabase
-      .from('math_duel_rooms')
-      .update(payload)
-      .eq('room_code', roomCode);
   };
 
   const handleInputChar = (char: string) => {
@@ -436,8 +376,8 @@ export default function MathDuel({ roomCode, isHost, player, onBack }: MathDuelP
             </div>
 
             <div className="flex flex-col items-center space-y-1">
-              <span className="text-[10px] font-black text-[#FF6B00] uppercase tracking-widest bg-[#FF6B00]/10 px-2.5 py-1 rounded-full border border-[#FF6B00]/20 flex items-center gap-1">
-                <Timer size={10} className="animate-pulse" /> {roundTimer}s
+              <span className="text-[10px] font-black text-[#FF6B00] uppercase tracking-widest bg-[#FF6B00]/10 px-2.5 py-1 rounded-full border border-[#FF6B00]/20 flex items-center gap-1 animate-pulse">
+                <Swords size={10} className="text-[#FF6B00]" /> Battle Active
               </span>
               <span className="text-[9px] font-black uppercase text-gray-400">Round {currentRound} of 5</span>
             </div>
