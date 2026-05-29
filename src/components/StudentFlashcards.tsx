@@ -12,9 +12,18 @@ import {
   Trophy, 
   CheckCircle2, 
   Inbox,
-  RefreshCw
+  RefreshCw,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { flashcardService, Flashcard } from '../services/flashcardService';
+import { 
+  playSuccess, 
+  playFailure, 
+  playTransition, 
+  areSoundEffectsEnabled, 
+  setSoundEffectsEnabled 
+} from '../utils/soundEffects';
 
 interface StudentFlashcardsProps {
   onBack: () => void;
@@ -24,6 +33,8 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTopic, setSelectedTopic] = useState<{ subject: string; topic: string; grade: number } | null>(null);
+
+  const [soundEnabled, setSoundEnabled] = useState(areSoundEffectsEnabled());
 
   // Set default grade filter to player's grade, or 'All' if none has set yet
   const getPlayerInitialGrade = (): string => {
@@ -48,6 +59,11 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
   const [masteredCount, setMasteredCount] = useState(0);
   const [sessionAnswers, setSessionAnswers] = useState<{ question: string; correct: boolean }[]>([]);
   const [sessionComplete, setSessionComplete] = useState(false);
+
+  const handleFlip = () => {
+    setIsFlipped(prev => !prev);
+    playTransition();
+  };
 
   // Load cards on startup
   useEffect(() => {
@@ -115,6 +131,7 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
     setMasteredCount(0);
     setSessionAnswers([]);
     setSessionComplete(false);
+    playTransition();
   };
 
   // Log answer feedback
@@ -123,6 +140,9 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
     setSessionAnswers(prev => [...prev, { question: currentCard.question, correct: gotIt }]);
     if (gotIt) {
       setMasteredCount(prev => prev + 1);
+      playSuccess();
+    } else {
+      playFailure();
     }
 
     // Advance index or complete
@@ -133,6 +153,9 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
       }, 250); // slight delay to reset flip gracefully
     } else {
       setSessionComplete(true);
+      setTimeout(() => {
+        playSuccess();
+      }, 400); // celebratory double sound on completion
     }
   };
 
@@ -144,12 +167,14 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
     setMasteredCount(0);
     setSessionAnswers([]);
     setSessionComplete(false);
+    playTransition();
   };
 
   const handleExitDeck = () => {
     setSelectedTopic(null);
     setActiveDeck([]);
     setSessionComplete(false);
+    playTransition();
   };
 
   return (
@@ -158,17 +183,36 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
       {!selectedTopic ? (
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onBack}
-              className="w-10 h-10 flex items-center justify-center bg-brand-surface hover:bg-brand-accent/5 border border-brand-border rounded-xl transition-all active:scale-95"
-            >
-              <ArrowLeft size={18} className="text-brand-text" />
-            </button>
-            <div>
-              <h1 className="text-2xl font-black text-brand-text tracking-tight uppercase">📚 Study Flashcards</h1>
-              <p className="text-xs text-brand-muted font-bold">Select a topic from your teacher's syllabus and test your active recall.</p>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={onBack}
+                className="w-10 h-10 flex items-center justify-center bg-brand-surface hover:bg-brand-accent/5 border border-brand-border rounded-xl transition-all active:scale-95"
+              >
+                <ArrowLeft size={18} className="text-brand-text" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-black text-brand-text tracking-tight uppercase">📚 Study Flashcards</h1>
+                <p className="text-xs text-brand-muted font-bold">Select a topic from your teacher's syllabus and test your active recall.</p>
+              </div>
             </div>
+
+            {/* Tactile Sound FX Switcher */}
+            <button
+              onClick={() => {
+                const updated = !soundEnabled;
+                setSoundEnabled(updated);
+                setSoundEffectsEnabled(updated);
+              }}
+              className="w-10 h-10 flex items-center justify-center bg-brand-surface hover:bg-brand-accent/5 border border-brand-border rounded-xl transition-all active:scale-95 text-brand-text cursor-pointer"
+              title={soundEnabled ? "Mute Flashcard Sounds" : "Unmute Flashcard Sounds"}
+            >
+              {soundEnabled ? (
+                <Volume2 size={18} className="text-emerald-500 animate-pulse" />
+              ) : (
+                <VolumeX size={18} className="text-brand-muted" />
+              )}
+            </button>
           </div>
 
           {loading ? (
@@ -327,7 +371,7 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
               {/* Card Workspace (Tactile Flip interaction) */}
               <div 
                 className="relative h-[250px] w-full [perspective:1000px] cursor-pointer group"
-                onClick={() => setIsFlipped(!isFlipped)}
+                onClick={handleFlip}
               >
                 <div 
                   className="relative w-full h-full transition-transform duration-500 shadow-xl rounded-[2.5rem]"
@@ -400,7 +444,7 @@ export const StudentFlashcards: React.FC<StudentFlashcardsProps> = ({ onBack }) 
                     className="text-center"
                   >
                     <button 
-                      onClick={() => setIsFlipped(true)}
+                      onClick={handleFlip}
                       className="inline-flex items-center gap-2 text-[10px] font-black text-brand-accent uppercase tracking-widest px-4 py-2 bg-brand-accent/5 hover:bg-brand-accent/15 border border-brand-accent/10 rounded-full transition-all duration-300 animate-bounce cursor-pointer"
                     >
                       <RotateCw size={12} /> Click Card to Reveal Answer
