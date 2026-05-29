@@ -7,6 +7,7 @@ export interface Flashcard {
   topic: string;
   question: string;
   answer: string;
+  difficulty?: 'easy' | 'medium' | 'hard' | string;
   created_at?: string;
 }
 
@@ -17,7 +18,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 8,
     topic: "The Digestive System",
     question: "What is the role of the stomach in digestion?",
-    answer: "The stomach churns food and mixes it with gastric juices to break it down into a semi-liquid mixture called chyme."
+    answer: "The stomach churns food and mixes it with gastric juices to break it down into a semi-liquid mixture called chyme.",
+    difficulty: "medium"
   },
   {
     id: "seed-2",
@@ -25,7 +27,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 8,
     topic: "The Digestive System",
     question: "Where does most nutrient absorption take place?",
-    answer: "Most nutrient absorption takes place in the small intestine, specifically across its highly folded inner wall."
+    answer: "Most nutrient absorption takes place in the small intestine, specifically across its highly folded inner wall.",
+    difficulty: "hard"
   },
   {
     id: "seed-3",
@@ -33,7 +36,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 8,
     topic: "The Digestive System",
     question: "Which digestive juice is produced by the liver and stored in the gallbladder?",
-    answer: "Bile is produced by the liver and stored in the gallbladder. It helps emulsify (break down) fats into tiny droplets."
+    answer: "Bile is produced by the liver and stored in the gallbladder. It helps emulsify (break down) fats into tiny droplets.",
+    difficulty: "easy"
   },
   {
     id: "seed-4",
@@ -41,7 +45,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 8,
     topic: "The Digestive System",
     question: "What are the finger-like projections in the small intestine called?",
-    answer: "Villi. They significantly increase the absorption surface area and are packed with blood vessels to carry nutrients to the rest of the body."
+    answer: "Villi. They significantly increase the absorption surface area and are packed with blood vessels to carry nutrients to the rest of the body.",
+    difficulty: "medium"
   },
   {
     id: "seed-5",
@@ -49,7 +54,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 8,
     topic: "The Digestive System",
     question: "Which organ is responsible for absorbing water and minerals back into the body?",
-    answer: "The large intestine (colon) absorbs water, salts, and some vitamins from undigested waste before it is eliminated."
+    answer: "The large intestine (colon) absorbs water, salts, and some vitamins from undigested waste before it is eliminated.",
+    difficulty: "easy"
   },
   {
     id: "seed-6",
@@ -57,7 +63,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 7,
     topic: "Photosynthesis",
     question: "What are the three main requirements for photosynthesis?",
-    answer: "Water, carbon dioxide, and sunlight. Water is absorbed from the soil, carbon dioxide from the air, and sunlight by chlorophyll."
+    answer: "Water, carbon dioxide, and sunlight. Water is absorbed from the soil, carbon dioxide from the air, and sunlight by chlorophyll.",
+    difficulty: "easy"
   },
   {
     id: "seed-7",
@@ -65,7 +72,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 7,
     topic: "Photosynthesis",
     question: "What green pigment absorbs sunlight for photosynthesis?",
-    answer: "Chlorophyll, which is found inside the chloroplasts of green plant cells, especially in the leaves."
+    answer: "Chlorophyll, which is found inside the chloroplasts of green plant cells, especially in the leaves.",
+    difficulty: "easy"
   },
   {
     id: "seed-8",
@@ -73,7 +81,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 7,
     topic: "Photosynthesis",
     question: "What is the primary waste gas produced during photosynthesis?",
-    answer: "Oxygen is the main gaseous byproduct, released into the atmosphere through the microscopic leaf pores called stomata."
+    answer: "Oxygen is the main gaseous byproduct, released into the atmosphere through the microscopic leaf pores called stomata.",
+    difficulty: "medium"
   },
   {
     id: "seed-9",
@@ -81,7 +90,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 9,
     topic: "Atoms",
     question: "What are the three subatomic particles that make up an atom?",
-    answer: "Protons (positive charge, inside the nucleus), Neutrons (neutral, inside the nucleus), and Electrons (negative, orbiting the nucleus)."
+    answer: "Protons (positive charge, inside the nucleus), Neutrons (neutral, inside the nucleus), and Electrons (negative, orbiting the nucleus).",
+    difficulty: "easy"
   },
   {
     id: "seed-10",
@@ -89,7 +99,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 9,
     topic: "Atoms",
     question: "Where is the mass of an atom concentrated?",
-    answer: "In the central nucleus, which contains protons and neutrons. Electrons are extremely light and orbit in the outer shells."
+    answer: "In the central nucleus, which contains protons and neutrons. Electrons are extremely light and orbit in the outer shells.",
+    difficulty: "medium"
   },
   {
     id: "seed-11",
@@ -97,7 +108,8 @@ const DEFAULT_FLASHCARDS: Flashcard[] = [
     grade: 9,
     topic: "Atoms",
     question: "What determines the atomic number of an element?",
-    answer: "The number of protons in its nucleus. Every element on the periodic table has a unique proton number."
+    answer: "The number of protons in its nucleus. Every element on the periodic table has a unique proton number.",
+    difficulty: "hard"
   }
 ];
 
@@ -265,6 +277,7 @@ CREATE TABLE IF NOT EXISTS flashcards (
   topic TEXT NOT NULL,
   question TEXT NOT NULL,
   answer TEXT NOT NULL,
+  difficulty TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

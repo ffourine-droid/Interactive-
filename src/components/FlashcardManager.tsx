@@ -116,15 +116,39 @@ export const FlashcardManager: React.FC = () => {
       const validated: Omit<Flashcard, 'id'>[] = [];
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        if (!item.question || !item.answer) {
-          throw new Error(`Item ${i + 1} is missing a required "question" or "answer" field.`);
+        if (!item.subject) {
+          throw new Error(`Item ${i + 1} is missing the required "subject" field.`);
+        }
+        if (item.grade === undefined || item.grade === null) {
+          throw new Error(`Item ${i + 1} is missing the required "grade" field.`);
+        }
+        const gradeNum = parseInt(item.grade, 10);
+        if (isNaN(gradeNum)) {
+          throw new Error(`Item ${i + 1}'s "grade" must be a valid number.`);
+        }
+        if (!item.topic) {
+          throw new Error(`Item ${i + 1} is missing the required "topic" field.`);
+        }
+        if (!item.question) {
+          throw new Error(`Item ${i + 1} is missing the required "question" field.`);
+        }
+        if (!item.answer) {
+          throw new Error(`Item ${i + 1} is missing the required "answer" field.`);
+        }
+        if (!item.difficulty) {
+          throw new Error(`Item ${i + 1} is missing the required "difficulty" field (values can be "easy", "medium", or "hard" only).`);
+        }
+        const diff = item.difficulty.toLowerCase().trim();
+        if (diff !== 'easy' && diff !== 'medium' && diff !== 'hard') {
+          throw new Error(`Item ${i + 1}'s "difficulty" must be exactly "easy", "medium", or "hard". Found "${item.difficulty}".`);
         }
         validated.push({
-          subject: item.subject || 'General',
-          grade: item.grade ? parseInt(item.grade) : 8,
-          topic: item.topic || 'General Topic',
+          subject: item.subject.trim(),
+          grade: gradeNum,
+          topic: item.topic.trim(),
           question: item.question.trim(),
-          answer: item.answer.trim()
+          answer: item.answer.trim(),
+          difficulty: diff
         });
       }
 
@@ -159,24 +183,35 @@ export const FlashcardManager: React.FC = () => {
   };
 
   // Generate template query
-  const masterPromptTemplate = `Generate 15 flashcards for Grade ${promptGrade} ${promptSubject} based on the Kenya CBC curriculum.
-Topic: ${promptTopic}
+  const masterPromptTemplate = `You are a Kenya CBC curriculum expert helping build an EdTech flashcard app.
 
-Return a JSON array. Each object must have exactly these fields:
-- "subject": "${promptSubject}"
-- "grade": ${promptGrade}
-- "topic": "${promptTopic}"
-- "question": a clear, concise question
-- "answer": a short, accurate answer (1-3 sentences max)
+Generate 15 flashcards for the following:
+- Subject: ${promptSubject}
+- Grade: ${promptGrade}
+- Topic: ${promptTopic}
 
-Requirements:
-- Questions must be appropriate for Grade ${promptGrade} students in Kenya
-- Cover a mix of definitions, concepts, and applications
-- Use simple English that CBC students understand
-- Answers must be factually accurate per the Kenya CBC syllabus
-- No duplicate questions
+Return a JSON array. Each object must have EXACTLY these fields:
+{
+  "subject": "${promptSubject}",
+  "grade": ${promptGrade},
+  "topic": "${promptTopic}",
+  "question": "...",
+  "answer": "...",
+  "difficulty": "easy" or "medium" or "hard"
+}
 
-Return ONLY the JSON array. Nothing else.`;
+Rules:
+- difficulty "easy" = definition or recall questions
+- difficulty "medium" = explain or describe questions  
+- difficulty "hard" = apply, analyse, or calculate questions
+- Include a mix: 5 easy, 6 medium, 4 hard
+- Answers must be 1 to 3 sentences maximum
+- Language must suit Grade ${promptGrade} CBC students in Kenya
+- Questions must be unique, no repetition
+- Based strictly on the Kenya CBC syllabus
+
+Return ONLY the raw JSON array.
+No markdown. No backticks. No explanation. Just the JSON.`;
 
   const copyPromptToClipboard = () => {
     navigator.clipboard.writeText(masterPromptTemplate);
@@ -323,6 +358,17 @@ Return ONLY the JSON array. Nothing else.`;
                           <span className="text-[8px] font-black tracking-widest uppercase bg-teal-500/10 text-teal-600 border border-teal-500/20 px-2 py-0.5 rounded-full">
                             Grade {card.grade}
                           </span>
+                          {card.difficulty && (
+                            <span className={`text-[8px] font-black tracking-widest uppercase border px-2 py-0.5 rounded-full ${
+                              card.difficulty === 'easy' 
+                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                : card.difficulty === 'hard'
+                                  ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                                  : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                            }`}>
+                              {card.difficulty}
+                            </span>
+                          )}
                         </div>
                         
                         <button
@@ -351,73 +397,251 @@ Return ONLY the JSON array. Nothing else.`;
 
         {/* Bulk Upload JSON tab */}
         {activeSubTab === 'upload' && (
-          <div className="space-y-6">
-            <div className="bg-brand-bg p-5 rounded-2xl border border-brand-border space-y-3">
-              <h3 className="text-xs font-black uppercase tracking-widest text-brand-text flex items-center gap-1.5">
-                <Upload size={14} className="text-brand-accent" /> Ready Your JSON File
-              </h3>
-              <p className="text-xs text-brand-muted leading-relaxed">
-                Paste the raw JSON Array generated from Google AI Studio. The tool automatically handles stripping off markdown delimiters like <code className="bg-brand-border/40 px-1 py-0.5 rounded">```json</code>.
-              </p>
-              
-              <textarea
-                value={jsonInput}
-                onChange={(e) => setJsonInput(e.target.value)}
-                rows={8}
-                placeholder={`[\n  {\n    "subject": "Biology",\n    "grade": 8,\n    "topic": "The Digestive System",\n    "question": "What is the role of the stomach?",\n    "answer": "The stomach churns food and mixes it with gastric juices."\n  }\n]`}
-                className="w-full bg-white dark:bg-brand-surface border border-brand-border rounded-xl p-4 font-mono text-xs text-brand-text focus:outline-none focus:border-brand-accent"
-              />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Column: Interactive Upload Box & Previews */}
+            <div className="lg:col-span-7 space-y-6">
+              <div className="bg-brand-bg p-5 rounded-2xl border border-brand-border space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-brand-text flex items-center gap-1.5">
+                    <Upload size={14} className="text-brand-accent" /> Ready Your JSON File
+                  </h3>
+                  <span className="text-[8px] font-black uppercase tracking-widest px-2.5 py-0.5 bg-brand-accent/10 text-brand-accent rounded-full border border-brand-accent/20">
+                    Ctrl+V Ready
+                  </span>
+                </div>
+                
+                <p className="text-xs text-brand-muted leading-relaxed font-bold">
+                  Paste the raw JSON Array generated from Google AI Studio. Markdown markers like <code className="bg-brand-border/40 px-1 py-0.5 rounded text-[10px] font-mono">```json</code> are automatically cleaned on validation.
+                </p>
+                
+                <textarea
+                  value={jsonInput}
+                  onChange={(e) => setJsonInput(e.target.value)}
+                  rows={9}
+                  placeholder={`[\n  {\n    "subject": "Biology",\n    "grade": 9,\n    "topic": "The Digestive System",\n    "question": "What is the role of the small intestine?",\n    "answer": "The small intestine absorbs digested nutrients into the bloodstream through finger-like projections called villi.",\n    "difficulty": "medium"\n  },\n  {\n    "subject": "Biology",\n    "grade": 9,\n    "topic": "The Digestive System",\n    "question": "What enzyme breaks down starch in the mouth?",\n    "answer": "Salivary amylase.",\n    "difficulty": "easy"\n  }\n]`}
+                  className="w-full bg-white dark:bg-brand-surface border border-brand-border rounded-xl p-4 font-mono text-xs text-brand-text focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent/30 transition-all placeholder:text-brand-muted/40 shadow-inner"
+                />
 
-              <div className="flex gap-2">
-                <button
-                  onClick={handleValidateJSON}
-                  className="px-4 py-2 bg-brand-text text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all cursor-pointer"
-                >
-                  Validate & Preview
-                </button>
-                {previewCards.length > 0 && (
+                <div className="flex gap-2">
                   <button
-                    onClick={handleSubmitBatch}
-                    disabled={isUploading}
-                    className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-115 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                    onClick={handleValidateJSON}
+                    className="px-4 py-2 bg-brand-text hover:bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-brand-accent/10 active:scale-95 transition-all cursor-pointer"
                   >
-                    {isUploading ? 'Uploading...' : `Upload ${previewCards.length} Cards`} <ArrowRight size={12} />
+                    Validate & Preview
                   </button>
+                  {previewCards.length > 0 && (
+                    <button
+                      onClick={handleSubmitBatch}
+                      disabled={isUploading}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-emerald-500/10 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      {isUploading ? 'Uploading...' : `Upload ${previewCards.length} Cards`} <ArrowRight size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {uploadError && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl flex items-start gap-2.5 text-xs font-bold leading-tight">
+                    <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-heavy uppercase block tracking-wider mb-0.5">Parse Failure</span>
+                      {uploadError}
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {uploadError && (
-                <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl flex items-start gap-2.5 text-xs font-bold leading-tight">
-                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-heavy uppercase block tracking-wider mb-0.5">Parse Failure</span>
-                    {uploadError}
+              {/* Validation Preview Deck */}
+              {previewCards.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1.5 leading-none">
+                      <Check size={16} /> Live Preview — ({previewCards.length} Cards Ready)
+                    </h3>
+                    <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 animate-pulse">
+                      Validated successfully
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border border-emerald-500/20 bg-emerald-500/5 p-4 rounded-3xl max-h-[480px] overflow-y-auto no-scrollbar">
+                    {previewCards.map((card, idx) => (
+                      <div key={idx} className="p-4 bg-white dark:bg-brand-surface rounded-2xl border border-brand-border hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-center gap-2 mb-2">
+                          <div className="flex flex-wrap gap-1">
+                            <span className="text-[8px] font-black bg-brand-accent/10 px-2 py-0.5 rounded-full border border-brand-accent/20 text-brand-accent">
+                              {card.subject}
+                            </span>
+                            <span className="text-[8px] font-black uppercase text-brand-muted italic px-1.5 py-0.5">
+                              G{card.grade}
+                            </span>
+                            {card.difficulty && (
+                              <span className={`text-[8px] font-all tracking-widest uppercase border px-2 py-0.5 rounded-full ${
+                                card.difficulty === 'easy' 
+                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                  : card.difficulty === 'hard'
+                                    ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                                    : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                              }`}>
+                                {card.difficulty}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[8px] font-black uppercase text-brand-muted/70 italic max-w-[80px] truncate">{card.topic}</span>
+                        </div>
+                        <h4 className="text-xs font-heavy text-brand-text font-black my-1">{card.question}</h4>
+                        <p className="text-[11px] font-bold text-brand-muted pl-2 border-l-2 border-brand-border italic mt-1 leading-normal">{card.answer}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Validation Preview Deck */}
-            {previewCards.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1.5 leading-none">
-                  <Check size={16} /> Ready to Upload — ({previewCards.length} Cards Found)
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-emerald-500/20 bg-emerald-500/5 p-4 rounded-3xl">
-                  {previewCards.map((card, idx) => (
-                    <div key={idx} className="p-4 bg-white dark:bg-brand-surface rounded-2xl border border-brand-border">
-                      <div className="flex justify-between items-center gap-2 mb-2">
-                        <span className="text-[8px] font-black bg-brand-accent/10 px-2 py-0.5 rounded-full border border-brand-accent/20 text-brand-accent">{card.subject}</span>
-                        <span className="text-[8px] font-black uppercase text-brand-muted italic">Grade {card.grade} · {card.topic}</span>
-                      </div>
-                      <h4 className="text-xs font-heavy text-brand-text font-black my-1">{card.question}</h4>
-                      <p className="text-[11px] font-bold text-brand-muted pl-2 border-l-2 border-brand-border italic">{card.answer}</p>
+            {/* Right Column: Expert Admin Upload Guide */}
+            <div className="lg:col-span-5 space-y-6">
+              {/* How it Works Module */}
+              <div className="border border-brand-border rounded-3xl p-5 bg-white dark:bg-brand-surface space-y-4 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-6 rounded-full bg-brand-accent" />
+                  <h4 className="text-xs font-black uppercase tracking-widest text-brand-text">How It Works</h4>
+                </div>
+                <div className="grid grid-cols-1 gap-2.5">
+                  {[
+                    { number: "1", text: "Open Google AI Studio" },
+                    { number: "2", text: "Paste the Expert Master prompt with grade, subject, and topic" },
+                    { number: "3", text: "Copy the output JSON array that AI yields" },
+                    { number: "4", text: "Click Bulk Upload on AziLearn and paste the JSON array" },
+                    { number: "5", text: "Verify with Preview, then submit!" },
+                    { number: "6", text: "Cards go live instantly for all CBC students" }
+                  ].map((step, idx) => (
+                    <div key={idx} className="flex gap-3 items-center text-xs font-bold text-brand-text">
+                      <span className="w-5 h-5 rounded-lg bg-brand-bg text-[10px] flex items-center justify-center font-black border border-brand-border text-brand-accent shrink-0 select-none">
+                        {step.number}
+                      </span>
+                      <p className="leading-tight">{step.text}</p>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
+
+              {/* Exact Rules Table */}
+              <div className="border border-brand-border rounded-3xl p-5 bg-white dark:bg-brand-surface space-y-3.5 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-6 rounded-full bg-teal-500" />
+                  <h4 className="text-xs font-black uppercase tracking-widest text-brand-text">Strict JSON Schema</h4>
+                </div>
+                
+                <div className="overflow-x-auto border border-brand-border rounded-2xl">
+                  <table className="w-full text-[10px] text-left">
+                    <thead>
+                      <tr className="bg-brand-bg font-black uppercase text-brand-muted border-b border-brand-border">
+                        <th className="p-2.5">Field</th>
+                        <th className="p-2.5">Type</th>
+                        <th className="p-2.5">Req</th>
+                        <th className="p-2.5">Allowed Values / Format</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-brand-border font-bold text-brand-text">
+                      <tr>
+                        <td className="p-2.5 font-mono text-xs text-brand-accent">subject</td>
+                        <td className="p-2.5 font-mono">text</td>
+                        <td className="p-2.5 text-emerald-500">✅</td>
+                        <td className="p-2.5">e.g. "Biology", "Mathematics"</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-mono text-xs text-brand-accent">grade</td>
+                        <td className="p-2.5 font-mono">number</td>
+                        <td className="p-2.5 text-emerald-500">✅</td>
+                        <td className="p-2.5">7, 8, 9, 10, 11, 12</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-mono text-xs text-brand-accent">topic</td>
+                        <td className="p-2.5 font-mono">text</td>
+                        <td className="p-2.5 text-emerald-500">✅</td>
+                        <td className="p-2.5">e.g. "Acids, Bases and Salts"</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-mono text-xs text-brand-accent">question</td>
+                        <td className="p-2.5 font-mono">text</td>
+                        <td className="p-2.5 text-emerald-500">✅</td>
+                        <td className="p-2.5">Unique questions from syllabus</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-mono text-xs text-brand-accent">answer</td>
+                        <td className="p-2.5 font-mono">text</td>
+                        <td className="p-2.5 text-emerald-500">✅</td>
+                        <td className="p-2.5">1-3 sentences maximum</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-mono text-xs text-brand-accent">difficulty</td>
+                        <td className="p-2.5 font-mono">text</td>
+                        <td className="p-2.5 text-emerald-500">✅</td>
+                        <td className="p-2.5">
+                          <code className="text-emerald-600 bg-emerald-500/5 px-1 py-0.5 rounded font-bold font-mono">easy</code>, 
+                          <code className="text-amber-600 bg-amber-500/5 px-1 py-0.5 rounded font-bold font-mono ml-1">medium</code>, 
+                          <code className="text-red-600 bg-red-500/5 px-1 py-0.5 rounded font-bold font-mono ml-1">hard</code>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Troubleshooting Diagnostics */}
+              <div className="border border-brand-border rounded-3xl p-5 bg-brand-bg/50 space-y-3 shadow-none">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-6 rounded-full bg-amber-500" />
+                  <h4 className="text-xs font-black uppercase tracking-widest text-brand-text">Troubleshooting Fixes</h4>
+                </div>
+                <div className="space-y-2.5 text-[11px] leading-snug font-bold">
+                  <div>
+                    <span className="text-brand-accent block font-black uppercase tracking-wider text-[9px] mb-0.5">⚠️ JSON contains Markdown Backticks</span>
+                    <p className="text-brand-muted">AziLearn handles and strips <code className="bg-brand-border/40 px-1 py-0.2 rounded font-mono text-[9px]">```json</code> delimiters automatically. No manual scrubbing needed.</p>
+                  </div>
+                  <div>
+                    <span className="text-brand-accent block font-black uppercase tracking-wider text-[9px] mb-0.5">⚠️ "Invalid JSON" Structure Errors</span>
+                    <p className="text-brand-muted">Ensure all items are enclosed in a main brackets array <code className="bg-brand-border/40 px-1 py-0.2 font-mono text-[9px]">[ ]</code> and separated with commas correctly.</p>
+                  </div>
+                  <div>
+                    <span className="text-brand-accent block font-black uppercase tracking-wider text-[9px] mb-0.5">⚠️ difficulty Value Validation Failures</span>
+                    <p className="text-brand-muted">Value must be exactly <code className="bg-brand-border/40 px-1 py-0.2 font-mono text-[9px]">"easy"</code>, <code className="bg-brand-border/40 px-1 py-0.2 font-mono text-[9px]">"medium"</code>, or <code className="bg-brand-border/40 px-1 py-0.2 font-mono text-[9px]">"hard"</code> inside double quotes.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Topic Priority Matrix */}
+              <div className="border border-brand-border rounded-3xl p-5 bg-white dark:bg-brand-surface space-y-4 shadow-sm">
+                <div className="flex items-center justify-between border-b border-brand-border pb-1.5">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-brand-text flex items-center gap-1.5 leading-none">
+                    <BookOpen size={14} className="text-emerald-500" /> Priority Upload Ideas
+                  </h4>
+                  <span className="text-[8px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/10 uppercase tracking-widest leading-none">
+                    Recommended
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-1 divide-y divide-brand-border">
+                  {[
+                    { grade: 7, subject: "Mathematics", topic: "BODMAS and Order of Operations" },
+                    { grade: 7, subject: "Science", topic: "The Human Digestive System" },
+                    { grade: 8, subject: "Mathematics", topic: "Linear Equations" },
+                    { grade: 8, subject: "Chemistry", topic: "Mixtures and Separation" },
+                    { grade: 9, subject: "Biology", topic: "Cell Division" },
+                    { grade: 9, subject: "Physics", topic: "Current Electricity" }
+                  ].map((rec, idx) => (
+                    <div key={idx} className="flex justify-between items-center py-2 text-xs font-bold text-brand-text">
+                      <div className="space-y-0.5">
+                        <span className="text-brand-accent text-[9px] font-black uppercase block leading-none">{rec.subject}</span>
+                        <p className="text-brand-muted text-[11px] leading-snug">{rec.topic}</p>
+                      </div>
+                      <span className="text-[8px] shrink-0 font-black tracking-widest uppercase bg-brand-bg border border-brand-border text-brand-muted px-2 py-1 rounded-lg">
+                        Grade {rec.grade}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -447,6 +671,9 @@ Return ONLY the JSON array. Nothing else.`;
                     <option value="7">Grade 7</option>
                     <option value="8">Grade 8</option>
                     <option value="9">Grade 9</option>
+                    <option value="10">Grade 10</option>
+                    <option value="11">Grade 11</option>
+                    <option value="12">Grade 12</option>
                   </select>
                 </div>
                 
@@ -462,7 +689,7 @@ Return ONLY the JSON array. Nothing else.`;
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase text-brand-muted">Topic Topic</label>
+                  <label className="text-[9px] font-black uppercase text-brand-muted">Topic</label>
                   <input
                     type="text"
                     value={promptTopic}

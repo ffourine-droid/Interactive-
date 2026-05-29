@@ -1046,7 +1046,20 @@ USING (true);
                     }}
                   >
                     <div className="flex justify-between items-center text-[10px] font-black uppercase text-brand-muted tracking-wider">
-                      <span>Question Stem</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>Question Stem</span>
+                        {activeDeck[currentIndex]?.difficulty && (
+                          <span className={`text-[8px] font-black tracking-widest uppercase border px-2 py-0.5 rounded-full ${
+                            activeDeck[currentIndex].difficulty === 'easy' 
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : activeDeck[currentIndex].difficulty === 'hard'
+                                ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                          }`}>
+                            {activeDeck[currentIndex].difficulty}
+                          </span>
+                        )}
+                      </div>
                       <span className="flex items-center gap-1"><RotateCw size={10} className="animate-spin" /> Tap to Flip</span>
                     </div>
 
