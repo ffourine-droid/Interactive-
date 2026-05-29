@@ -7,6 +7,7 @@ import LiveGame from '../components/LiveGame';
 import LiveResults from '../components/LiveResults';
 import CompetitionHub from '../components/CompetitionHub';
 import { StudentCompetitionLobby } from '../components/StudentCompetitionLobby';
+import { StudentFlashcards } from '../components/StudentFlashcards';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ interface RoomPlayer {
   is_finished: boolean;
 }
 
-type ArenaView = 'hub' | 'speed' | 'lobby' | 'live' | 'results' | 'competitions' | 'teacher_lobby';
+type ArenaView = 'hub' | 'speed' | 'lobby' | 'live' | 'results' | 'competitions' | 'teacher_lobby' | 'flashcards';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -217,6 +218,29 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
             </div>
           </motion.button>
 
+          {/* Study Flashcards Option */}
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setView('flashcards')}
+            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-teal-400 transition-all group shadow-lg shadow-teal-500/5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-14 h-14 bg-teal-500/10 rounded-2xl flex items-center justify-center group-hover:bg-teal-500/20 transition-colors">
+                <BookOpen size={28} className="text-teal-500" />
+              </div>
+              <span className="text-[9px] font-black text-teal-400 tracking-wider uppercase px-2.5 py-1 bg-teal-500/10 border border-teal-500/20 rounded-full">Self Study</span>
+            </div>
+            <div>
+              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">📚 Study Flashcards</h2>
+              <p className="text-xs font-bold text-brand-muted mt-0.5">Flip interactive cards designed per Kenya CBC curriculum by subjects. Boost recall speed!</p>
+            </div>
+            <div className="flex gap-2">
+              {['Active Recall', 'Syllabus Revision', 'Self-paced', '30 XP'].map(tag => (
+                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
+              ))}
+            </div>
+          </motion.button>
+
           {/* Points guide */}
           <div className="bg-brand-bg border border-brand-border rounded-[2rem] p-5 space-y-2">
             <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">How Points Work</p>
@@ -309,6 +333,17 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
         <StudentCompetitionLobby
           username={username}
           grade={formattedGrade}
+          onBack={() => setView('hub')}
+        />
+      </motion.div>
+    );
+  }
+
+  // ── Study Flashcards ──
+  if (view === 'flashcards') {
+    return (
+      <motion.div key="flashcards" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+        <StudentFlashcards
           onBack={() => setView('hub')}
         />
       </motion.div>

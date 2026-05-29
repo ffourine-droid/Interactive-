@@ -16,7 +16,8 @@ import {
   Clock,
   Check,
   Trophy,
-  Shield
+  Shield,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -25,6 +26,7 @@ import { QuestionRequestForm } from '../components/QuestionRequestForm';
 import { MaterialCard } from '../components/MaterialCard';
 import { SlidesViewer } from '../components/SlidesViewer';
 import { Experiment } from '../types';
+import { FlashcardManager } from '../components/FlashcardManager';
 import ModerationPage from './ModerationPage';
 
 interface Assignment {
@@ -74,7 +76,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [newClassName, setNewClassName] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
-  const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions' | 'forum_moderation'>('classes');
+  const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions' | 'forum_moderation' | 'flashcards'>('classes');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [importCode, setImportCode] = useState('');
@@ -536,10 +538,19 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <Shield size={12} /> Forum Mod
               {activeView === 'forum_moderation' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
             </button>
+            <button
+              onClick={() => setActiveView('flashcards')}
+              className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 pb-2 transition-all relative shrink-0 ${
+                activeView === 'flashcards' ? 'text-brand-accent' : 'text-brand-muted'
+              }`}
+            >
+              <Sparkles size={12} /> CBC Flashcards
+              {activeView === 'flashcards' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
+            </button>
           </div>
 
           {/* Action buttons — scroll horizontally, never wrap */}
-          {activeView !== 'forum_moderation' && (
+          {activeView !== 'forum_moderation' && activeView !== 'flashcards' && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
               {activeView === 'classes' ? (
                 <>
@@ -778,6 +789,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         ) : activeView === 'competitions' ? (
           <TeacherCompetitionManager teacherId={teacher?.id || ''} />
+        ) : activeView === 'flashcards' ? (
+          <FlashcardManager />
         ) : (
           <ModerationPage embedMode={true} />
         )}
