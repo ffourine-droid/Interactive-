@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Swords, ChevronLeft, Users } from 'lucide-react';
+import { Zap, Swords, ChevronLeft, Users, BookOpen } from 'lucide-react';
 import SpeedRoundPage from './SpeedRoundPage';
 import ArenaLobby from '../components/ArenaLobby';
 import LiveGame from '../components/LiveGame';
 import LiveResults from '../components/LiveResults';
 import CompetitionHub from '../components/CompetitionHub';
+import { StudentCompetitionLobby } from '../components/StudentCompetitionLobby';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ interface RoomPlayer {
   is_finished: boolean;
 }
 
-type ArenaView = 'hub' | 'speed' | 'lobby' | 'live' | 'results' | 'competitions';
+type ArenaView = 'hub' | 'speed' | 'lobby' | 'live' | 'results' | 'competitions' | 'teacher_lobby';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -89,6 +90,31 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
           {username && (
             <p className="text-xs font-bold text-brand-muted">Playing as <span className="text-brand-accent font-black">{username}</span></p>
           )}
+
+          {/* TEACHERS GROUP WORK Card - HIGHLY PROMINENT */}
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              setView('teacher_lobby');
+            }}
+            className="w-full bg-brand-surface border border-indigo-500/40 rounded-[2rem] p-6 text-left space-y-3 hover:border-indigo-500 transition-all group shadow-lg shadow-indigo-500/5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
+                <BookOpen size={28} className="text-indigo-500" />
+              </div>
+              <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest px-2.5 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20">Class Projects</span>
+            </div>
+            <div>
+              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">🏫 Teachers Group Work</h2>
+              <p className="text-xs font-bold text-brand-muted mt-0.5">Participate in challenges, collaborative squad projects, and active battles assigned by your teacher.</p>
+            </div>
+            <div className="flex gap-2">
+              {['Teacher Assigned', 'Squads & Teams', 'Leaderboard', 'Revision'].map(tag => (
+                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
+              ))}
+            </div>
+          </motion.button>
 
           {/* 1V1 MATH DUEL Card - EXTREMELY PROMINENT */}
           <motion.button
@@ -269,6 +295,20 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
       <motion.div key="competitions" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
         <CompetitionHub
           defaultTab={compDefaultTab}
+          onBack={() => setView('hub')}
+        />
+      </motion.div>
+    );
+  }
+
+  // ── Teachers Group Work Lobby ──
+  if (view === 'teacher_lobby') {
+    const formattedGrade = player?.grade ? `Grade ${player.grade}` : 'Grade 7';
+    return (
+      <motion.div key="teacher_lobby" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+        <StudentCompetitionLobby
+          username={username}
+          grade={formattedGrade}
           onBack={() => setView('hub')}
         />
       </motion.div>

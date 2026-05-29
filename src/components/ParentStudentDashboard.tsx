@@ -152,7 +152,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         supabase
           .from('exam_attempts')
           .select(`
-            id, exam_id, score, total_marks, teacher_feedback, parent_feedback, teacher_reply, submitted_at,
+            id, exam_id, score, total_marks, teacher_feedback, parent_feedback, teacher_reply, submitted_at, answers, grading,
             exam:exam_id (id, title, subject)
           `)
           .in('student_id', studentIds)
