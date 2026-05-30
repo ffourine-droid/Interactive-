@@ -8,6 +8,8 @@ import {
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { playTick, playHurry, playSuccess, playFailure } from '../utils/soundEffects';
+import RevengeDeck, { RevengeDeckQuestion } from '../components/RevengeDeck';
+import { fallbackQuestions } from '../data/fallbackQuestions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,7 +46,7 @@ interface ScoreEntry {
   played_at: string;
 }
 
-type GamePhase = 'setup' | 'identity' | 'countdown' | 'playing' | 'result' | 'leaderboard';
+type GamePhase = 'setup' | 'identity' | 'countdown' | 'playing' | 'result' | 'leaderboard' | 'revenge';
 
 const SUBJECTS = [
   'Mathematics', 'Integrated Science', 'Social Studies',
@@ -184,6 +186,7 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
   const [leaderboard, setLeaderboard] = useState<ScoreEntry[]>([]);
   const [loadingLB, setLoadingLB] = useState(false);
   const [savingScore, setSavingScore] = useState(false);
+  const [roundHistory, setRoundHistory] = useState<RevengeDeckQuestion[]>([]);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const feedbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -202,16 +205,49 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
       }
       query = query.eq('grade', grade);
 
-      const { data, error } = await query.limit(100);
+      // Create a 2.0-second timeout to handle high database latencies
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), 2000)
+      );
+
+      const fetchPromise = query.limit(100);
+      const { data, error } = await Promise.race([
+        fetchPromise,
+        timeoutPromise.then(() => ({ data: null, error: new Error("Timeout") }))
+      ]) as any;
+
       if (error) throw error;
-      if (!data || data.length === 0) throw new Error('No questions found for this subject and grade. Ask your admin to add some!');
+      
+      let finalData = data || [];
+      if (finalData.length === 0) {
+        throw new Error('No questions found');
+      }
 
       // Shuffle
-      const shuffled = [...data].sort(() => Math.random() - 0.5);
+      const shuffled = [...finalData].sort(() => Math.random() - 0.5);
       setQuestions(shuffled);
     } catch (e: any) {
-      showToast(e.message || 'Failed to load questions', 'error');
-      setPhase('setup');
+      console.warn('Falling back to preloaded question bank:', e.message || e);
+      
+      const filteredFallback = fallbackQuestions.filter(q => {
+        const matchesGrade = q.grade === grade;
+        const matchesSubject = subject === 'Mixed (All Subjects)' || q.subject.toLowerCase() === subject.toLowerCase();
+        return matchesGrade && matchesSubject;
+      });
+      
+      let finalFallback = filteredFallback;
+      if (finalFallback.length === 0) {
+        finalFallback = fallbackQuestions.filter(q => q.grade === grade);
+      }
+      if (finalFallback.length === 0) {
+        finalFallback = fallbackQuestions;
+      }
+      
+      // Shuffle fallback
+      const shuffled = [...finalFallback].sort(() => Math.random() - 0.5);
+      setQuestions(shuffled as any[]);
+      
+      showToast('Offline Mode has been loaded. Quick Practice questions are active! ⚡', 'info');
     } finally {
       setLoadingQ(false);
     }
@@ -327,6 +363,22 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
     setSelected(letter);
     const isCorrect = letter.trim().toUpperCase() === q.correct_answer.trim().toUpperCase();
 
+    const getOptionText = (questionObj: Question, choiceLetter: string) => {
+      const key = `option_${choiceLetter.toLowerCase()}` as keyof Question;
+      return String(questionObj[key] || choiceLetter);
+    };
+
+    setRoundHistory(prev => [
+      ...prev,
+      {
+        id: q.id,
+        question: q.question,
+        correct: isCorrect,
+        yourAnswer: getOptionText(q, letter),
+        rightAnswer: getOptionText(q, q.correct_answer)
+      }
+    ]);
+
     setAnswered(a => a + 1);
 
     if (isCorrect) {
@@ -370,6 +422,7 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
     setBestStreak(0);
     setSelected(null);
     setFeedback(null);
+    setRoundHistory([]);
   };
 
   const handleStart = async () => {
@@ -734,6 +787,24 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
                 </div>
               </div>
 
+              {/* CTA — Revenge Deck component integrated nicely */}
+              {roundHistory.filter(q => !q.correct).length > 0 && (
+                <div className="bg-gradient-to-r from-red-500/10 to-amber-500/5 border border-red-500/25 rounded-[1.5rem] p-4 text-center space-y-2">
+                  <div className="text-[10px] font-black text-red-400 uppercase tracking-widest leading-none">
+                    ⚔ REVENGE DECK AVAILABLE
+                  </div>
+                  <p className="text-xs text-brand-muted leading-relaxed font-semibold px-2">
+                    Replay only the <span className="text-red-400 font-extrabold">{roundHistory.filter(q => !q.correct).length} questions</span> you missed to correct your mistakes!
+                  </p>
+                  <button
+                    onClick={() => setPhase('revenge')}
+                    className="w-full bg-gradient-to-r from-red-500 to-orange-500 hover:brightness-110 active:scale-95 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl transition-all shadow-md shadow-red-500/10 cursor-pointer"
+                  >
+                    ⚔ Start Revenge Deck →
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setPhase('setup')}
@@ -750,6 +821,28 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
                   Board
                 </button>
               </div>
+            </motion.div>
+          )}
+
+          {/* ════════ REVENGE DECK ════════ */}
+          {phase === 'revenge' && (
+            <motion.div
+              key="revenge"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="py-2 animate-in fade-in duration-300"
+            >
+              <RevengeDeck
+                customResults={{
+                  subject: subject,
+                  grade: `Grade ${grade}`,
+                  totalQuestions: answered,
+                  timeTaken: `${GAME_DURATION - timeLeft}s`,
+                  questions: roundHistory
+                }}
+                onBackToSpeedRound={() => setPhase('result')}
+              />
             </motion.div>
           )}
 

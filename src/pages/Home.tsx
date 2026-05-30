@@ -14,6 +14,7 @@ import { Experiment } from '../types';
 import { MaterialCard, SkeletonCard } from '../components/MaterialCard';
 import { MaterialsList } from '../components/MaterialsList';
 import { SlidesViewer } from '../components/SlidesViewer';
+import { fallbackMaterials } from '../data/fallbackMaterials';
 
 interface HomeProps {
   onBack: () => void;
@@ -173,11 +174,45 @@ export default function Home({
       } else {
         supabaseQuery = supabaseQuery.limit(50);
       }
-      const { data, error: fetchError } = await supabaseQuery.order('created_at', { ascending: false });
+
+      // Add a 2.5-second timeout to prevent database load hangs
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), 2500)
+      );
+
+      const fetchPromise = supabaseQuery.order('created_at', { ascending: false });
+      const { data, error: fetchError } = await Promise.race([
+        fetchPromise,
+        timeoutPromise.then(() => ({ data: null, error: new Error("Timeout") }))
+      ]) as any;
+
       if (fetchError) throw fetchError;
       if (requestId !== lastRequestId.current) return;
       let filteredData = data || [];
-      if (cat !== 'all') {
+      if (filteredData.length === 0) {
+        // Fallback to local files if database holds no records
+        let localFallback = fallbackMaterials;
+        if (currentClass) {
+          localFallback = localFallback.filter(m => m.grade === String(currentClass));
+        }
+        if (cat !== 'all') {
+          localFallback = localFallback.filter(exp => {
+            if (cat === 'slides') return exp.slides && Array.isArray(exp.slides) && exp.slides.length > 0;
+            if (cat === 'audio') return !!exp.audio_url;
+            return true;
+          });
+        }
+        if (query.trim()) {
+          const q = query.toLowerCase();
+          localFallback = localFallback.filter(m => 
+            m.title.toLowerCase().includes(q) || 
+            m.keywords.toLowerCase().includes(q) || 
+            m.subject?.toLowerCase().includes(q)
+          );
+        }
+        filteredData = localFallback;
+      }
+      if (cat !== 'all' && data && data.length > 0) {
         filteredData = filteredData.filter(exp => {
           if (cat === 'slides') return exp.slides && Array.isArray(exp.slides) && exp.slides.length > 0;
           if (cat === 'audio') return !!exp.audio_url;
@@ -188,7 +223,28 @@ export default function Home({
       setSearchCache(prev => ({ ...prev, [cacheKey]: filteredData }));
     } catch (err: any) {
       if (requestId !== lastRequestId.current) return;
-      setError(err.message || "Could not load results.");
+      // Graceful fallback to rich preloaded materials if server database is down/unavailable
+      let filteredFallback = fallbackMaterials;
+      if (currentClass) {
+        filteredFallback = filteredFallback.filter(m => m.grade === String(currentClass));
+      }
+      if (cat !== 'all') {
+        filteredFallback = filteredFallback.filter(exp => {
+          if (cat === 'slides') return exp.slides && Array.isArray(exp.slides) && exp.slides.length > 0;
+          if (cat === 'audio') return !!exp.audio_url;
+          return true;
+        });
+      }
+      if (query.trim()) {
+        const q = query.toLowerCase();
+        filteredFallback = filteredFallback.filter(m => 
+          m.title.toLowerCase().includes(q) || 
+          m.keywords.toLowerCase().includes(q) || 
+          m.subject?.toLowerCase().includes(q)
+        );
+      }
+      setResults(filteredFallback);
+      setSearchCache(prev => ({ ...prev, [cacheKey]: filteredFallback }));
     } finally {
       if (requestId === lastRequestId.current) setLoading(false);
     }

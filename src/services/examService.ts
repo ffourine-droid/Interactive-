@@ -17,9 +17,10 @@ export const examService = {
 
       const existingTitles = new Set(existingExams?.map(e => e.title) || []);
 
+      const recordsToInsert = [];
       for (const exam of prebuiltExams) {
         if (!existingTitles.has(exam.title)) {
-          await supabase.from('exams').insert({
+          recordsToInsert.push({
             title: exam.title,
             subject: exam.subject,
             grade: exam.grade,
@@ -30,6 +31,10 @@ export const examService = {
             is_published: true
           });
         }
+      }
+
+      if (recordsToInsert.length > 0) {
+        await supabase.from('exams').insert(recordsToInsert);
       }
     } catch (err) {
       console.error('Failed to seed prebuilt exams:', err);

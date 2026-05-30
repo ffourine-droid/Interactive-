@@ -29,6 +29,7 @@ import { ArenaQuestionCreator } from '../components/ArenaQuestionCreator';
 import { QuestionManager } from '../components/QuestionManager';
 import { MaterialManager } from '../components/MaterialManager';
 import StoryQuestManager from '../components/StoryQuestManager';
+import RevengeDeck from '../components/RevengeDeck';
 import { forumService } from '../services/forumService';
 import { attachmentService } from '../services/attachmentService';
 import { ShieldAlert, Pin, Heart, MessageSquare, Repeat } from 'lucide-react';
@@ -40,7 +41,7 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation'>('overview');
+  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards'>('overview');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
 
@@ -523,6 +524,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             { id: 'system' as const, icon: Database, label: 'Materials', badge: 0 },
             { id: 'arena' as const, icon: Zap, label: 'Arena & Qns', badge: 0 },
             { id: 'stories' as const, icon: BookOpen, label: 'Story Quest', badge: 0 },
+            { id: 'flashcards' as const, icon: BookOpen, label: 'Flashcards', badge: 0 },
             { id: 'requests' as const, icon: MessageCircle, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
             { id: 'teachers' as const, icon: Users, label: 'Teachers', badge: 0 },
             { id: 'forum_moderation' as const, icon: ShieldAlert, label: 'Forum Mod', badge: unresolvedFlags.length }
@@ -587,6 +589,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                 { id: 'system' as const, label: 'Materials', badge: 0 },
                 { id: 'arena' as const, label: 'Arena', badge: 0 },
                 { id: 'stories' as const, label: 'Story Quest', badge: 0 },
+                { id: 'flashcards' as const, label: 'Flashcards', badge: 0 },
                 { id: 'requests' as const, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
                 { id: 'teachers' as const, label: 'Teachers', badge: 0 },
                 { id: 'forum_moderation' as const, label: 'Forum Mod', badge: unresolvedFlags.length }
@@ -1152,6 +1155,13 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
           {!loading && activeTab === 'stories' && (
             <div className="animate-in fade-in duration-300">
               <StoryQuestManager />
+            </div>
+          )}
+
+          {/* ────── TABS: FLASHCARDS (REVENGE DECK) Preview ────── */}
+          {!loading && activeTab === 'flashcards' && (
+            <div className="animate-in fade-in duration-300">
+              <RevengeDeck />
             </div>
           )}
 
