@@ -30,6 +30,7 @@ import { QuestionManager } from '../components/QuestionManager';
 import { MaterialManager } from '../components/MaterialManager';
 import StoryQuestManager from '../components/StoryQuestManager';
 import RevengeDeck from '../components/RevengeDeck';
+import { FlashcardManager } from '../components/FlashcardManager';
 import { forumService } from '../services/forumService';
 import { attachmentService } from '../services/attachmentService';
 import { ShieldAlert, Pin, Heart, MessageSquare, Repeat } from 'lucide-react';
@@ -1161,7 +1162,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
           {/* ────── TABS: FLASHCARDS (REVENGE DECK) Preview ────── */}
           {!loading && activeTab === 'flashcards' && (
             <div className="animate-in fade-in duration-300">
-              <RevengeDeck />
+              <FlashcardManager />
             </div>
           )}
 

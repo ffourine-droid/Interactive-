@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { Analytics } from '@vercel/analytics/react';
 
 // Global error handler for mobile debugging
 window.onerror = function(message, source, lineno, colno, error) {
@@ -17,6 +18,7 @@ window.onerror = function(message, source, lineno, colno, error) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
+    <Analytics />
   </StrictMode>,
 );
 

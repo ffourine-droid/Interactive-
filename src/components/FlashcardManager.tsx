@@ -126,6 +126,9 @@ export const FlashcardManager: React.FC = () => {
         if (isNaN(gradeNum)) {
           throw new Error(`Item ${i + 1}'s "grade" must be a valid number.`);
         }
+        if (![7, 8, 9, 10, 11, 12].includes(gradeNum)) {
+          throw new Error(`Item ${i + 1}'s "grade" must be an allowed grade number from: 7, 8, 9, 10, 11, or 12. Found "${item.grade}".`);
+        }
         if (!item.topic) {
           throw new Error(`Item ${i + 1} is missing the required "topic" field.`);
         }
@@ -418,7 +421,7 @@ No markdown. No backticks. No explanation. Just the JSON.`;
                   value={jsonInput}
                   onChange={(e) => setJsonInput(e.target.value)}
                   rows={9}
-                  placeholder={`[\n  {\n    "subject": "Biology",\n    "grade": 9,\n    "topic": "The Digestive System",\n    "question": "What is the role of the small intestine?",\n    "answer": "The small intestine absorbs digested nutrients into the bloodstream through finger-like projections called villi.",\n    "difficulty": "medium"\n  },\n  {\n    "subject": "Biology",\n    "grade": 9,\n    "topic": "The Digestive System",\n    "question": "What enzyme breaks down starch in the mouth?",\n    "answer": "Salivary amylase.",\n    "difficulty": "easy"\n  }\n]`}
+                  placeholder={`[\n  {\n    "subject": "Biology",\n    "grade": 9,\n    "topic": "The Digestive System",\n    "question": "What is the role of the small intestine?",\n    "answer": "The small intestine absorbs digested nutrients.",\n    "difficulty": "medium"\n  },\n  {\n    "subject": "Biology",\n    "grade": 9,\n    "topic": "The Digestive System",\n    "question": "What enzyme breaks down starch in the mouth?",\n    "answer": "Salivary amylase.",\n    "difficulty": "easy"\n  }\n]`}
                   className="w-full bg-white dark:bg-brand-surface border border-brand-border rounded-xl p-4 font-mono text-xs text-brand-text focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent/30 transition-all placeholder:text-brand-muted/40 shadow-inner"
                 />
 
