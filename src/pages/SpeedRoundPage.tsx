@@ -201,9 +201,15 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
         .eq('is_approved', true);
 
       if (subject !== 'Mixed (All Subjects)') {
-        query = query.eq('subject', subject);
+        if (subject === 'Creative Arts & Sports') {
+          query = query.in('subject', ['Creative Arts & Sports', 'Creative Arts and Sports', 'Creative Arts']);
+        } else if (subject === 'Agriculture') {
+          query = query.in('subject', ['Agriculture', 'Agriculture and Nutrition']);
+        } else {
+          query = query.eq('subject', subject);
+        }
       }
-      query = query.eq('grade', grade);
+      query = query.eq('grade', Number(grade));
 
       // Create a 2.0-second timeout to handle high database latencies
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -230,14 +236,17 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
       console.warn('Falling back to preloaded question bank:', e.message || e);
       
       const filteredFallback = fallbackQuestions.filter(q => {
-        const matchesGrade = q.grade === grade;
-        const matchesSubject = subject === 'Mixed (All Subjects)' || q.subject.toLowerCase() === subject.toLowerCase();
+        const matchesGrade = Number(q.grade) === Number(grade);
+        const matchesSubject = subject === 'Mixed (All Subjects)' || 
+          q.subject.toLowerCase() === subject.toLowerCase() ||
+          (subject === 'Creative Arts & Sports' && (q.subject.toLowerCase() === 'creative arts & sports' || q.subject.toLowerCase() === 'creative arts and sports')) ||
+          (subject === 'Agriculture' && (q.subject.toLowerCase() === 'agriculture' || q.subject.toLowerCase() === 'agriculture and nutrition'));
         return matchesGrade && matchesSubject;
       });
       
       let finalFallback = filteredFallback;
       if (finalFallback.length === 0) {
-        finalFallback = fallbackQuestions.filter(q => q.grade === grade);
+        finalFallback = fallbackQuestions.filter(q => Number(q.grade) === Number(grade));
       }
       if (finalFallback.length === 0) {
         finalFallback = fallbackQuestions;
@@ -267,6 +276,7 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
         correct: finalCorrect,
         total: finalAnswered,
         best_streak: finalBestStreak,
+        game_mode: 'solo',
         played_at: new Date().toISOString(),
       });
     } catch {
@@ -280,12 +290,16 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
   const loadLeaderboard = useCallback(async () => {
     setLoadingLB(true);
     try {
+      // 24 hours ago timestamp
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
       let query = supabase
         .from('arena_scores')
         .select('*')
-        .eq('grade', grade)
-        .order('score', { ascending: false })
-        .limit(10);
+        .eq('grade', Number(grade))
+        .eq('game_mode', 'solo')
+        .gte('played_at', since)
+        .order('score', { ascending: false });
 
       if (subject !== 'Mixed (All Subjects)') {
         query = query.eq('subject', subject);
@@ -293,7 +307,21 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
 
       const { data, error } = await query;
       if (error) throw error;
-      setLeaderboard(data || []);
+      
+      // Deduplicate on the frontend: show best score per player (username)
+      const best = new Map<string, any>();
+      for (const entry of (data || [])) {
+        const existing = best.get(entry.username);
+        if (!existing || entry.score > existing.score) {
+          best.set(entry.username, entry);
+        }
+      }
+      
+      const ranked = Array.from(best.values())
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10); // Show top 10
+
+      setLeaderboard(ranked);
     } catch {
       setLeaderboard([]);
     } finally {
@@ -861,7 +889,7 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
                   </div>
                   <div>
                     <h2 className="text-xl font-black text-brand-text tracking-tighter uppercase">{subject}</h2>
-                    <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Global Top 10 - Grade {grade}</p>
+                    <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Today's Top Players (24h) - Grade {grade}</p>
                   </div>
                 </div>
 
