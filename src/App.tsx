@@ -33,6 +33,7 @@ import StoryQuest from './components/StoryQuest';
 import CommunityPage from './pages/CommunityPage';
 import ForumPage from './pages/ForumPage';
 import ModerationPage from './pages/ModerationPage';
+import NotesPage from './components/NotesPage';
 
 import { examService } from './services/examService';
 
@@ -439,6 +440,25 @@ function AppContent() {
             </motion.div>
           </Suspense>
         );
+      case 'notes':
+        return (
+          <Suspense fallback={<LoadingFallback text="Syncing Curriculum..." />}>
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="notes"
+              className="max-w-[420px] mx-auto min-h-screen font-sans"
+            >
+              <NotesPage 
+                onBack={() => setCurrentPage('home')}
+                username={currentPageProps?.username}
+                grade={currentPageProps?.grade}
+                subject={currentPageProps?.subject}
+              />
+            </motion.div>
+          </Suspense>
+        );
       case 'home':
       default:
         return (
@@ -469,6 +489,26 @@ function AppContent() {
                 onParentClick={() => setCurrentPage('parent')}
                 onStoriesClick={() => setCurrentPage('story-quest')}
                 onCommunityClick={() => setCurrentPage('community')}
+                onNotesClick={(gradeVal, subjectVal) => {
+                  const savedStudent = localStorage.getItem('azilearn_student');
+                  let username = '';
+                  let gradeNum = gradeVal;
+                  if (savedStudent) {
+                    try {
+                      const parsed = JSON.parse(savedStudent);
+                      username = parsed.username || parsed.name || '';
+                      const matches = parsed.grade ? parsed.grade.replace(/\D/g, '') : '';
+                      if (!gradeNum && matches) gradeNum = parseInt(matches, 10);
+                    } catch {}
+                  }
+                  const resolvedGrade = gradeNum || (selectedClass ? parseInt(selectedClass.replace(/\D/g, ''), 10) : 7);
+                  setCurrentPageProps({
+                    username,
+                    grade: resolvedGrade,
+                    subject: subjectVal || 'Mathematics'
+                  });
+                  setCurrentPage('notes');
+                }}
                 selectedClass={selectedClass}
                 setSelectedClass={setSelectedClass}
                 theme={theme}

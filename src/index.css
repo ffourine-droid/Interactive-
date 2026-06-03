@@ -352,6 +352,27 @@ iframe {
   font-family: monospace;
   font-size: 0.85em;
 }
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.875rem;
+}
+.prose th, .prose td {
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+.prose th {
+  background-color: var(--bg);
+  font-weight: 700;
+  color: var(--text);
+  border-bottom: 2px solid var(--border);
+}
+.prose tr:nth-child(even) {
+  background-color: var(--bg);
+  opacity: 0.9;
+}
 
 /* ─── DARK MODE ─── */
 .dark {

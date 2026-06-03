@@ -4,6 +4,23 @@ import App from './App.tsx';
 import './index.css';
 import { Analytics } from '@vercel/analytics/react';
 
+// Define global navigation helpers for dynamic syllabus/CBC HTML materials
+(window as any).openStrand = function(strandId?: any, strandName?: string) {
+  console.log("Syllabus Strand navigation requested:", strandId, strandName);
+  const ev = new CustomEvent('open-strand', { 
+    detail: { strandId: strandId || '', strandName: strandName || '' } 
+  });
+  window.dispatchEvent(ev);
+};
+
+(window as any).openSubstrand = function(subStrandId?: any, subStrandName?: string) {
+  console.log("Syllabus Sub-strand navigation requested:", subStrandId, subStrandName);
+  const ev = new CustomEvent('open-substrand', { 
+    detail: { subStrandId: subStrandId || '', subStrandName: subStrandName || '' } 
+  });
+  window.dispatchEvent(ev);
+};
+
 // Global error handler for mobile debugging
 window.onerror = function(message, source, lineno, colno, error) {
   const errorMsg = `Error: ${message}\nSource: ${source}\nLine: ${lineno}`;

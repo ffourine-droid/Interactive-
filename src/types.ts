@@ -10,6 +10,10 @@ export interface Experiment {
   ppt_url?: string;
   grade?: string;
   created_at?: string;
+  sections?: any[];
+  category?: string;
+  topic_id?: string;
+  is_interactive_note?: boolean;
 }
 
 export type Page = 
@@ -32,7 +36,8 @@ export type Page =
   | 'exam-results'
   | 'story-quest'
   | 'community'
-  | 'moderation';
+  | 'moderation'
+  | 'notes';
 
 export interface Question {
   index: number;

@@ -247,16 +247,16 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
       let finalFallback = filteredFallback;
       if (finalFallback.length === 0) {
         finalFallback = fallbackQuestions.filter(q => Number(q.grade) === Number(grade));
-      }
-      if (finalFallback.length === 0) {
-        finalFallback = fallbackQuestions;
+        if (subject !== 'Mixed (All Subjects)') {
+          showToast(`Serving general Grade ${grade} challenge questions! 📚`, 'info');
+        }
+      } else {
+        showToast('Quick Practice questions loaded successfully! ⚡', 'info');
       }
       
       // Shuffle fallback
       const shuffled = [...finalFallback].sort(() => Math.random() - 0.5);
       setQuestions(shuffled as any[]);
-      
-      showToast('Offline Mode has been loaded. Quick Practice questions are active! ⚡', 'info');
     } finally {
       setLoadingQ(false);
     }
@@ -267,24 +267,84 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
     if (!player) return;
     setSavingScore(true);
     try {
-      await supabase.from('arena_scores').insert({
-        player_id: player.id,
+      let playerId = player.id;
+      
+      // Self-healing: if player_id is missing or invalid, resolve or create in arena_players
+      if (!playerId) {
+        console.log('Player has no id, resolving or creating entry in arena_players...');
+        const { data: existing } = await supabase
+          .from('arena_players')
+          .select('id')
+          .eq('username', player.username)
+          .maybeSingle();
+          
+        if (existing) {
+          playerId = existing.id;
+        } else {
+          const { data: inserted, error: insertErr } = await supabase
+            .from('arena_players')
+            .insert({
+              username: player.username,
+              grade: Number(player.grade) || Number(grade) || 7
+            })
+            .select('id')
+            .single();
+            
+          if (!insertErr && inserted) {
+            playerId = inserted.id;
+          }
+        }
+        
+        if (playerId) {
+          const updatedPlayer = { ...player, id: playerId };
+          setPlayer(updatedPlayer);
+          localStorage.setItem('azilearn_arena_player', JSON.stringify(updatedPlayer));
+        }
+      }
+
+      const payload: any = {
+        player_id: playerId || null,
         username: player.username,
-        grade: player.grade,
+        grade: Number(player.grade) || Number(grade) || 7,
         subject: subject === 'Mixed (All Subjects)' ? 'Mixed' : subject,
         score: finalScore,
         correct: finalCorrect,
         total: finalAnswered,
         best_streak: finalBestStreak,
-        game_mode: 'solo',
         played_at: new Date().toISOString(),
+      };
+
+      // Try with game_mode first
+      const { error } = await supabase.from('arena_scores').insert({
+        ...payload,
+        game_mode: 'solo'
       });
-    } catch {
-      // Silent — score save failure shouldn't break the game
+
+      if (error) {
+        console.warn('Error inserting score with game_mode:', error);
+        // If the column does not exist (Code 42703 or 'game_mode' missing), retry without it
+        if (error.code === '42703' || (error.message && error.message.includes('game_mode'))) {
+          console.log('Retrying insert without game_mode column...');
+          const { error: retryError } = await supabase.from('arena_scores').insert(payload);
+          if (retryError) {
+            console.error('Failed to insert score without game_mode too:', retryError);
+            showToast(`Could not record score: ${retryError.message}`, 'error');
+          } else {
+            showToast('Score recorded successfully! 🏆', 'success');
+          }
+        } else {
+          showToast(`Error recording score: ${error.message}`, 'error');
+        }
+      } else {
+        showToast('Score recorded successfully! 🏆', 'success');
+      }
+    } catch (e: any) {
+      console.error('Score saving exception:', e);
+      showToast('An unexpected error occurred while saving your score.', 'error');
     } finally {
       setSavingScore(false);
     }
-  }, [player, subject]);
+  }, [player, grade, subject, showToast]);
 
   // ── Load leaderboard ──
   const loadLeaderboard = useCallback(async () => {
@@ -293,7 +353,7 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
       // 24 hours ago timestamp
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      let query = supabase
+      let queryWithMode = supabase
         .from('arena_scores')
         .select('*')
         .eq('grade', Number(grade))
@@ -302,10 +362,30 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
         .order('score', { ascending: false });
 
       if (subject !== 'Mixed (All Subjects)') {
-        query = query.eq('subject', subject);
+        queryWithMode = queryWithMode.eq('subject', subject);
       }
 
-      const { data, error } = await query;
+      let { data, error } = await queryWithMode;
+
+      // Handle missing game_mode column self-healing fallback
+      if (error && (error.code === '42703' || (error.message && error.message.includes('game_mode')))) {
+        console.warn('game_mode column is missing on arena_scores, retrying without game_mode constraint...');
+        let queryWithoutMode = supabase
+          .from('arena_scores')
+          .select('*')
+          .eq('grade', Number(grade))
+          .gte('played_at', since)
+          .order('score', { ascending: false });
+
+        if (subject !== 'Mixed (All Subjects)') {
+          queryWithoutMode = queryWithoutMode.eq('subject', subject);
+        }
+
+        const retryResult = await queryWithoutMode;
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
       if (error) throw error;
       
       // Deduplicate on the frontend: show best score per player (username)
@@ -322,7 +402,8 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
         .slice(0, 10); // Show top 10
 
       setLeaderboard(ranked);
-    } catch {
+    } catch (e: any) {
+      console.error('Leaderboard query error:', e);
       setLeaderboard([]);
     } finally {
       setLoadingLB(false);
@@ -431,8 +512,18 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
       setQIndex(i => {
         const next = i + 1;
         if (next >= questions.length) {
-          // Ran out of questions before time — shuffle again
-          setQuestions(qs => [...qs].sort(() => Math.random() - 0.5));
+          // Ran out of questions before time — shuffle again with smart same-question prevention
+          setQuestions(qs => {
+            if (qs.length <= 1) return qs;
+            const lastQuestion = qs[qs.length - 1];
+            let shuffled = [...qs];
+            let attempts = 0;
+            do {
+              shuffled.sort(() => Math.random() - 0.5);
+              attempts++;
+            } while (shuffled[0].id === lastQuestion.id && attempts < 10);
+            return shuffled;
+          });
           return 0;
         }
         return next;

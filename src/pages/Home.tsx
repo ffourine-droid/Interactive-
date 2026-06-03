@@ -14,6 +14,7 @@ import { Experiment } from '../types';
 import { MaterialCard, SkeletonCard } from '../components/MaterialCard';
 import { MaterialsList } from '../components/MaterialsList';
 import { SlidesViewer } from '../components/SlidesViewer';
+import { InteractiveNotes } from '../components/InteractiveNotes';
 import { fallbackMaterials } from '../data/fallbackMaterials';
 
 interface HomeProps {
@@ -28,6 +29,7 @@ interface HomeProps {
   onParentClick: () => void;
   onStoriesClick: () => void;
   onCommunityClick: () => void;
+  onNotesClick: (grade?: number, subject?: string) => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   selectedClass: string | null;
@@ -37,12 +39,12 @@ interface HomeProps {
 export default function Home({ 
   onBack, onAdminClick, onAdminTerminalClick, onTeacherClick, onTeacherDashboardClick, 
   onAssignmentsClick, onExamsClick, onArenaClick, onParentClick, onStoriesClick,
-  onCommunityClick, theme, setTheme,
+  onCommunityClick, onNotesClick, theme, setTheme,
   selectedClass, setSelectedClass
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [category, setCategory] = useState<'all' | 'notes' | 'slides' | 'audio'>('all');
+  const [category, setCategory] = useState<'all' | 'slides' | 'audio' | 'pdf' | 'pptx' | null>(null);
   const [results, setResults] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +117,7 @@ export default function Home({
 
   const handleClassSelect = (grade: string) => {
     setSelectedClass(grade);
+    setCategory(null);
     setHasSearched(false);
     setSearchQuery('');
     setDebouncedQuery('');
@@ -144,8 +147,13 @@ export default function Home({
     localStorage.setItem('azilearn_search_history', JSON.stringify(newHistory));
   };
 
-  const handleSearch = async (query: string, cat: string = category, currentClass: string | null = selectedClass, shouldBlur: boolean = false) => {
+  const handleSearch = async (query: string, cat: string | null = category, currentClass: string | null = selectedClass, shouldBlur: boolean = false) => {
     const requestId = ++lastRequestId.current;
+    if (cat === null) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
     const cacheKey = `${query.trim().toLowerCase()}-${cat}-${currentClass || 'all'}`;
     if (shouldBlur && searchInputRef.current) searchInputRef.current.blur();
     if (searchCache[cacheKey]) {
@@ -166,8 +174,15 @@ export default function Home({
     try {
       let supabaseQuery = supabase
         .from('experiments')
-        .select('id, title, keywords, subject, grade, created_at, audio_url, slides, pdf_url, ppt_url');
-      if (currentClass) supabaseQuery = supabaseQuery.eq('grade', currentClass);
+        .select('id, title, keywords, subject, grade, created_at, audio_url, slides, pdf_url, ppt_url, category, html_content');
+      if (currentClass) {
+        const numGrade = currentClass.replace(/\D/g, '');
+        const gradesToQuery = [currentClass];
+        if (numGrade && numGrade !== currentClass) {
+          gradesToQuery.push(numGrade);
+        }
+        supabaseQuery = supabaseQuery.in('grade', gradesToQuery);
+      }
       if (query.trim()) supabaseQuery = supabaseQuery.or(`keywords.ilike.%${query}%,title.ilike.%${query}%,subject.ilike.%${query}%`);
       if (!query.trim() && cat === 'all' && !currentClass) {
         supabaseQuery = supabaseQuery.limit(10);
@@ -181,24 +196,43 @@ export default function Home({
       );
 
       const fetchPromise = supabaseQuery.order('created_at', { ascending: false });
-      const { data, error: fetchError } = await Promise.race([
+      
+      const experimentsResult = await Promise.race([
         fetchPromise,
         timeoutPromise.then(() => ({ data: null, error: new Error("Timeout") }))
-      ]) as any;
+      ]).catch(err => ({ data: null, error: err })) as any;
 
-      if (fetchError) throw fetchError;
+      const { data, error: fetchError } = experimentsResult;
+      if (fetchError && !data) throw fetchError;
       if (requestId !== lastRequestId.current) return;
-      let filteredData = data || [];
+
+      // Filter out any materials that represent notes
+      let filteredData = (data || []).filter((exp: any) => 
+        exp.category !== 'notes' && 
+        !exp.is_interactive_note && 
+        !(exp.slides?.length === 0 && !exp.audio_url)
+      );
+
       if (filteredData.length === 0) {
         // Fallback to local files if database holds no records
-        let localFallback = fallbackMaterials;
+        let localFallback = fallbackMaterials.filter((exp: any) => 
+          exp.category !== 'notes' && 
+          !(exp.slides?.length === 0 && !exp.audio_url)
+        );
         if (currentClass) {
-          localFallback = localFallback.filter(m => m.grade === String(currentClass));
+          const numGrade = currentClass.replace(/\D/g, '');
+          localFallback = localFallback.filter(m => 
+            m.grade === String(currentClass) || 
+            `Grade ${m.grade}` === String(currentClass) || 
+            m.grade === numGrade
+          );
         }
         if (cat !== 'all') {
           localFallback = localFallback.filter(exp => {
             if (cat === 'slides') return exp.slides && Array.isArray(exp.slides) && exp.slides.length > 0;
             if (cat === 'audio') return !!exp.audio_url;
+            if (cat === 'pdf') return !!exp.pdf_url;
+            if (cat === 'pptx') return !!exp.ppt_url;
             return true;
           });
         }
@@ -212,10 +246,12 @@ export default function Home({
         }
         filteredData = localFallback;
       }
-      if (cat !== 'all' && data && data.length > 0) {
+      if (cat !== 'all' && filteredData.length > 0) {
         filteredData = filteredData.filter(exp => {
           if (cat === 'slides') return exp.slides && Array.isArray(exp.slides) && exp.slides.length > 0;
           if (cat === 'audio') return !!exp.audio_url;
+          if (cat === 'pdf') return !!exp.pdf_url;
+          if (cat === 'pptx') return !!exp.ppt_url;
           return true;
         });
       }
@@ -226,12 +262,19 @@ export default function Home({
       // Graceful fallback to rich preloaded materials if server database is down/unavailable
       let filteredFallback = fallbackMaterials;
       if (currentClass) {
-        filteredFallback = filteredFallback.filter(m => m.grade === String(currentClass));
+        const numGrade = currentClass.replace(/\D/g, '');
+        filteredFallback = filteredFallback.filter(m => 
+          m.grade === String(currentClass) || 
+          `Grade ${m.grade}` === String(currentClass) || 
+          m.grade === numGrade
+        );
       }
       if (cat !== 'all') {
         filteredFallback = filteredFallback.filter(exp => {
           if (cat === 'slides') return exp.slides && Array.isArray(exp.slides) && exp.slides.length > 0;
           if (cat === 'audio') return !!exp.audio_url;
+          if (cat === 'pdf') return !!exp.pdf_url;
+          if (cat === 'pptx') return !!exp.ppt_url;
           return true;
         });
       }
@@ -266,7 +309,9 @@ export default function Home({
     }
     const setInitialViewMode = (data: Experiment) => {
       setZoom(100); setPan({ x: 0, y: 0 });
-      if (data.slides && Array.isArray(data.slides) && data.slides.length > 0) {
+      if (category === 'notes' && (data.html_content || data.sections)) {
+        setViewMode('notes');
+      } else if (data.slides && Array.isArray(data.slides) && data.slides.length > 0) {
         setViewMode('slides');
       } else if (data.pdf_url) {
         setViewMode('pdf');
@@ -276,7 +321,7 @@ export default function Home({
         setViewMode('notes'); // Always fallback to notes if no other visual assets
       }
     };
-    if (exp.html_content || (exp.slides && exp.slides.length > 0) || exp.pdf_url || exp.ppt_url) {
+    if (exp.html_content || exp.sections || (exp.slides && exp.slides.length > 0) || exp.pdf_url || exp.ppt_url) {
       setSelectedExperiment(exp);
       setInitialViewMode(exp);
       return;
@@ -393,6 +438,7 @@ export default function Home({
                     label: 'Navigate',
                     items: [
                       { title: 'Home Hub', subtitle: 'Your learning dashboard', icon: '🏠', color: 'o', action: () => { setActiveTab('home'); setIsSidebarOpen(false); setSelectedClass(null); } },
+                      { title: 'Curriculum Notes', subtitle: 'Interactive & classic study guides', icon: '📚', color: 'o', action: () => { onNotesClick(); setIsSidebarOpen(false); } },
                       { title: 'Stories to Learn', subtitle: 'Engaging reading content', icon: '📖', color: 'b', action: () => { onStoriesClick(); setIsSidebarOpen(false); } },
                       { title: 'My Classes', subtitle: 'All your subjects', icon: '📄', color: 'g', action: () => { setActiveTab('home'); setIsSidebarOpen(false); setSelectedClass(null); } },
                       { title: 'My Work', subtitle: 'Assignments & submissions', icon: '💼', color: 'p', action: () => { onAssignmentsClick(); setIsSidebarOpen(false); } }
@@ -584,15 +630,15 @@ export default function Home({
                         const gradeVal = i + 1;
                         const gradeStr = `Grade ${gradeVal}`;
                         return (
-                          <button
+                          <div
                             key={gradeStr}
                             onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                            className="group relative overflow-hidden py-3 px-1 bg-brand-surface border border-brand-border/40 hover:border-emerald-500/30 rounded-[16px] flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-sm"
+                            className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-emerald-500/30 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-300 shadow-sm cursor-pointer select-none active:scale-[0.97]"
                           >
-                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-emerald-500 transition-colors">{gradeVal}</span>
-                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade</span>
+                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-emerald-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
                             <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-emerald-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -613,15 +659,15 @@ export default function Home({
                         const gradeVal = i + 7;
                         const gradeStr = `Grade ${gradeVal}`;
                         return (
-                          <button
+                          <div
                             key={gradeStr}
                             onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                            className="group relative overflow-hidden py-3 px-1 bg-brand-surface border border-brand-border/40 hover:border-brand-accent/30 rounded-[16px] flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-sm"
+                            className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-brand-accent/30 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-300 shadow-sm cursor-pointer select-none active:scale-[0.97]"
                           >
-                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-brand-accent transition-colors">{gradeVal}</span>
-                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade</span>
+                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-brand-accent transition-colors leading-none mb-0.5">{gradeVal}</span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
                             <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand-accent scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -642,15 +688,15 @@ export default function Home({
                         const gradeVal = i + 10;
                         const gradeStr = `Grade ${gradeVal}`;
                         return (
-                          <button
+                          <div
                             key={gradeStr}
                             onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                            className="group relative overflow-hidden py-3 px-1 bg-brand-surface border border-brand-border/40 hover:border-purple-500/30 rounded-[16px] flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-sm"
+                            className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-purple-500/30 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-300 shadow-sm cursor-pointer select-none active:scale-[0.97]"
                           >
-                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-purple-500 transition-colors">{gradeVal}</span>
-                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade</span>
+                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-purple-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
                             <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-purple-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -728,28 +774,29 @@ export default function Home({
                     </div>
                   </div>
 
-                  {/* Category Filter — 4 cols */}
-                  <div className="grid grid-cols-4 gap-1.5">
+                  {/* Category Filter — 5 options (Excluding General Notes) */}
+                  <div className="grid grid-cols-5 gap-1">
                     {[
                       { id: 'all', label: 'All', icon: FileText },
-                      { id: 'notes', label: 'Notes', icon: FileText },
                       { id: 'slides', label: 'Slides', icon: PlayCircle },
                       { id: 'audio', label: 'Audio', icon: Mic2 },
+                      { id: 'pptx', label: 'PPTX', icon: PlayCircle },
+                      { id: 'pdf', label: 'PDF', icon: FileText },
                     ].map((cat) => (
                       <button
                         key={cat.id}
                         onClick={() => setCategory(cat.id as any)}
-                        className={`flex items-center justify-center gap-1 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tight transition-all border ${
+                        className={`flex flex-col items-center justify-center gap-0.5 py-2.5 px-0.5 rounded-xl text-[8px] font-black uppercase tracking-tighter transition-all border ${
                           category === cat.id
                             ? 'bg-brand-accent border-brand-accent text-white shadow-sm'
-                            : 'bg-brand-surface border-brand-border text-brand-text'
+                            : 'bg-brand-surface border-brand-border text-brand-text hover:border-brand-accent/40'
                         }`}
                       >
-                        <cat.icon size={10} />
-                        {cat.label}
+                        <cat.icon size={10} className="shrink-0 mb-0.5" />
+                        <span className="leading-none text-[8px]">{cat.label}</span>
                       </button>
                     ))}
-                </div>
+                  </div>
                 </div>
 
                 <div className="px-4 pt-3 space-y-6">
@@ -765,167 +812,161 @@ export default function Home({
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-1 gap-2.5">
                       {[
                         {
-                          id: 'assignments',
-                          label: 'Homework Tasks',
-                          sub: 'Due assignments',
+                          id: 'homework',
+                          label: 'Homework.....',
+                          sub: 'Access homework tasks and deadlines',
                           icon: FileText,
                           color: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/15',
                           action: onAssignmentsClick
                         },
                         {
-                          id: 'exams',
-                          label: 'Assessments',
-                          sub: 'Timed exam papers',
-                          icon: Clock,
-                          color: 'text-rose-500 bg-rose-500/10 border-rose-500/15',
-                          action: onExamsClick
+                          id: 'assignment',
+                          label: 'Assignment....',
+                          sub: 'Submit assigned exercises and files',
+                          icon: FileText,
+                          color: 'text-violet-500 bg-violet-500/10 border-violet-500/15',
+                          action: onAssignmentsClick
                         },
                         {
                           id: 'arena',
-                          label: 'Student Arena',
-                          sub: 'Group game battles',
+                          label: 'Students arena.......',
+                          sub: 'Join multiplayer learning and quiz challenges',
                           icon: FlaskConical,
                           color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/15',
                           action: onArenaClick
                         },
                         {
                           id: 'stories',
-                          label: 'Story Quest',
-                          sub: 'Adventure learning',
+                          label: 'Story quest......',
+                          sub: 'Embark on engaging adventure learning quests',
                           icon: BookOpen,
                           color: 'text-[#FF6B2C] bg-[#FF6B2C]/10 border-[#FF6B2C]/15',
                           action: onStoriesClick
+                        },
+                        {
+                          id: 'forum',
+                          label: 'Combined school forum...',
+                          sub: 'Learn, chat, and discuss with classes',
+                          icon: Users,
+                          color: 'text-blue-500 bg-blue-500/10 border-blue-500/15',
+                          action: onCommunityClick
                         }
                       ].map((item) => (
                         <button
                           key={item.id}
                           onClick={(e) => { rippleEffect(e); item.action(); }}
-                          className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-brand-accent/25 rounded-2xl p-3.5 flex flex-col items-start gap-2.5 text-left active:scale-[0.97] transition-all shadow-sm w-full"
+                          className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-brand-accent/25 rounded-2xl p-3.5 flex items-center gap-3 text-left active:scale-[0.98] transition-all shadow-sm w-full"
                         >
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${item.color}`}>
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${item.color}`}>
                             <item.icon size={16} />
                           </div>
-                          <div>
-                            <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-brand-accent transition-colors leading-tight">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-display text-[11.5px] font-black text-brand-text group-hover:text-brand-accent transition-colors leading-tight">
                               {item.label}
                             </h4>
-                            <p className="text-[9px] font-medium text-brand-muted leading-tight mt-0.5">
+                            <p className="text-[9px] font-medium text-brand-muted leading-tight mt-0.5 truncate">
                               {item.sub}
                             </p>
                           </div>
-                          {/* Chevron in bottom right */}
-                          <span className="absolute bottom-2.5 right-3 text-xs font-bold text-brand-muted/30 group-hover:text-brand-accent group-hover:translate-x-0.5 transition-all">›</span>
+                          {/* Chevron */}
+                          <span className="text-xs font-bold text-brand-muted/55 group-hover:text-brand-accent group-hover:translate-x-0.5 transition-all">›</span>
                         </button>
                       ))}
                     </div>
-
-                    {/* All-Grades Combined Forum Shortcut inside Grade Hub for easy access */}
-                    <button
-                      onClick={(e) => { rippleEffect(e); onCommunityClick(); }}
-                      className="w-full bg-brand-surface border border-brand-border/40 hover:border-[#FF6B2C]/25 rounded-2xl p-3.5 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm text-left group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-[#FF6B2C]/10 border border-[#FF6B2C]/15 text-[#FF6B2C] rounded-xl flex items-center justify-center shrink-0">
-                          <Users size={16} />
-                        </div>
-                        <div>
-                          <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-[#FF6B2C] transition-colors leading-tight">
-                            All-Grades Combined Forum
-                          </h4>
-                          <p className="text-[9px] font-medium text-brand-muted mt-0.5">
-                            Learn from other students and ask questions
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-sm font-bold text-brand-muted group-hover:text-[#FF6B2C] group-hover:translate-x-0.5 transition-all">›</span>
-                    </button>
                   </div>
 
-                  {/* Teacher Shared School-Specific Materials */}
-                  {selectedClass && (
-                    <div className="space-y-3 mb-1">
-                      <div className="flex items-center justify-between px-2">
-                        <h3 className="text-[10px] uppercase font-black tracking-wider text-brand-muted flex items-center gap-1.5">
-                          <GraduationCap size={14} className="text-[#FF6B2C]" />
-                          Teacher Shared Courseware
-                        </h3>
-                        {student && student.grade === selectedClass && (
-                          <span className="text-[8px] font-black uppercase tracking-wider bg-[#FF6B2C]/10 text-[#FF6B2C] border border-[#FF6B2C]/15 px-2 py-0.5 rounded-full">
-                            My Class
+                  {category === null ? (
+                    <div className="py-8 text-center bg-brand-surface/45 rounded-2xl border border-dashed border-brand-border/60">
+                      <div className="w-10 h-10 bg-brand-accent/5 rounded-full flex items-center justify-center mx-auto mb-2.5 text-brand-accent/60">
+                        <FileText size={18} />
+                      </div>
+                      <p className="text-[10.5px] font-black text-brand-text uppercase tracking-wider mb-1">💡 View Class Materials</p>
+                      <p className="text-[9.5px] font-medium text-brand-muted px-8 leading-relaxed max-w-xs mx-auto">
+                        Tap any format in the top navigation bar (Slides, Audio, PPTX, PDF) to load the shared curriculum worksheets and resources!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Count & Study Materials list */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between px-2">
+                          <h3 className="text-[10px] uppercase font-black tracking-wider text-brand-muted flex items-center gap-1.5">
+                            <BookOpen size={13} className="text-brand-accent" />
+                            Study Materials
+                          </h3>
+                          <span className="text-[8.5px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border border-emerald-500/15 px-2 py-0.5 rounded-full">
+                            {results.length} Items {category !== 'all' && `(${category.toUpperCase()})`}
                           </span>
+                        </div>
+
+                        {loading && results.length === 0 ? (
+                          <div className="grid grid-cols-1 gap-3">
+                            {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
+                          </div>
+                        ) : error ? (
+                          <div className="text-center py-10 bg-brand-surface/50 rounded-2xl border border-dashed border-brand-border">
+                            <AlertCircle className="mx-auto text-red-500 mb-2" size={32} />
+                            <p className="text-brand-text text-[10px] font-bold">{error}</p>
+                            <button 
+                              onClick={() => handleSearch(searchQuery)}
+                              className="mt-2 text-brand-accent font-black uppercase tracking-widest text-[9px]"
+                            >
+                              Try Again
+                            </button>
+                          </div>
+                        ) : results.length === 0 ? (
+                          <div className="text-center py-10 bg-brand-surface border border-brand-border rounded-2xl">
+                            <h3 className="text-[11px] font-extrabold text-brand-text mb-1">No shared {category.toUpperCase()} materials found</h3>
+                            <p className="text-brand-muted text-[9.5px] font-medium px-6">We couldn't find any documents or slides for this category right now.</p>
+                          </div>
+                        ) : (
+                          <motion.div 
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate="show"
+                            className="grid grid-cols-1 gap-3"
+                          >
+                            {results.map((exp) => (
+                              <motion.div key={exp.id} variants={itemVariants}>
+                                <MaterialCard 
+                                  exp={exp} 
+                                  onClick={(e) => {
+                                    rippleEffect(e);
+                                    openExperiment(exp);
+                                  }}
+                                />
+                              </motion.div>
+                            ))}
+                          </motion.div>
                         )}
                       </div>
-                      <MaterialsList 
-                        grade={selectedClass}
-                        classId={student && student.grade === selectedClass ? student.class_id : null}
-                        isTeacher={false}
-                      />
+
+                      {/* Teacher Shared School-Specific Materials AT THE VERY BOTTOM */}
+                      {selectedClass && (
+                        <div className="space-y-3 pt-2.5 border-t border-brand-border/45">
+                          <div className="flex items-center justify-between px-2">
+                            <h3 className="text-[10px] uppercase font-black tracking-wider text-brand-muted flex items-center gap-1.5">
+                              <GraduationCap size={14} className="text-[#FF6B2C]" />
+                              Sent by Your Teachers
+                            </h3>
+                            {student && student.grade === selectedClass && (
+                              <span className="text-[8px] font-black uppercase tracking-wider bg-[#FF6B2C]/10 text-[#FF6B2C] border border-[#FF6B2C]/15 px-2 py-0.5 rounded-full">
+                                My Class
+                              </span>
+                            )}
+                          </div>
+                          <MaterialsList 
+                            grade={selectedClass}
+                            classId={student && student.grade === selectedClass ? student.class_id : null}
+                            isTeacher={false}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
-
-                  {/* Count */}
-                  <div className="flex items-center justify-end mb-3">
-                    <span className="text-[9px] font-black text-brand-muted uppercase tracking-wider whitespace-nowrap">
-                      {results.length} Materials
-                    </span>
-                  </div>
-
-                  {loading && results.length === 0 ? (
-                    <div className="grid grid-cols-1 gap-4">
-                      {[1, 2, 3, 4].map(i => <SkeletonCard key={i} />)}
-                    </div>
-                  ) : error ? (
-                    <div className="text-center py-20 bg-brand-surface/50 rounded-[3rem] border-2 border-dashed border-brand-border">
-                      <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
-                      <p className="text-brand-text font-bold">{error}</p>
-                      <button 
-                        onClick={() => handleSearch(searchQuery)}
-                        className="mt-4 text-brand-accent font-black uppercase tracking-widest text-xs"
-                      >
-                        Try Again
-                      </button>
-                    </div>
-                  ) : results.length === 0 ? (
-                  <div className="text-center py-20 bg-brand-surface border border-brand-border rounded-[2rem]">
-                    <div className="w-20 h-20 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                      <Search className="text-brand-accent" size={40} />
-                    </div>
-                    <h3 className="text-xl font-bold mb-2">No materials found</h3>
-                    <p className="text-brand-muted text-sm font-medium px-10">We couldn't find any materials for this search. Try a different keyword!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-8">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between px-2">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-brand-muted">Study Materials</h3>
-                        <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full">
-                          {results.length} Items
-                        </span>
-                      </div>
-                      <motion.div 
-                        variants={containerVariants}
-                        initial="hidden"
-                        animate="show"
-                        className="grid grid-cols-1 gap-4"
-                      >
-                        {results.map((exp) => (
-                          <motion.div key={exp.id} variants={itemVariants}>
-                            <MaterialCard 
-                              exp={exp} 
-                              onClick={(e) => {
-                                rippleEffect(e);
-                                openExperiment(exp);
-                              }}
-                            />
-                          </motion.div>
-                        ))}
-                      </motion.div>
-                    </div>
-                  </div>
-                )}
               </div>
             </motion.div>
           )}
@@ -1099,6 +1140,7 @@ export default function Home({
             <div className="flex justify-around items-center">
               {[
                 { id: 'home', label: 'Home', icon: HomeIcon, action: () => { setActiveTab('home'); setSelectedClass(null); } },
+                { id: 'notes', label: 'Notes', icon: BookOpen, action: () => { onNotesClick(); } },
                 { id: 'settings', label: 'Settings', icon: Settings, action: () => setActiveTab('settings') },
               ].map((tab) => (
                 <button
@@ -1201,14 +1243,7 @@ export default function Home({
                   PPT
                 </button>
               )}
-              {selectedExperiment.html_content && (
-                <button 
-                  onClick={() => { setViewMode('notes'); setZoom(100); setPan({ x: 0, y: 0 }); }}
-                  className={`px-4 py-3 text-xs font-bold whitespace-nowrap transition-all border-b-2 ${viewMode === 'notes' ? 'border-brand-accent text-brand-accent' : 'border-transparent text-brand-muted'}`}
-                >
-                  Notes
-                </button>
-              )}
+
             </div>
             
             <div className="flex-1 relative bg-brand-bg overflow-hidden">
@@ -1250,67 +1285,12 @@ export default function Home({
                   )}
 
                   {viewMode === 'notes' && (
-                    selectedExperiment.html_content?.startsWith('http') ? (
-                      <iframe
-                        src={selectedExperiment.html_content}
-                        className="absolute inset-0 w-full h-full border-none bg-white"
-                        title={selectedExperiment.title}
-                        sandbox="allow-scripts allow-modals allow-popups allow-forms allow-same-origin"
+                    <div className="absolute inset-0 flex flex-col overflow-hidden">
+                      <InteractiveNotes 
+                        material={selectedExperiment} 
+                        username={student?.username || student?.name}
                       />
-                    ) : (
-                      <iframe
-                        title={selectedExperiment.title}
-                        srcDoc={`
-                          <!DOCTYPE html>
-                          <html lang="en">
-                            <head>
-                              <meta charset="utf-8">
-                              <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-                              <style>
-                                * { box-sizing: border-box; }
-                                html { 
-                                  height: 100%; 
-                                  margin: 0; 
-                                  padding: 0; 
-                                }
-                                body { 
-                                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                                  line-height: 1.7;
-                                  color: ${theme === 'dark' ? '#f8fafc' : '#0f172a'};
-                                  padding: 24px;
-                                  padding-bottom: 120px;
-                                  margin: 0;
-                                  background: ${theme === 'dark' ? '#0f172a' : '#ffffff'};
-                                  word-wrap: break-word;
-                                  overflow-wrap: break-word;
-                                  min-height: 100%;
-                                }
-                                img { max-width: 100%; height: auto; border-radius: 12px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-                                h1, h2, h3 { color: ${theme === 'dark' ? '#ffffff' : '#000000'}; margin-top: 1.5em; font-weight: 800; line-height: 1.3; }
-                                h1 { font-size: 1.75rem; margin-top: 0; border-bottom: 2px solid ${theme === 'dark' ? '#1e293b' : '#f1f5f9'}; padding-bottom: 12px; }
-                                h2 { font-size: 1.5rem; }
-                                p { margin-bottom: 1.25em; }
-                                table { width: 100%; border-collapse: collapse; margin: 1.5em 0; background: ${theme === 'dark' ? '#1e293b' : '#fafafa'}; border-radius: 8px; overflow: hidden; }
-                                th, td { border: 1px solid ${theme === 'dark' ? '#334155' : '#e2e8f0'}; padding: 12px; text-align: left; }
-                                th { background: ${theme === 'dark' ? '#334155' : '#f8fafc'}; font-weight: 700; }
-                                pre { background: ${theme === 'dark' ? '#1e293b' : '#f1f5f9'}; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 0.9em; }
-                                code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-                                .loading { display: flex; align-items: center; justify-content: center; height: 100vh; font-weight: bold; }
-                                ::-webkit-scrollbar { width: 8px; }
-                                ::-webkit-scrollbar-track { background: transparent; }
-                                ::-webkit-scrollbar-thumb { background: ${theme === 'dark' ? '#334155' : '#cbd5e1'}; border-radius: 4px; }
-                              </style>
-                            </head>
-                            <body>
-                              ${selectedExperiment.html_content || '<div class="loading">No content available for this material.</div>'}
-                            </body>
-                          </html>
-                        `}
-                        className="absolute inset-0 w-full h-full border-none bg-white"
-                        sandbox="allow-scripts allow-modals allow-same-origin"
-                        loading="lazy"
-                      />
-                    )
+                    </div>
                   )}
                 </div>
               </div>
