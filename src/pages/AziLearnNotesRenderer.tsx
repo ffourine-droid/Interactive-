@@ -1,9 +1,25 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useContext } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { AlertCircle, Sparkles, CheckCircle, Award, BookOpen, Clock, Zap } from "lucide-react";
+import { 
+  AlertCircle, 
+  Sparkles, 
+  CheckCircle, 
+  Award, 
+  BookOpen, 
+  Clock, 
+  Zap, 
+  Volume2, 
+  VolumeX, 
+  Type, 
+  Play, 
+  Pause,
+  SlidersHorizontal,
+  BookmarkCheck,
+  Sparkle
+} from "lucide-react";
 import { supabase } from "../lib/supabase";
 
-// ─── AZILEARN BRANDCOLORS ────────────────────────────────────────────────────────
+// ─── MODEL ALIASES & CATEGORY CONSTANTS ─────────────────────────────────────────────
 export const AZL = {
   orange: "#F97316",
   orangeDark: "#EA580C",
@@ -38,6 +54,161 @@ const XP_MAP = {
   keypoint: 2,
   accordion: 2,
 };
+
+// ─── RETRO AUDIO SYNTH DRIVER (Web Audio API) ──────────────────────────────────
+class AudioSynthController {
+  private ctx: AudioContext | null = null;
+  private soundOn: boolean = true;
+
+  toggleSound(on: boolean) {
+    this.soundOn = on;
+  }
+
+  isSoundOn() {
+    return this.soundOn;
+  }
+
+  private initCtx() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playSuccess() {
+    if (!this.soundOn) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      
+      const playNote = (pitch: number, start: number, duration: number) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+        
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(pitch, start);
+        
+        gain.gain.setValueAtTime(0.12, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+        
+        osc.start(start);
+        osc.stop(start + duration);
+      };
+
+      playNote(523.25, now, 0.15); // C5
+      playNote(659.25, now + 0.08, 0.15); // E5
+      playNote(783.99, now + 0.16, 0.15); // G5
+      playNote(1046.50, now + 0.24, 0.3); // C6
+    } catch (e) {
+      console.warn("Audio blocked:", e);
+    }
+  }
+
+  playError() {
+    if (!this.soundOn) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.linearRampToValueAtTime(100, now + 0.25);
+      
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.linearRampToValueAtTime(0.001, now + 0.25);
+      
+      osc.start();
+      osc.stop(now + 0.25);
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+
+  playTap() {
+    if (!this.soundOn) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(330, now);
+      osc.frequency.exponentialRampToValueAtTime(660, now + 0.1);
+      
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      
+      osc.start();
+      osc.stop(now + 0.1);
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+
+  playFanfare() {
+    if (!this.soundOn) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      
+      const notes = [440, 554.37, 659.25, 880, 1108.73];
+      notes.forEach((pitch, i) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+        
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(pitch, now + i * 0.08);
+        
+        gain.gain.setValueAtTime(0.08, now + i * 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.3);
+        
+        osc.start(now + i * 0.08);
+        osc.stop(now + i * 0.08 + 0.3);
+      });
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+}
+
+const synth = new AudioSynthController();
+
+// ─── CONFIGURATION CONSTANTS ───
+export type TextSize = "small" | "medium" | "large";
+export type FontTheme = "celestial" | "parchment" | "neondusk";
+
+interface RendererConfig {
+  textSize: TextSize;
+  fontTheme: FontTheme;
+  sfxEnabled: boolean;
+  highlightCorrect: boolean;
+}
+
+const ConfigContext = React.createContext<RendererConfig>({
+  textSize: "medium",
+  fontTheme: "celestial",
+  sfxEnabled: true,
+  highlightCorrect: true,
+});
 
 // Handcrafted structured data lookup if notes matches fallback IDs
 const STRUCTURED_CURRICULUM_NOTES: Record<string, any> = {
@@ -204,24 +375,150 @@ const STRUCTURED_CURRICULUM_NOTES: Record<string, any> = {
   }
 };
 
-// ─── HELPER CARDS ───
+// ─── UTILITY HELPERS FOR TEXT SIZING & ACCUMULATED STYLES ───────────────────────────
+const getTextSizeClass = (size: TextSize) => {
+  switch (size) {
+    case "small": return "text-xs md:text-sm";
+    case "large": return "text-base md:text-lg lg:text-xl";
+    default: return "text-sm md:text-base";
+  }
+};
+
+const getTitleSizeClass = (size: TextSize) => {
+  switch (size) {
+    case "small": return "text-sm md:text-base font-black";
+    case "large": return "text-xl md:text-2xl font-black";
+    default: return "text-base md:text-lg font-black";
+  }
+};
+
+// ─── STUNNING MODERN HELPER CARDS with config access ────────────────────────────────
 function NoteCard({ block }: { block: any }) {
+  const config = useContext(ConfigContext);
   return (
-    <div className="bg-brand-surface border border-brand-border rounded-xl p-4 shadow-sm text-brand-text leading-relaxed text-[15px]">
-      {block.content}
+    <div className={`p-5 rounded-2xl border transition-all duration-300 leading-relaxed shadow-sm relative overflow-hidden group hover:scale-[1.01] ${
+      config.fontTheme === "parchment" 
+        ? "bg-[#FCFAF2] border-[#EADCC9] text-[#29221B]" 
+        : config.fontTheme === "neondusk"
+        ? "bg-[#0A0D1A] border-[#10B981]/25 text-emerald-200/90 shadow-emerald-500/5 hover:border-[#10B981]/50"
+        : "bg-[#1E293B]/70 border-[#2D3E50]/70 text-slate-100"
+    }`}>
+      <div className="absolute top-0 left-0 w-1 h-full bg-orange-400 group-hover:bg-orange-500 transition-colors" />
+      <span className="inline-block text-[10px] font-black tracking-widest text-[#F97316]/80 uppercase mb-2">LECTURE SUMMARY</span>
+      <p className={`m-0 ${getTextSizeClass(config.textSize)}`}>{block.content}</p>
     </div>
   );
 }
 
 function RichHtmlCard({ title, htmlContent }: { title: string; htmlContent: string }) {
+  const config = useContext(ConfigContext);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speechRate, setSpeechRate] = useState(1.0);
+  const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Stop reading text on unmount
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  const handleSpeakAloud = () => {
+    if (!window.speechSynthesis) return;
+
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    // Strip HTML to speak raw content only
+    const rawText = htmlContent.replace(/<\/?[^>]+(>|$)/g, " ");
+    const utterance = new SpeechSynthesisUtterance(rawText);
+    utterance.rate = speechRate;
+    
+    utterance.onend = () => {
+      setIsPlaying(false);
+    };
+
+    utterance.onerror = () => {
+      setIsPlaying(false);
+    };
+
+    synthRef.current = utterance;
+    setIsPlaying(true);
+    window.speechSynthesis.speak(utterance);
+    synth.playTap();
+  };
+
   return (
-    <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 md:p-8 shadow-sm text-brand-text mb-4 overflow-hidden">
-      <div className="flex items-center gap-2.5 mb-5 pb-3 border-b border-brand-border/40">
-        <span className="text-xl">📖</span>
-        <h3 className="font-extrabold text-xs text-brand-accent uppercase tracking-wider">{title}</h3>
+    <div className={`border rounded-3xl p-6 md:p-8 transition-all duration-300 leading-relaxed relative overflow-hidden ${
+      config.fontTheme === "parchment"
+        ? "bg-[#FDFBF7] border-[#EADCC9] text-[#29221B]"
+        : config.fontTheme === "neondusk"
+        ? "bg-[#090D1A] border-[#3B82F6]/30 text-slate-200 shadow-blue-500/5 hover:border-[#3B82F6]/50"
+        : "bg-[#1E293B]/60 border-[#2D3E50]/60 text-slate-100 shadow-xl"
+    }`}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-[#F97316]/10 text-[#F97316] flex items-center justify-center font-bold text-base">
+            📖
+          </div>
+          <h3 className="font-black text-xs uppercase tracking-wider text-[#F97316]">{title}</h3>
+        </div>
+
+        {/* Text to Speech controller widget */}
+        <div className="flex items-center gap-2 bg-black/10 border border-white/5 rounded-xl p-1.5 shrink-0 select-none">
+          <button
+            onClick={handleSpeakAloud}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+              isPlaying 
+                ? "bg-red-500 text-white animate-pulse" 
+                : "bg-white/10 hover:bg-white/15 text-white"
+            }`}
+          >
+            {isPlaying ? (
+              <>
+                <Pause size={12} className="fill-current" /> Stop Listening
+              </>
+            ) : (
+              <>
+                <Play size={12} className="fill-current text-[#F97316]" /> Listen Aloud
+              </>
+            )}
+          </button>
+
+          {isPlaying && (
+            <select
+              value={speechRate}
+              onChange={(e) => {
+                const rate = parseFloat(e.target.value);
+                setSpeechRate(rate);
+                // Trigger reload of speech synthesizer with the new rate
+                if (window.speechSynthesis) {
+                  window.speechSynthesis.cancel();
+                  const rawText = htmlContent.replace(/<\/?[^>]+(>|$)/g, " ");
+                  const utterance = new SpeechSynthesisUtterance(rawText);
+                  utterance.rate = rate;
+                  utterance.onend = () => setIsPlaying(false);
+                  utterance.onerror = () => setIsPlaying(false);
+                  window.speechSynthesis.speak(utterance);
+                }
+              }}
+              className="bg-zinc-800 text-white rounded-lg text-[9px] px-2 py-1 uppercase font-black tracking-wider outline-none border border-white/10"
+            >
+              <option value="0.9">0.9x Slow</option>
+              <option value="1.0">1.0x Norm</option>
+              <option value="1.2">1.2x Quick</option>
+              <option value="1.4">1.4x Fast</option>
+            </select>
+          )}
+        </div>
       </div>
+
       <div 
-        className="prose max-w-none text-brand-text select-text"
+        className={`prose max-w-none text-current select-text leading-relaxed tracking-wide space-y-4 font-sans ${getTextSizeClass(config.textSize)}`}
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
     </div>
@@ -229,152 +526,202 @@ function RichHtmlCard({ title, htmlContent }: { title: string; htmlContent: stri
 }
 
 function KeypointCard({ block }: { block: any }) {
-  const styles: Record<string, { bg: string; border: string; icon: string; text: string }> = {
-    info: { bg: AZL.blueLight, border: AZL.blue, icon: "💡", text: "#1e3a8a" },
-    warning: { bg: AZL.amberLight, border: AZL.amber, icon: "⚠️", text: "#78350f" },
-    success: { bg: AZL.greenLight, border: AZL.green, icon: "✅", text: "#065f46" },
+  const config = useContext(ConfigContext);
+  const styles: Record<string, { bg: string; border: string; icon: string; text: string; label: string }> = {
+    info: { bg: "bg-blue-500/10", border: "border-blue-500", icon: "💡", text: "text-blue-200", label: "PRO STRATEGY" },
+    warning: { bg: "bg-amber-500/10", border: "border-amber-500", icon: "⚠️", text: "text-amber-200", label: "EXAM DANGER ZONE" },
+    success: { bg: "bg-emerald-500/10", border: "border-emerald-500", icon: "🌸", text: "text-emerald-200", label: "CONGRATULATIONS" },
   };
   const s = styles[block.style] || styles.info;
   return (
-    <div 
-      className="rounded-xl p-4 flex gap-3 items-start border-l-4 shadow-sm"
-      style={{ background: s.bg, borderLeftColor: s.border }}
-    >
-      <span className="text-xl shrink-0 mt-0.5">{s.icon}</span>
-      <p className="m-0 font-medium text-[14px]" style={{ color: s.text }}>
-        {block.content}
-      </p>
+    <div className={`p-5 rounded-2xl border-l-4 transition-all duration-300 shadow-sm flex gap-4 items-start ${s.bg} ${s.border} ${
+      config.fontTheme === "parchment" ? "bg-[#FAF1DF] text-[#422D16] border-[#D4A373]" : "text-white"
+    }`}>
+      <span className="text-2xl shrink-0 mt-0.5 animate-bounce-slow">{s.icon}</span>
+      <div className="space-y-1">
+        <span className="text-[10px] font-black tracking-widest uppercase opacity-75">{s.label}</span>
+        <p className={`font-semibold leading-relaxed m-0 ${getTextSizeClass(config.textSize)}`}>
+          {block.content}
+        </p>
+      </div>
     </div>
   );
 }
 
 function DefinitionCard({ block, onComplete }: { block: any; onComplete?: () => void }) {
+  const config = useContext(ConfigContext);
   const [revealed, setRevealed] = useState(false);
+
+  const handleReveal = () => {
+    setRevealed(true);
+    synth.playSuccess();
+    onComplete?.();
+  };
+
   return (
-    <div className="bg-brand-surface border border-brand-border rounded-xl overflow-hidden shadow-sm">
-      <div 
-        className="px-4 py-3 flex justify-between items-center text-white"
-        style={{ background: AZL.navy }}
-      >
-        <span className="font-bold text-[14px] uppercase tracking-wide">{block.term}</span>
-        <span className="px-2 py-0.5 text-[9px] font-black rounded" style={{ background: AZL.orange }}>DEFINITION</span>
+    <div className={`border rounded-2xl overflow-hidden shadow-lg transition-all duration-300 ${
+      config.fontTheme === "parchment"
+        ? "bg-[#F7F4EB] border-[#D6CAB2]"
+        : config.fontTheme === "neondusk"
+        ? "bg-[#090D1A] border-[#10B981]/20"
+        : "bg-[#1E293B]/80 border-[#2D3E50]/70"
+    }`}>
+      <div className="px-5 py-3.5 flex justify-between items-center bg-gradient-to-r from-[#1E3A5F] to-[#2D5282] text-white">
+        <span className="font-extrabold text-[12px] uppercase tracking-wider">{block.term}</span>
+        <span className="px-2.5 py-0.5 text-[9px] font-black rounded uppercase tracking-widest bg-orange-500 text-white">DEFINITION</span>
       </div>
-      <div className="p-4 bg-brand-bg/35 min-h-[64px] flex items-center justify-center">
-        {revealed ? (
-          <motion.p 
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="m-0 text-brand-text font-medium text-center text-sm md:text-[15px] leading-relaxed"
-          >
-            {block.meaning}
-          </motion.p>
-        ) : (
-          <button
-            onClick={() => { setRevealed(true); onComplete?.(); }}
-            className="w-full text-white font-bold text-xs uppercase px-4 py-2.5 rounded-lg border-b-2 shadow-sm transition-all hover:brightness-105 active:scale-95"
-            style={{ background: AZL.orange, borderBottomColor: AZL.orangeDark }}
-          >
-            🔍 Tap to reveal meaning
-          </button>
-        )}
+      <div className="p-6 min-h-[96px] flex items-center justify-center">
+        <AnimatePresence mode="wait">
+          {revealed ? (
+            <motion.p 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`m-0 text-center font-bold font-sans leading-relaxed text-current ${getTextSizeClass(config.textSize)}`}
+            >
+              {block.meaning}
+            </motion.p>
+          ) : (
+            <button
+              onClick={handleReveal}
+              className="w-full text-white font-black text-xs uppercase px-5 py-3 rounded-xl border-b-2 shadow-md transition-all bg-[#F97316] hover:brightness-105 active:scale-95 border-[#C2410C]"
+            >
+              🔍 Reveal Scientific Meaning
+            </button>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
 }
 
 function ExampleCard({ block, onComplete }: { block: any; onComplete?: () => void }) {
+  const config = useContext(ConfigContext);
   const [showHint, setShowHint] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
+
+  const handleRevealAnswer = () => {
+    setShowAnswer(true);
+    synth.playSuccess();
+    onComplete?.();
+  };
+
   return (
-    <div className="bg-brand-surface border-2 rounded-xl overflow-hidden shadow-sm" style={{ borderColor: AZL.orange }}>
-      <div className="px-4 py-2.5 flex justify-between" style={{ background: AZL.orangeLight }}>
-        <span className="font-black text-[11px] uppercase tracking-wider" style={{ color: AZL.orangeDark }}>📝 WORKED EXAMPLE</span>
+    <div className={`border-2 rounded-2xl overflow-hidden shadow-lg transition-all duration-300 ${
+      config.fontTheme === "parchment"
+        ? "bg-[#FAF7EF] border-[#E2B78C]"
+        : "bg-[#1E293B]/70 border-[#F97316]/50"
+    }`}>
+      <div className="px-5 py-3 flex justify-between items-center bg-[#F97316]/10 text-[#F97316] border-b border-[#F97316]/20">
+        <span className="font-black text-[10px] uppercase tracking-widest">📝 WORKED STEP-BY-STEP EXAMPLE</span>
+        <span className="text-[9px] font-black uppercase tracking-wider bg-[#F97316] text-white px-2 py-0.5 rounded-full">ACTIVE SOLUTION</span>
       </div>
-      <div className="p-4">
-        <p className="font-bold text-brand-text text-[15px] mb-3 leading-snug">
+      <div className="p-6 space-y-4">
+        <p className={`font-black text-current leading-snug ${getTextSizeClass(config.textSize)}`}>
           {block.question}
         </p>
+
         {block.hint && !showAnswer && (
-          <button
-            onClick={() => setShowHint(true)}
-            className="mb-3 text-[11px] font-black tracking-wide flex items-center gap-1 uppercase transition-opacity hover:opacity-80"
-            style={{ color: AZL.amber, display: showHint ? "none" : "flex" }}
-          >
-            💡 Need a hint?
-          </button>
+          <div>
+            <button
+              onClick={() => { setShowHint(!showHint); synth.playTap(); }}
+              className="text-[11px] font-black tracking-wider flex items-center gap-1.5 uppercase text-amber-500 hover:opacity-80 pb-1"
+            >
+              💡 {showHint ? "Hide Exam Helper Hint" : "Get Exam-Winning Hint"}
+            </button>
+            <AnimatePresence>
+              {showHint && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="rounded-xl p-4 text-xs font-semibold leading-relaxed bg-amber-500/10 text-amber-300 border border-amber-500/25 mt-2"
+                >
+                  {block.hint}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
-        {showHint && !showAnswer && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="rounded-lg p-3 mb-3 text-xs font-semibold leading-relaxed"
-            style={{ background: AZL.amberLight, color: "#92400e" }}
-          >
-            {block.hint}
-          </motion.div>
-        )}
-        {!showAnswer ? (
-          <button
-            onClick={() => { setShowAnswer(true); onComplete?.(); }}
-            className="w-full text-white font-bold text-xs uppercase px-4 py-2.5 rounded-lg border-b-2 shadow-sm transition-all hover:brightness-105 active:scale-95"
-            style={{ background: AZL.navy, borderBottomColor: AZL.navyDark }}
-          >
-            Show Step-by-Step Solution
-          </button>
-        ) : (
-          <motion.div 
-            initial={{ scale: 0.98, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="rounded-lg p-3.5 text-sm font-semibold border"
-            style={{ background: AZL.greenLight, borderColor: AZL.green, color: "#065f46" }}
-          >
-            ✅ {block.answer}
-          </motion.div>
-        )}
+
+        <AnimatePresence mode="wait">
+          {!showAnswer ? (
+            <button
+              onClick={handleRevealAnswer}
+              className="w-full text-white font-black text-xs uppercase px-5 py-3 rounded-xl border-b-2 shadow-md transition-all bg-[#1E3A5F] border-[#0F2240] hover:brightness-105 active:scale-95"
+            >
+              Calculate & Unfold Solution Steps
+            </button>
+          ) : (
+            <motion.div 
+              initial={{ scale: 0.98, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="rounded-xl p-4.5 text-sm font-bold border bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+            >
+              <div className="flex items-center gap-2 mb-1.5 text-xs font-black uppercase text-emerald-400">
+                <span>✓ Verified Solution</span>
+              </div>
+              <p className={getTextSizeClass(config.textSize)}>{block.answer}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
 }
 
 function FlashCard({ block, onComplete }: { block: any; onComplete?: () => void }) {
+  const config = useContext(ConfigContext);
   const [flipped, setFlipped] = useState(false);
+
+  const handleFlip = () => {
+    if (!flipped) {
+      setFlipped(true);
+      synth.playSuccess();
+      onComplete?.();
+    } else {
+      setFlipped(false);
+      synth.playTap();
+    }
+  };
+
   return (
     <div
-      onClick={() => { if (!flipped) { setFlipped(true); onComplete?.(); } }}
-      className="cursor-pointer h-36 relative select-none"
-      style={{ perspective: 1000 }}
+      onClick={handleFlip}
+      className="cursor-pointer h-40 relative select-none"
+      style={{ perspective: 1200 }}
     >
       <div 
-        className="w-full h-full duration-500 rounded-xl shadow-md cursor-pointer transition-transform duration-500 origin-center"
+        className="w-full h-full duration-500 rounded-2xl shadow-xl transition-all origin-center relative cursor-cell"
         style={{
           transformStyle: "preserve-3d",
           transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
         }}
       >
-        {/* Front */}
+        {/* Front Side */}
         <div 
-          className="absolute inset-0 rounded-xl flex flex-col justify-center items-center p-4 gap-2 text-center"
+          className="absolute inset-0 rounded-2xl flex flex-col justify-center items-center p-6 gap-3 text-center border-2 border-white/5"
           style={{
             backfaceVisibility: "hidden",
-            background: `linear-gradient(135deg, ${AZL.navy}, ${AZL.navyLight})`,
+            background: `linear-gradient(135deg, ${AZL.navy}, ${AZL.navyDark})`,
           }}
         >
-          <span className="text-[9px] font-black tracking-widest" style={{ color: AZL.orangeLight }}>FLASHCARD • TAP TO REVEAL</span>
-          <p className="text-white font-bold text-sm md:text-[15px] leading-relaxed max-w-md">
+          <span className="text-[10px] font-black tracking-widest text-[#FED7AA] uppercase animate-pulse">FLASHCARD • TAP TO ROTATE</span>
+          <p className="text-white font-extrabold text-sm md:text-base leading-snug max-w-md">
             {block.front}
           </p>
         </div>
-        {/* Back */}
+
+        {/* Back Side */}
         <div 
-          className="absolute inset-0 rounded-xl flex flex-col justify-center items-center p-4 gap-2 text-center"
+          className="absolute inset-0 rounded-2xl flex flex-col justify-center items-center p-6 gap-3 text-center border-2 border-white/5"
           style={{
             backfaceVisibility: "hidden",
             transform: "rotateY(180deg)",
             background: `linear-gradient(135deg, ${AZL.orange}, ${AZL.orangeDark})`,
           }}
         >
-          <span className="text-[9.5px] font-black tracking-widest text-white/70">ANSWER REVEALED</span>
-          <p className="text-white font-bold text-sm md:text-[15px] leading-relaxed max-w-md">
+          <span className="text-[10px] font-black tracking-widest text-white/80 uppercase">ACADEMIC RESPONSE</span>
+          <p className="text-white font-extrabold text-sm md:text-base leading-snug max-w-md">
             {block.back}
           </p>
         </div>
@@ -384,6 +731,7 @@ function FlashCard({ block, onComplete }: { block: any; onComplete?: () => void 
 }
 
 function QuizBlock({ block, onComplete, onMistake }: { block: any; onComplete?: (e: any) => void; onMistake?: () => void }) {
+  const config = useContext(ConfigContext);
   const [selected, setSelected] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
 
@@ -392,66 +740,77 @@ function QuizBlock({ block, onComplete, onMistake }: { block: any; onComplete?: 
     setSelected(i);
     setLocked(true);
     const correct = i === block.correct;
+    if (correct) {
+      synth.playSuccess();
+    } else {
+      synth.playError();
+      onMistake?.();
+    }
     onComplete?.({ correct, selected: i, answer: block.correct });
-    if (!correct) onMistake?.();
   };
 
   return (
-    <div className="bg-brand-surface border border-brand-border rounded-xl overflow-hidden shadow-sm">
-      <div 
-        className="px-4 py-2.5 flex justify-between items-center text-white"
-        style={{ background: AZL.navyDark }}
-      >
-        <span className="font-extrabold text-[11px] tracking-widest">❓ QUIZ CHALLENGE</span>
-        <span className="text-[10px] font-black tracking-wide" style={{ color: AZL.orangeLight }}>+10 XP</span>
+    <div className={`border rounded-2xl overflow-hidden shadow-lg transition-all duration-300 ${
+      config.fontTheme === "parchment" ? "bg-[#FAF7EF] border-[#D6CAB2]" : "bg-[#1E293B]/70 border-[#2D3E50]/70"
+    }`}>
+      <div className="px-5 py-3 flex justify-between items-center bg-[#0F2240] text-white">
+        <span className="font-black text-[10px] tracking-widest uppercase text-[#FF6B2C]">❓ QUIZ CHALLENGE</span>
+        <span className="text-[10px] font-black tracking-wide text-[#FED7AA] bg-[#FF6B2C]/20 px-2 py-0.5 rounded">+10 XP</span>
       </div>
-      <div className="p-4">
-        <p className="font-bold text-brand-text text-[15px] mb-4 leading-snug">
+      <div className="p-6 space-y-4">
+        <p className={`font-black text-current leading-snug ${getTextSizeClass(config.textSize)}`}>
           {block.question}
         </p>
-        <div className="flex flex-col gap-2.5">
+
+        <div className="flex flex-col gap-3">
           {block.options.map((opt: string, i: number) => {
-            let bg = AZL.gray100;
-            let border = AZL.gray200;
-            let color = AZL.gray800;
-            if (locked) {
-              if (i === block.correct) { bg = AZL.greenLight; border = AZL.green; color = "#166534"; }
-              else if (i === selected && i !== block.correct) { bg = AZL.redLight; border = AZL.red; color = "#991b1b"; }
+            let bgStyle = "bg-[#253248]/50 hover:bg-[#2e3f5b]/50 border-white/5 text-slate-100";
+            if (config.fontTheme === "parchment") {
+              bgStyle = "bg-[#F0ECDF] hover:bg-[#EAE4D3] border-stone-300 text-stone-800";
             }
+
+            if (locked) {
+              if (i === block.correct) {
+                bgStyle = "bg-emerald-500/15 border-emerald-500 text-emerald-300 pointer-events-none";
+              } else if (i === selected && i !== block.correct) {
+                bgStyle = "bg-red-500/15 border-red-500 text-red-300 pointer-events-none";
+              } else {
+                bgStyle = "opacity-50 pointer-events-none";
+              }
+            }
+
             return (
               <button
                 key={i}
                 type="button"
                 onClick={() => handleSelect(i)}
                 disabled={locked}
-                className="group flex items-center gap-3 w-full text-left p-3 rounded-xl border-2 transition-all font-medium text-[14px]"
-                style={{
-                  background: bg,
-                  borderColor: border,
-                  color,
-                  cursor: locked ? "default" : "pointer"
-                }}
+                className={`group flex items-center gap-4 w-full text-left p-3.5 rounded-xl border transition-all font-bold ${bgStyle}`}
               >
-                <span 
-                  className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-black transition-all"
-                  style={{
-                    background: locked && i === block.correct ? AZL.green : locked && i === selected ? AZL.red : AZL.gray200,
-                    color: locked ? AZL.white : AZL.gray600,
-                  }}
-                >
+                <span className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-black transition-all ${
+                  locked && i === block.correct 
+                    ? "bg-emerald-500 text-white" 
+                    : locked && i === selected 
+                    ? "bg-red-500 text-white" 
+                    : "bg-black/20 text-white"
+                }`}>
                   {["A", "B", "C", "D"][i]}
                 </span>
-                <span className="flex-1">{opt}</span>
+                <span className={`flex-1 ${getTextSizeClass(config.textSize)}`}>{opt}</span>
               </button>
             );
           })}
         </div>
+
         {locked && block.explanation && (
           <motion.div 
-            initial={{ opacity: 0, y: 5 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-3 rounded-lg p-3 text-xs font-medium leading-relaxed"
-            style={{ background: AZL.blueLight, color: AZL.navyDark }}
+            className={`rounded-xl p-4 font-semibold leading-relaxed border ${
+              selected === block.correct 
+                ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300"
+                : "bg-amber-500/10 border-amber-500/25 text-amber-300"
+            }`}
           >
             💡 <strong>Explanation:</strong> {block.explanation}
           </motion.div>
@@ -462,42 +821,55 @@ function QuizBlock({ block, onComplete, onMistake }: { block: any; onComplete?: 
 }
 
 function AccordionBlock({ block, onComplete }: { block: any; onComplete?: () => void }) {
+  const config = useContext(ConfigContext);
   const [open, setOpen] = useState(false);
+
+  const handleToggle = () => {
+    setOpen(!open);
+    if (!open) {
+      synth.playTap();
+      onComplete?.();
+    }
+  };
+
   return (
-    <div className="bg-brand-surface border border-brand-border rounded-xl overflow-hidden shadow-sm">
+    <div className={`border rounded-2xl overflow-hidden shadow-lg transition-all duration-300 ${
+      config.fontTheme === "parchment" ? "bg-[#FAF7EF] border-[#D6CAB2]" : "bg-[#1E293B]/70 border-[#2D3E50]/70"
+    }`}>
       <button
-        onClick={() => { setOpen(o => !o); if (!open) onComplete?.(); }}
-        className="w-full bg-none border-none p-4 flex justify-between items-center cursor-pointer text-left focus:outline-none"
+        onClick={handleToggle}
+        className="w-full bg-transparent border-none p-5 flex justify-between items-center cursor-pointer text-left focus:outline-none"
       >
-        <span className="font-bold text-brand-text text-[14px] leading-tight flex-1 pr-4">{block.heading}</span>
+        <span className="font-extrabold text-current text-sm md:text-base leading-tight flex-1 pr-4">{block.heading}</span>
         <span 
-          className="text-lg font-black transition-transform duration-200"
-          style={{
-            color: AZL.orange,
-            transform: open ? "rotate(180deg)" : "rotate(0deg)",
-          }}
+          className="text-lg font-black transition-transform duration-300 shrink-0 text-orange-500"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
         >
           ▾
         </span>
       </button>
-      {open && (
-        <motion.div 
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          className="p-4 bg-brand-bg/20 border-t border-brand-border"
-        >
-          {block.content.split("\n").map((line: string, i: number) => (
-            <p key={i} className="m-0 mb-2 last:mb-0 text-sm text-brand-muted leading-relaxed">
-              {line}
-            </p>
-          ))}
-        </motion.div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="px-5 pb-5 bg-black/10 border-t border-white/5 pt-4 space-y-3"
+          >
+            {block.content.split("\n").map((line: string, i: number) => (
+              <p key={i} className={`m-0 text-current/80 font-semibold leading-relaxed ${getTextSizeClass(config.textSize)}`}>
+                {line}
+              </p>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 function FillBlankBlock({ block, onComplete, onMistake }: { block: any; onComplete?: (e: any) => void; onMistake?: () => void }) {
+  const config = useContext(ConfigContext);
   const [inputs, setInputs] = useState<string[]>(() => block.blanks.map(() => ""));
   const [checked, setChecked] = useState(false);
   const [results, setResults] = useState<boolean[]>([]);
@@ -507,21 +879,28 @@ function FillBlankBlock({ block, onComplete, onMistake }: { block: any; onComple
     setResults(r);
     setChecked(true);
     const allCorrect = r.every(Boolean);
+    if (allCorrect) {
+      synth.playSuccess();
+    } else {
+      synth.playError();
+      onMistake?.();
+    }
     onComplete?.({ correct: allCorrect, given: inputs, answer: block.blanks });
-    if (!allCorrect) onMistake?.();
   };
 
   const parts = block.sentence.split("___");
   let blankIdx = 0;
 
   return (
-    <div className="bg-brand-surface border border-brand-border rounded-xl overflow-hidden shadow-sm">
-      <div className="px-4 py-2.5 flex justify-between items-center text-white" style={{ background: AZL.navyLight }}>
-        <span className="font-black text-[11px] tracking-widest">✏️ FILL IN THE BLANKS</span>
-        <span className="text-[10px] font-black tracking-wide" style={{ color: AZL.orangeLight }}>+10 XP</span>
+    <div className={`border rounded-2xl overflow-hidden shadow-lg transition-all duration-300 ${
+      config.fontTheme === "parchment" ? "bg-[#FAF7EF] border-[#D6CAB2]" : "bg-[#1E293B]/70 border-[#2D3E50]/70"
+    }`}>
+      <div className="px-5 py-3 flex justify-between items-center bg-[#2D5282] text-white">
+        <span className="font-black text-[10px] tracking-widest uppercase">✏️ FILL IN THE BLANKS</span>
+        <span className="text-[10.5px] font-black text-[#FED7AA]">+10 XP</span>
       </div>
-      <div className="p-4">
-        <div className="text-[15px] text-brand-text leading-loose flex flex-wrap items-center gap-1 font-medium select-none mb-4">
+      <div className="p-6 space-y-5">
+        <div className={`text-current font-bold leading-loose flex flex-wrap items-center gap-x-2 gap-y-3 select-none ${getTextSizeClass(config.textSize)}`}>
           {parts.map((part: string, pi: number) => {
             const idx = blankIdx++;
             return (
@@ -537,12 +916,13 @@ function FillBlankBlock({ block, onComplete, onMistake }: { block: any; onComple
                       setInputs(v);
                     }}
                     disabled={checked}
-                    placeholder="fill blank..."
-                    className="border-b-2 rounded px-2 py-0.5 text-center font-bold text-brand-text text-sm outline-none transition-all focus:border-orange-500 focus:bg-orange-500/5"
+                    placeholder="Type word..."
+                    className="border-b-2 rounded px-3 py-1 text-center font-extrabold text-sm outline-none transition-all focus:border-orange-500 focus:bg-orange-500/5 placeholder:text-slate-400"
                     style={{
                       borderBottomColor: checked ? (results[idx] ? AZL.green : AZL.red) : AZL.orange,
-                      background: checked ? (results[idx] ? AZL.greenLight : AZL.redLight) : AZL.offWhite,
-                      width: 130,
+                      background: checked ? (results[idx] ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)") : "rgba(0,0,0,0.15)",
+                      color: checked ? (results[idx] ? AZL.green : AZL.red) : "inherit",
+                      width: 145,
                     }}
                   />
                 )}
@@ -550,28 +930,24 @@ function FillBlankBlock({ block, onComplete, onMistake }: { block: any; onComple
             );
           })}
         </div>
+
         {!checked ? (
           <button
             onClick={check}
             disabled={inputs.some(v => !v.trim())}
-            style={{
-              background: inputs.some(v => !v.trim()) ? AZL.gray200 : AZL.orange,
-              color: inputs.some(v => !v.trim()) ? AZL.gray400 : AZL.white,
-            }}
-            className="w-full font-bold text-xs uppercase px-4 py-2.5 rounded-lg border-b-2 border-orange-700 shadow-sm transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed"
+            className="w-full font-black text-xs uppercase px-5 py-3 rounded-xl border-b-2 shadow-md transition-all text-white bg-[#F97316] hover:brightness-105 active:scale-95 border-[#EA580C] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Check My Answers
+            Submit for Academic Verification
           </button>
         ) : (
           <motion.div 
             initial={{ scale: 0.98, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="rounded-lg p-3 text-sm font-semibold border"
-            style={{
-              background: results.every(Boolean) ? AZL.greenLight : AZL.redLight,
-              borderColor: results.every(Boolean) ? AZL.green : AZL.red,
-              color: results.every(Boolean) ? "#166534" : "#991b1b",
-            }}
+            className={`rounded-xl p-4 text-sm font-bold border ${
+              results.every(Boolean) 
+                ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300"
+                : "bg-red-500/10 border-red-500/25 text-red-300"
+            }`}
           >
             {results.every(Boolean) ? "✅ Absolutely perfect! Exceptional job." : `❌ Correct answers: ${block.blanks.join(", ")}`}
           </motion.div>
@@ -581,7 +957,7 @@ function FillBlankBlock({ block, onComplete, onMistake }: { block: any; onComple
   );
 }
 
-// ─── DYNAMIC TOPIC COMPILER FROM TEXT / HTML ───
+// ─── DYNAMIC TOPIC COMPILER FROM TEXT / HTML ──────────────────────────────────────────
 function compileInteractiveBlocksFromHtml(title: string, htmlStr: string): any[] {
   const blocks: any[] = [];
   try {
@@ -677,7 +1053,7 @@ function compileInteractiveBlocksFromHtml(title: string, htmlStr: string): any[]
   }
 }
 
-// ─── MAIN COMPONENT ───
+// ─── MAIN COMPONENT ─────────────────────────────────────────────────────────────────
 export interface AziLearnNotesRendererProps {
   notes: {
     id: string | number;
@@ -700,9 +1076,24 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
   const [xpClaimed, setXpClaimed] = useState(false);
   const [savingXp, setSavingXp] = useState(false);
 
+  // Custom styling, filter and scale states
+  const [textSize, setTextSize] = useState<TextSize>("medium");
+  const [fontTheme, setFontTheme] = useState<FontTheme>("celestial");
+  const [sfxEnabled, setSfxEnabled] = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "notes" | "challenges">("all");
+  const [showConfigDrawer, setShowConfigDrawer] = useState(false);
+
   // Dynamic Supabase table fetcher state
   const [dbNotes, setDbNotes] = useState<any>(null);
   const [loadingDb, setLoadingDb] = useState(false);
+
+  // Confetti triggering particles state
+  const [particles, setParticles] = useState<Array<{ id: number, x: number, y: number, color: string }>>([]);
+
+  // Initialize sound settings
+  useEffect(() => {
+    synth.toggleSound(sfxEnabled);
+  }, [sfxEnabled]);
 
   useEffect(() => {
     let active = true;
@@ -749,9 +1140,6 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
     sections: dbNotes.sections || notes?.sections || dbNotes.content?.sections || dbNotes.content
   } : (notes || {});
 
-  // Tab view selection: strictly interactive
-  const [viewTab, setViewTab] = useState<'notes' | 'interactive'>('interactive');
-
   // Compile active review blocks
   const targetId = String(activeNotes.id || activeNotes.topic_id || "");
   const structuredData = STRUCTURED_CURRICULUM_NOTES[targetId] || (activeNotes.sections ? { sections: activeNotes.sections } : null);
@@ -766,6 +1154,16 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
     return list;
   }, [targetId, activeNotes.title, activeNotes.html_content, structuredData]);
 
+  // Filters blocks by category
+  const filteredBlocks = React.useMemo(() => {
+    if (categoryFilter === "all") return blocks;
+    if (categoryFilter === "notes") {
+      return blocks.filter((b: any) => ["note", "html_content", "keypoint", "accordion"].includes(b.type));
+    }
+    // challenges
+    return blocks.filter((b: any) => ["definition", "example", "flashcard", "quiz", "fill_blank"].includes(b.type));
+  }, [blocks, categoryFilter]);
+
   const interactiveBlocks = React.useMemo(() => {
     return blocks.filter((b: any) => ["definition", "example", "flashcard", "quiz", "fill_blank", "accordion"].includes(b.type));
   }, [blocks]);
@@ -779,16 +1177,32 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
     return Math.min(100, Math.round((progressCount / interactiveBlocks.length) * 100));
   }, [progressCount, interactiveBlocks.length]);
 
+  const triggerParticlesBurst = () => {
+    const freshParticles = Array.from({ length: 24 }).map((_, i) => ({
+      id: Date.now() + i,
+      x: 10 + Math.random() * 80, // percentage left
+      y: 10 + Math.random() * 80, // percentage top
+      color: ["#F97316", "#22C55E", "#3B82F6", "#F59E0B", "#EC4899"][Math.floor(Math.random() * 5)]
+    }));
+    setParticles(freshParticles);
+    // Auto clear after 1 second
+    setTimeout(() => {
+      setParticles([]);
+    }, 1200);
+  };
+
   const handleBlockCompletion = (blockId: string, type: string) => {
     if (completedBlocks[blockId]) return;
     setCompletedBlocks(prev => ({ ...prev, [blockId]: true }));
     const reward = (XP_MAP as any)[type] || 2;
     setXpEarned(prev => prev + reward);
+    triggerParticlesBurst();
   };
 
   useEffect(() => {
     if (interactiveBlocks.length > 0 && progressCount === interactiveBlocks.length && !congratulated) {
       setCongratulated(true);
+      synth.playFanfare();
     }
   }, [progressCount, interactiveBlocks.length, congratulated]);
 
@@ -834,6 +1248,7 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
         }
       }
       setXpClaimed(true);
+      synth.playFanfare();
     } catch (err) {
       console.error("Failed to claim revision XP in renderer:", err);
     } finally {
@@ -905,169 +1320,369 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
     );
   }
 
+  // Map theme background color
+  const getThemeBgClass = () => {
+    if (fontTheme === "parchment") return "bg-[#FAF7F0] text-[#29221B]";
+    if (fontTheme === "neondusk") return "bg-[#05060C] text-slate-100";
+    return "bg-[#0F172A] text-slate-100";
+  };
+
   return (
-    <div className="w-full h-full bg-brand-bg flex flex-col overflow-y-auto scroll-smooth">
-      {/* Header Panel */}
-      <div 
-        className="shrink-0 p-5 border-b border-brand-border text-white relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
-        style={{ background: `linear-gradient(135deg, ${AZL.navyDark}, ${AZL.navy})` }}
-      >
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="px-2.5 py-0.5 text-[9px] font-black rounded uppercase tracking-wider bg-[#FF6B2C]/20 text-[#FF6B2C] border border-[#FF6B2C]/20">
-              Interactive Mode 🧠
-            </span>
-            <span className="text-[10px] text-white/50 font-semibold uppercase tracking-wider">
-              {activeNotes.subject || "Study Note"} • Grade {activeNotes.grade || "7"}
-            </span>
-          </div>
-          <h2 className="text-lg md:text-xl font-bold font-sans text-white tracking-tight">{activeNotes.title}</h2>
-          {username && (
-            <p className="text-[9px] font-bold text-white/40 mt-1 uppercase tracking-wider">Current User: {username}</p>
-          )}
-        </div>
-
-        {/* Live Progress Radial Tracker */}
-        <div className="relative z-10 shrink-0 bg-white/5 border border-white/10 rounded-2xl p-3 flex items-center gap-4 min-w-[200px]">
-          <div className="relative w-12 h-12 flex items-center justify-center shrink-0">
-            <div className="absolute inset-0 rounded-full border-4 border-white/10" />
-            <div 
-              className="absolute inset-0 rounded-full border-4 transition-all duration-500" 
-              style={{
-                borderTopColor: AZL.orange,
-                borderRightColor: progressPercent >= 50 ? AZL.orange : "transparent",
-                borderBottomColor: progressPercent >= 75 ? AZL.orange : "transparent",
-                borderLeftColor: progressPercent >= 100 ? AZL.orange : "transparent",
-              }}
+    <ConfigContext.Provider value={{ textSize, fontTheme, sfxEnabled, highlightCorrect: true }}>
+      <div className={`w-full h-full flex flex-col overflow-y-auto scroll-smooth relative ${getThemeBgClass()}`}>
+        
+        {/* Render interactive sparkles burst */}
+        <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+          {particles.map(p => (
+            <motion.div
+              key={p.id}
+              initial={{ x: `${p.x}vw`, y: "90vh", scale: 0.2, opacity: 1 }}
+              animate={{ y: `${p.y - 12}vh`, scale: [0.2, 1.2, 0.4], opacity: [1, 0.9, 0] }}
+              transition={{ duration: 1.1, ease: "easeOut" }}
+              style={{ backgroundColor: p.color }}
+              className="absolute w-3 h-3 rounded-full shadow-lg"
             />
-            <span className="text-white font-extrabold text-xs">{progressPercent}%</span>
+          ))}
+        </div>
+
+        {/* Dynamic Header Frame */}
+        <div 
+          className="shrink-0 p-5 border-b border-white/5 text-white relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl"
+          style={{ background: `linear-gradient(135deg, ${AZL.navyDark}, ${AZL.navy})` }}
+        >
+          {/* Backdrops sparkle items */}
+          <div className="absolute right-0 top-0 opacity-10 pointer-events-none">
+            <Sparkles size={160} className="text-orange-400 rotate-12" />
           </div>
 
-          <div>
-            <div className="text-[10px] text-white/50 font-black uppercase tracking-widest mb-0.5">Session XP</div>
-            <div className="flex items-center gap-1.5">
-              <Zap size={14} className="text-[#FF6B2C] animate-pulse" />
-              <span className="text-[16px] font-black text-[#FF6B2C]">{xpEarned} XP</span>
+          <div className="relative z-10">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <motion.span 
+                initial={{ x: -100, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 100, damping: 15, delay: 0.1 }}
+                className="px-2.5 py-0.5 text-[9px] font-black rounded uppercase tracking-wider bg-[#FF6B2C]/20 text-[#FF6B2C] border border-[#FF6B2C]/20"
+              >
+                Interactive Mode 🧠
+              </motion.span>
+              <motion.span 
+                initial={{ x: -150, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                whileInView={{
+                  x: [0, 12, -4, 8, 0],
+                  transition: {
+                    x: {
+                      repeat: Infinity,
+                      repeatType: "mirror",
+                      duration: 6,
+                      ease: "easeInOut"
+                    }
+                  }
+                }}
+                transition={{ 
+                  type: "spring", 
+                  stiffness: 85, 
+                  damping: 12, 
+                  delay: 0.2
+                }}
+                className="text-[10px] text-white/90 font-black uppercase tracking-wider bg-white/10 px-2.5 py-0.5 rounded border border-white/10 shadow-sm inline-flex items-center gap-1 cursor-default"
+              >
+                <span className="text-[#FF6B2C] animate-pulse">✦</span> {activeNotes.subject || "Study Note"} • Grade {activeNotes.grade || "7"}
+              </motion.span>
             </div>
+            <h2 className="text-lg md:text-xl font-bold font-sans text-white tracking-tight">{activeNotes.title}</h2>
+          </div>
+
+          {/* Quick Config Header Strip */}
+          <div className="flex flex-wrap items-center gap-3 relative z-20">
+            
+            {/* Filters selectors */}
+            <div className="bg-black/20 border border-white/10 rounded-xl p-1 flex items-center select-none text-[10px] font-black tracking-wider uppercase">
+              <button 
+                onClick={() => { setCategoryFilter("all"); synth.playTap(); }}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  categoryFilter === "all" ? "bg-[#FF6B2C] text-white" : "text-white/60 hover:text-white"
+                }`}
+              >
+                All ({blocks.length})
+              </button>
+              <button 
+                onClick={() => { setCategoryFilter("notes"); synth.playTap(); }}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  categoryFilter === "notes" ? "bg-[#FF6B2C] text-white" : "text-white/60 hover:text-white"
+                }`}
+              >
+                Notes
+              </button>
+              <button 
+                onClick={() => { setCategoryFilter("challenges"); synth.playTap(); }}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  categoryFilter === "challenges" ? "bg-[#FF6B2C] text-white" : "text-white/60 hover:text-white"
+                }`}
+              >
+                Practices
+              </button>
+            </div>
+
+            {/* Config Toggle Trigger Button */}
+            <button
+              onClick={() => { setShowConfigDrawer(!showConfigDrawer); synth.playTap(); }}
+              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 flex items-center justify-center text-white transition-all shadow-md active:scale-95"
+              title="Study Settings"
+            >
+              <SlidersHorizontal size={16} />
+            </button>
+
+            {/* Live Progress Tracker Ring */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-2.5 flex items-center gap-3 shrink-0 select-none">
+              <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
+                <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+                <div 
+                  className="absolute inset-0 rounded-full border-2 transition-all duration-500" 
+                  style={{
+                    borderTopColor: AZL.orange,
+                    borderRightColor: progressPercent >= 50 ? AZL.orange : "transparent",
+                    borderBottomColor: progressPercent >= 75 ? AZL.orange : "transparent",
+                    borderLeftColor: progressPercent >= 100 ? AZL.orange : "transparent",
+                  }}
+                />
+                <span className="text-white font-extrabold text-[10px]">{progressPercent}%</span>
+              </div>
+              <div className="hidden sm:block">
+                <div className="text-[8px] text-white/50 font-black tracking-widest uppercase">Session</div>
+                <div className="flex items-center gap-1">
+                  <Zap size={11} className="text-[#FF6B2C] animate-pulse" />
+                  <span className="text-xs font-black text-[#FF6B2C]">{xpEarned} XP</span>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
-      </div>
 
-      <div className="w-full bg-brand-border h-1.5 shrink-0 overflow-hidden relative">
-        <div 
-          className="h-full bg-brand-accent transition-all duration-300 ease-out"
-          style={{ width: `${progressPercent}%` }}
-        />
-      </div>
-
-      {/* Revision Blocks Stream */}
-      <div className="flex-1 w-full max-w-2xl mx-auto p-4 md:p-6 flex flex-col gap-5 pb-32">
-          {blocks.map((block: any, idx: number) => {
-            const isInteractive = ["definition", "example", "flashcard", "quiz", "fill_blank", "accordion"].includes(block.type);
-            const isCompleted = completedBlocks[block.id];
-
-            return (
-              <motion.div
-                key={block.id || idx}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className="relative"
-              >
-                {isInteractive && isCompleted && (
-                  <div className="absolute -left-3 -top-3 z-10 bg-emerald-500 text-white rounded-full p-0.5 shadow-md">
-                    <CheckCircle size={15} />
+        {/* Expanded Config Settings panel (Accordion style drawer) */}
+        <AnimatePresence>
+          {showConfigDrawer && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="bg-black/30 border-b border-white/5 px-6 py-4 select-none relative z-10"
+            >
+              <div className="max-w-2xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                
+                {/* 1. Theme Picker */}
+                <div className="space-y-1.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#FF6B2C]">Study Atmosphere</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      onClick={() => { setFontTheme("celestial"); synth.playTap(); }}
+                      className={`py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${
+                        fontTheme === "celestial" 
+                          ? "bg-white/10 text-white border-white/30" 
+                          : "bg-black/10 text-white/40 border-transparent hover:text-white"
+                      }`}
+                    >
+                      🌌 Celestial
+                    </button>
+                    <button
+                      onClick={() => { setFontTheme("parchment"); synth.playTap(); }}
+                      className={`py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${
+                        fontTheme === "parchment" 
+                          ? "bg-white/10 text-white border-white/30" 
+                          : "bg-black/10 text-white/40 border-transparent hover:text-white"
+                      }`}
+                    >
+                      📜 Sepia
+                    </button>
+                    <button
+                      onClick={() => { setFontTheme("neondusk"); synth.playTap(); }}
+                      className={`py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${
+                        fontTheme === "neondusk" 
+                          ? "bg-white/10 text-white border-white/30" 
+                          : "bg-black/10 text-white/40 border-transparent hover:text-white"
+                      }`}
+                    >
+                      🌠 Dusk
+                    </button>
                   </div>
-                )}
+                </div>
 
-                {block.type === "note" && <NoteCard block={block} />}
-                {block.type === "html_content" && (
-                  <RichHtmlCard 
-                    title={block.title} 
-                    htmlContent={block.html} 
-                  />
-                )}
-                {block.type === "keypoint" && <KeypointCard block={block} />}
-                {block.type === "accordion" && (
-                  <AccordionBlock 
-                    block={block} 
-                    onComplete={() => handleBlockCompletion(block.id, "accordion")} 
-                  />
-                )}
-                {block.type === "definition" && (
-                  <DefinitionCard 
-                    block={block} 
-                    onComplete={() => handleBlockCompletion(block.id, "definition")} 
-                  />
-                )}
-                {block.type === "example" && (
-                  <ExampleCard 
-                    block={block} 
-                    onComplete={() => handleBlockCompletion(block.id, "example")} 
-                  />
-                )}
-                {block.type === "flashcard" && (
-                  <FlashCard 
-                    block={block} 
-                    onComplete={() => handleBlockCompletion(block.id, "flashcard")} 
-                  />
-                )}
-                {block.type === "quiz" && (
-                  <QuizBlock 
-                    block={block} 
-                    onComplete={() => handleBlockCompletion(block.id, "quiz")} 
-                  />
-                )}
-                {block.type === "fill_blank" && (
-                  <FillBlankBlock 
-                    block={block} 
-                    onComplete={() => handleBlockCompletion(block.id, "fill_blank")} 
-                  />
-                )}
-              </motion.div>
-            );
-          })}
+                {/* 2. Audio SFX switch */}
+                <div className="space-y-1.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#FF6B2C]">Retro Reward Sounds</span>
+                  <div className="flex items-center justify-between bg-black/10 rounded-xl p-1.5 border border-white/5">
+                    <span className="text-[10px] text-white/60 font-bold uppercase pl-2">Sound Chimes</span>
+                    <button
+                      onClick={() => { setSfxEnabled(!sfxEnabled); synth.playTap(); }}
+                      className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
+                        sfxEnabled ? "bg-emerald-500 text-white" : "bg-zinc-700 text-white/60"
+                      }`}
+                    >
+                      {sfxEnabled ? "🔊 ON" : "🔇 OFF"}
+                    </button>
+                  </div>
+                </div>
 
+                {/* 3. Font Zoom Size */}
+                <div className="space-y-1.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#FF6B2C]">Readable Zoom Size</span>
+                  <div className="grid grid-cols-3 gap-1 px-1.5 py-1 bg-black/25 rounded-xl border border-white/5">
+                    {(["small", "medium", "large"] as TextSize[]).map(sz => (
+                      <button
+                        key={sz}
+                        onClick={() => { setTextSize(sz); synth.playTap(); }}
+                        className={`py-1 rounded-lg text-[10px] font-black uppercase transition-all ${
+                          textSize === sz ? "bg-[#FF6B2C] text-white" : "text-white/40 hover:text-white"
+                        }`}
+                      >
+                        {sz === "small" ? "A" : sz === "medium" ? "AA" : "AAA"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Dynamic Linear Progress bar */}
+        <div className="w-full bg-black/30 h-1.5 shrink-0 overflow-hidden relative">
+          <div 
+            className="h-full bg-brand-accent transition-all duration-300 ease-out"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+
+        {/* Revision Blocks Stream Container */}
+        <div className="flex-1 w-full max-w-2xl mx-auto p-4 md:p-6 flex flex-col gap-6 pb-32">
+          
+          <AnimatePresence mode="popLayout">
+            {filteredBlocks.map((block: any, idx: number) => {
+              const isInteractive = ["definition", "example", "flashcard", "quiz", "fill_blank", "accordion"].includes(block.type);
+              const isCompleted = completedBlocks[block.id];
+
+              return (
+                <motion.div
+                  key={block.id || idx}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.25 }}
+                  className="relative group/block"
+                >
+                  {/* Glowing halo indicator if completed */}
+                  {isInteractive && isCompleted && (
+                    <div className="absolute -left-3 -top-2.5 z-10 bg-emerald-500 text-white rounded-full p-0.5 shadow-lg border border-white">
+                      <CheckCircle size={15} />
+                    </div>
+                  )}
+
+                  {block.type === "note" && <NoteCard block={block} />}
+                  {block.type === "html_content" && (
+                    <RichHtmlCard 
+                      title={block.title} 
+                      htmlContent={block.html} 
+                    />
+                  )}
+                  {block.type === "keypoint" && <KeypointCard block={block} />}
+                  {block.type === "accordion" && (
+                    <AccordionBlock 
+                      block={block} 
+                      onComplete={() => handleBlockCompletion(block.id, "accordion")} 
+                    />
+                  )}
+                  {block.type === "definition" && (
+                    <DefinitionCard 
+                      block={block} 
+                      onComplete={() => handleBlockCompletion(block.id, "definition")} 
+                    />
+                  )}
+                  {block.type === "example" && (
+                    <ExampleCard 
+                      block={block} 
+                      onComplete={() => handleBlockCompletion(block.id, "example")} 
+                    />
+                  )}
+                  {block.type === "flashcard" && (
+                    <FlashCard 
+                      block={block} 
+                      onComplete={() => handleBlockCompletion(block.id, "flashcard")} 
+                    />
+                  )}
+                  {block.type === "quiz" && (
+                    <QuizBlock 
+                      block={block} 
+                      onComplete={() => handleBlockCompletion(block.id, "quiz")} 
+                    />
+                  )}
+                  {block.type === "fill_blank" && (
+                    <FillBlankBlock 
+                      block={block} 
+                      onComplete={() => handleBlockCompletion(block.id, "fill_blank")} 
+                    />
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+
+          {/* Session completed celebration trophy card */}
           <AnimatePresence>
             {congratulated && (
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="rounded-2xl border-2 p-5 text-center mt-4 bg-brand-surface border-orange-500/30 shadow-lg relative overflow-hidden flex flex-col items-center gap-3"
+                className={`rounded-3xl border-2 p-6 text-center mt-6 shadow-xl relative overflow-hidden flex flex-col items-center gap-4 ${
+                  fontTheme === "parchment" 
+                    ? "bg-[#FCFAF0] border-orange-200" 
+                    : "bg-[#1E293B] border-orange-500/30"
+                }`}
               >
-                <div 
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white shrink-0 mb-1"
-                  style={{ background: `linear-gradient(135deg, ${AZL.orange}, ${AZL.orangeDark})` }}
-                >
-                  <Award size={24} />
+                
+                {/* Visual celebrate effect */}
+                <div className="absolute right-0 top-0 text-orange-500/5 rotate-[45deg] scale-150 select-none pointer-events-none">
+                  ★
                 </div>
 
-                <h3 className="font-bold text-base md:text-lg text-brand-text">Active Study Session Complete!</h3>
-                <p className="text-xs md:text-sm text-brand-muted max-w-sm m-0 leading-relaxed">
-                  Splendid effort! You have carefully processed every key point, solution, definition, and quiz inside this revision packet.
-                </p>
+                <div 
+                  className="w-14 h-14 rounded-full flex items-center justify-center text-white shrink-0 shadow-lg"
+                  style={{ background: `linear-gradient(135deg, ${AZL.orange}, ${AZL.orangeDark})` }}
+                >
+                  <Award size={28} className="animate-pulse" />
+                </div>
 
-                <div className="font-black text-xs tracking-wider text-orange-500 flex items-center gap-2 mt-1 px-4 py-1.5 rounded-full bg-orange-500/5 max-w-max">
-                  <Sparkles size={14} /> EARNED: +{xpEarned} AZILEARN XP
+                <div className="space-y-1">
+                  <h3 className="font-sans font-black text-lg md:text-xl text-[#FF6B2C]">Active Study Session Complete!</h3>
+                  <p className="text-xs md:text-sm text-slate-400 max-w-md m-0 leading-relaxed">
+                    Splendid effort! You have successfully reviews every key point, definition, exercise and quiz in this revision packet.
+                  </p>
+                </div>
+
+                <div className="font-black text-xs tracking-wider text-orange-500 flex items-center gap-2 px-5 py-2 rounded-full bg-orange-500/10 max-w-max border border-orange-500/25">
+                  <Sparkles size={14} className="animate-spin-slow text-orange-400" /> EARNED SESSION BONUS: +{xpEarned} AZILEARN XP
                 </div>
 
                 <button
                   type="button"
                   onClick={handleClaimReward}
                   disabled={xpClaimed || savingXp}
-                  className="mt-2 text-white font-black text-xs uppercase px-6 py-3 rounded-xl border-b-4 transition-all shadow-md active:scale-95 disabled:brightness-90 disabled:cursor-not-allowed"
+                  className="mt-2 text-white font-black text-xs uppercase px-12 py-3.5 rounded-2xl border-b-4 transition-all shadow-lg active:scale-95 disabled:brightness-90 disabled:cursor-not-allowed"
                   style={{
                     background: xpClaimed ? AZL.green : AZL.orange,
                     borderBottomColor: xpClaimed ? "#166534" : AZL.orangeDark,
                   }}
                 >
-                  {savingXp ? "Validating Progress..." : xpClaimed ? "🏆 XP Claimed Successfully!" : `Claim Session Revison XP`}
+                  {savingXp ? "Writing to Registry..." : xpClaimed ? "🏆 XP Claimed Successfully!" : `Claim & Record Session XP`}
                 </button>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
+
       </div>
-    );
-  }
+    </ConfigContext.Provider>
+  );
+}

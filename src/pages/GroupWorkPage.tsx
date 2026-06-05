@@ -92,78 +92,78 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
             <p className="text-xs font-bold text-brand-muted">Playing as <span className="text-brand-accent font-black">{username}</span></p>
           )}
 
-          {/* TEACHERS GROUP WORK Card - HIGHLY PROMINENT */}
+          {/* TEACHERS GROUP WORK Card */}
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => {
               setView('teacher_lobby');
             }}
-            className="w-full bg-brand-surface border border-indigo-500/40 rounded-[2rem] p-6 text-left space-y-3 hover:border-indigo-500 transition-all group shadow-lg shadow-indigo-500/5"
+            className="w-full bg-brand-surface border border-indigo-500/25 hover:border-indigo-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
           >
-            <div className="flex items-center justify-between">
-              <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
-                <BookOpen size={28} className="text-indigo-500" />
+            <div className="w-9 h-9 bg-indigo-500/10 border border-indigo-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-indigo-500/15 transition-colors">
+              <BookOpen size={16} className="text-indigo-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1.5">
+                <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-indigo-500 transition-colors leading-tight uppercase">
+                  🏫 Teachers Group Work
+                </h4>
+                <span className="text-[7.5px] font-black text-indigo-500 bg-indigo-500/10 uppercase tracking-widest px-1.5 py-0.5 rounded leading-none shrink-0">Class Projects</span>
               </div>
-              <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest px-2.5 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20">Class Projects</span>
+              <p className="text-[9.5px] font-medium text-brand-muted leading-tight mt-0.5">
+                Challenges and active battles assigned by your teacher.
+              </p>
             </div>
-            <div>
-              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">🏫 Teachers Group Work</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">Participate in challenges, collaborative squad projects, and active battles assigned by your teacher.</p>
-            </div>
-            <div className="flex gap-2">
-              {['Teacher Assigned', 'Squads & Teams', 'Leaderboard', 'Revision'].map(tag => (
-                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
-              ))}
-            </div>
+            <span className="text-xs font-bold text-brand-muted/50 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0">›</span>
           </motion.button>
 
-          {/* 1V1 MATH DUEL Card - EXTREMELY PROMINENT */}
+          {/* 1V1 MATH DUEL Card */}
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => {
               setCompDefaultTab('math_duel');
               setView('competitions');
             }}
-            className="w-full bg-brand-surface border border-[#FF6B00]/40 rounded-[2rem] p-6 text-left space-y-3 hover:border-[#FF6B00] transition-all group shadow-lg shadow-[#FF6B00]/5"
+            className="w-full bg-brand-surface border border-[#FF6B00]/25 hover:border-[#FF6B00] rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
           >
-            <div className="flex items-center justify-between">
-              <div className="w-14 h-14 bg-[#FF6B00]/10 rounded-2xl flex items-center justify-center group-hover:bg-[#FF6B00]/20 transition-colors">
-                <Swords size={28} className="text-[#FF6B00]" />
+            <div className="w-9 h-9 bg-[#FF6B00]/10 border border-[#FF6B00]/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-[#FF6B00]/15 transition-colors">
+              <Swords size={16} className="text-[#FF6B00]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1.5">
+                <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-[#FF6B00] transition-colors leading-tight uppercase">
+                  ✏️ 1v1 Math Duel
+                </h4>
+                <span className="text-[7.5px] font-black text-[#FF6B00] bg-[#FF6B00]/10 uppercase tracking-widest px-1.5 py-0.5 rounded leading-none shrink-0">Live 1v1</span>
               </div>
-              <span className="text-[9px] font-black text-[#FF6B00] uppercase tracking-widest px-2.5 py-1 bg-[#FF6B00]/10 rounded-full border border-[#FF6B00]/20">Live 1v1</span>
+              <p className="text-[9.5px] font-medium text-brand-muted leading-tight mt-0.5">
+                Real-time arithmetic battle with numeric answers.
+              </p>
             </div>
-            <div>
-              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">✏️ 1v1 Math Duel</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">Real-time arithmetic battle! Submit numeric answers instantly. Best of 5 rounds wins.</p>
-            </div>
-            <div className="flex gap-2">
-              {['Real-time', 'PvP', 'Arithmetic', '30 XP'].map(tag => (
-                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
-              ))}
-            </div>
+            <span className="text-xs font-bold text-brand-muted/50 group-hover:text-[#FF6B00] group-hover:translate-x-0.5 transition-all shrink-0">›</span>
           </motion.button>
 
           {/* Speed Round */}
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => setView('speed')}
-            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-brand-accent transition-all group"
+            className="w-full bg-brand-surface border border-brand-accent/25 hover:border-brand-accent rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
           >
-            <div className="flex items-center justify-between">
-              <div className="w-14 h-14 bg-brand-accent/10 rounded-2xl flex items-center justify-center group-hover:bg-brand-accent/20 transition-colors">
-                <Zap size={28} className="text-brand-accent" />
+            <div className="w-9 h-9 bg-brand-accent/10 border border-brand-accent/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-brand-accent/15 transition-colors">
+              <Zap size={16} className="text-brand-accent" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1.5">
+                <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-brand-accent transition-colors leading-tight uppercase">
+                  ⚡ Speed Round (Solo)
+                </h4>
+                <span className="text-[7.5px] font-black text-brand-accent bg-brand-accent/10 uppercase tracking-widest px-1.5 py-0.5 rounded leading-none shrink-0">Solo</span>
               </div>
-              <span className="text-[9px] font-black text-brand-accent uppercase tracking-widest px-2 py-1 bg-brand-accent/10 rounded-full">Solo</span>
+              <p className="text-[9.5px] font-medium text-brand-muted leading-tight mt-0.5">
+                60 seconds async challenge to top the board.
+              </p>
             </div>
-            <div>
-              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">⚡ Speed Round (Solo)</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">60 seconds · answer as many as you can · leaderboard</p>
-            </div>
-            <div className="flex gap-2">
-              {['Solo', 'Async', 'Leaderboard'].map(tag => (
-                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
-              ))}
-            </div>
+            <span className="text-xs font-bold text-brand-muted/50 group-hover:text-brand-accent group-hover:translate-x-0.5 transition-all shrink-0">›</span>
           </motion.button>
 
           {/* Live Battle (Host/Join Room) */}
@@ -173,23 +173,23 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               setCompDefaultTab('group_battle');
               setView('competitions');
             }}
-            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-emerald-400 transition-all group shadow-lg shadow-emerald-400/5"
+            className="w-full bg-brand-surface border border-emerald-400/25 hover:border-emerald-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
           >
-            <div className="flex items-center justify-between">
-              <div className="w-14 h-14 bg-emerald-400/10 rounded-2xl flex items-center justify-center group-hover:bg-emerald-400/20 transition-all">
-                <Users size={28} className="text-emerald-400 group-hover:text-emerald-500 transition-colors" />
+            <div className="w-9 h-9 bg-emerald-400/10 border border-emerald-400/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-emerald-400/15 transition-colors">
+              <Users size={16} className="text-emerald-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1.5">
+                <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-emerald-500 transition-colors leading-tight uppercase">
+                  👥 Class Group Battle
+                </h4>
+                <span className="text-[7.5px] font-black text-emerald-500 bg-emerald-500/10 uppercase tracking-widest px-1.5 py-0.5 rounded leading-none shrink-0">Class Multi</span>
               </div>
-              <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest px-2 py-1 bg-emerald-400/10 rounded-full border border-emerald-400/20">Class Multi</span>
+              <p className="text-[9.5px] font-medium text-brand-muted leading-tight mt-0.5">
+                Create synchronous lobby for up to 10 peers.
+              </p>
             </div>
-            <div>
-              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">👥 Class Group Battle</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">Create room & invite up to 10 classmates. Answer same questions synchronously.</p>
-            </div>
-            <div className="flex gap-2">
-              {['Lobby Room', 'Up to 10', 'CBC Questions'].map(tag => (
-                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
-              ))}
-            </div>
+            <span className="text-xs font-bold text-brand-muted/50 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0">›</span>
           </motion.button>
 
           {/* Alternative 1v1 Option */}
@@ -199,56 +199,56 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               setCompDefaultTab('speed_round');
               setView('competitions');
             }}
-            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-blue-400 transition-all group shadow-lg shadow-blue-500/5"
+            className="w-full bg-brand-surface border border-blue-400/25 hover:border-blue-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
           >
-            <div className="flex items-center justify-between">
-              <div className="w-14 h-14 bg-blue-500/10 rounded-2xl flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                <Zap size={28} className="text-blue-500" />
+            <div className="w-9 h-9 bg-blue-500/10 border border-blue-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-blue-500/25 transition-colors">
+              <Zap size={16} className="text-blue-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1.5">
+                <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-blue-500 transition-colors leading-tight uppercase">
+                  ⚡ Live 1v1 Speed Round
+                </h4>
+                <span className="text-[7.5px] font-black text-blue-500 bg-blue-500/10 uppercase tracking-widest px-1.5 py-0.5 rounded leading-none shrink-0">Live PvP</span>
               </div>
-              <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest px-2 py-1 bg-blue-400/10 rounded-full">Live PvP</span>
+              <p className="text-[9.5px] font-medium text-brand-muted leading-tight mt-0.5">
+                Simultaneous curriculum contest with classmate.
+              </p>
             </div>
-            <div>
-              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">⚡ Live 1v1 Speed Round</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">Simultaneous general knowledge challenge with classmate. 60s max limit.</p>
-            </div>
-            <div className="flex gap-2">
-              {['Simultaneous', 'Syllabus Quiz', 'Leaderboard'].map(tag => (
-                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
-              ))}
-            </div>
+            <span className="text-xs font-bold text-brand-muted/50 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all shrink-0">›</span>
           </motion.button>
 
           {/* Study Flashcards Option */}
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => setView('flashcards')}
-            className="w-full bg-brand-surface border border-brand-border rounded-[2rem] p-6 text-left space-y-3 hover:border-teal-400 transition-all group shadow-lg shadow-teal-500/5"
+            className="w-full bg-brand-surface border border-teal-400/25 hover:border-teal-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
           >
-            <div className="flex items-center justify-between">
-              <div className="w-14 h-14 bg-teal-500/10 rounded-2xl flex items-center justify-center group-hover:bg-teal-500/20 transition-colors">
-                <BookOpen size={28} className="text-teal-500" />
+            <div className="w-9 h-9 bg-teal-500/10 border border-teal-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-teal-500/15 transition-colors">
+              <BookOpen size={16} className="text-teal-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1.5">
+                <h4 className="font-display text-[11px] font-black text-brand-text group-hover:text-teal-500 transition-colors leading-tight uppercase">
+                  📚 Study Flashcards
+                </h4>
+                <span className="text-[7.5px] font-black text-teal-500 bg-teal-500/10 uppercase tracking-widest px-1.5 py-0.5 rounded leading-none shrink-0">Self Study</span>
               </div>
-              <span className="text-[9px] font-black text-teal-400 tracking-wider uppercase px-2.5 py-1 bg-teal-500/10 border border-teal-500/20 rounded-full">Self Study</span>
+              <p className="text-[9.5px] font-medium text-brand-muted leading-tight mt-0.5">
+                Revision flashcards matching the CBC curriculum.
+              </p>
             </div>
-            <div>
-              <h2 className="text-md font-black text-brand-text tracking-tight uppercase">📚 Study Flashcards</h2>
-              <p className="text-xs font-bold text-brand-muted mt-0.5">Flip interactive cards designed per Kenya CBC curriculum by subjects. Boost recall speed!</p>
-            </div>
-            <div className="flex gap-2">
-              {['Active Recall', 'Syllabus Revision', 'Self-paced', '30 XP'].map(tag => (
-                <span key={tag} className="text-[8px] font-black text-brand-muted px-2 py-0.5 bg-brand-bg border border-brand-border rounded-full">{tag}</span>
-              ))}
-            </div>
+            <span className="text-xs font-bold text-brand-muted/50 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0">›</span>
           </motion.button>
 
           {/* Points guide */}
-          <div className="bg-brand-bg border border-brand-border rounded-[2rem] p-5 space-y-2">
-            <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">How Points Work</p>
-            <div className="grid grid-cols-2 gap-2 text-xs font-bold text-brand-text">
-              <p>✅ Correct → +10pts</p>
-              <p>🔥 5-streak → +5pts</p>
-              <p>🔥 10-streak → +15pts</p>
-              <p>⭐ Perfect → +50pts</p>
+          <div className="bg-brand-surface border border-brand-border/45 rounded-2xl p-4 space-y-1.5 shadow-sm">
+            <p className="text-[8.5px] font-black text-brand-muted uppercase tracking-widest">How Points Work</p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[9.5px] font-black uppercase text-brand-text tracking-wide">
+              <p className="flex items-center gap-1"><span className="text-emerald-500 text-[11px]">✅</span> Correct <span className="text-brand-muted font-black font-sans text-[8px]">+10 XP</span></p>
+              <p className="flex items-center gap-1"><span className="text-[#FF6B2C] text-[11px]">🔥</span> 5-Streak <span className="text-brand-muted font-black font-sans text-[8px]">+5 XP</span></p>
+              <p className="flex items-center gap-1"><span className="text-rose-500 text-[11px]">🔥</span> 10-Streak <span className="text-brand-muted font-black font-sans text-[8px]">+15 XP</span></p>
+              <p className="flex items-center gap-1"><span className="text-yellow-500 text-[11px]">⭐</span> Perfect <span className="text-brand-muted font-black font-sans text-[8px]">+50 XP</span></p>
             </div>
           </div>
         </div>

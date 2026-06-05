@@ -295,10 +295,34 @@ export default function NotesPage({
                 <ArrowLeft size={14} className="text-[#F97316]" /> Back to Topics
               </button>
               
-              <div className="text-right">
-                <span className="text-[9px] font-black uppercase tracking-wider text-brand-accent bg-brand-accent/5 border border-brand-accent/10 px-2.5 py-1 rounded-full">
-                  Grade {selectedGrade} • {selectedSubject}
-                </span>
+              <div className="text-right overflow-hidden">
+                <motion.span 
+                  initial={{ x: -120, opacity: 0 }}
+                  animate={{ 
+                    x: 0, 
+                    opacity: 1,
+                  }}
+                  whileInView={{
+                    x: [0, 10, -3, 6, 0],
+                    transition: {
+                      x: {
+                        repeat: Infinity,
+                        repeatType: "mirror",
+                        duration: 6,
+                        ease: "easeInOut"
+                      }
+                    }
+                  }}
+                  transition={{ 
+                    type: "spring", 
+                    stiffness: 85, 
+                    damping: 12, 
+                    delay: 0.15
+                  }}
+                  className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-brand-accent bg-brand-accent/5 border border-brand-accent/10 px-2.5 py-1 rounded-full cursor-default"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-accent animate-ping" /> Grade {selectedGrade} • {selectedSubject}
+                </motion.span>
               </div>
             </div>
 

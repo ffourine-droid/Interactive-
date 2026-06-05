@@ -31,6 +31,7 @@ import { MaterialManager } from '../components/MaterialManager';
 import StoryQuestManager from '../components/StoryQuestManager';
 import RevengeDeck from '../components/RevengeDeck';
 import { FlashcardManager } from '../components/FlashcardManager';
+import { CurriculumNotesManager } from '../components/CurriculumNotesManager';
 import { forumService } from '../services/forumService';
 import { attachmentService } from '../services/attachmentService';
 import { ShieldAlert, Pin, Heart, MessageSquare, Repeat } from 'lucide-react';
@@ -42,7 +43,7 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards'>('overview');
+  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards' | 'curriculum'>('overview');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
 
@@ -523,6 +524,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             { id: 'overview' as const, icon: Layout, label: 'Overview', badge: 0 },
             { id: 'shared' as const, icon: FileText, label: 'Templates', badge: 0 },
             { id: 'system' as const, icon: Database, label: 'Materials', badge: 0 },
+            { id: 'curriculum' as const, icon: FileJson, label: 'Notes Hub', badge: 0 },
             { id: 'arena' as const, icon: Zap, label: 'Arena & Qns', badge: 0 },
             { id: 'stories' as const, icon: BookOpen, label: 'Story Quest', badge: 0 },
             { id: 'flashcards' as const, icon: BookOpen, label: 'Flashcards', badge: 0 },
@@ -588,6 +590,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                 { id: 'overview' as const, label: 'Overview', badge: 0 },
                 { id: 'shared' as const, label: 'Templates', badge: 0 },
                 { id: 'system' as const, label: 'Materials', badge: 0 },
+                { id: 'curriculum' as const, label: 'Notes Hub', badge: 0 },
                 { id: 'arena' as const, label: 'Arena', badge: 0 },
                 { id: 'stories' as const, label: 'Story Quest', badge: 0 },
                 { id: 'flashcards' as const, label: 'Flashcards', badge: 0 },
@@ -1010,6 +1013,13 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
           {!loading && activeTab === 'system' && (
             <div className="animate-in fade-in duration-300">
               <MaterialManager />
+            </div>
+          )}
+
+          {/* ────── TABS: CURRICULUM NOTES HUB ────── */}
+          {!loading && activeTab === 'curriculum' && (
+            <div className="animate-in fade-in duration-300">
+              <CurriculumNotesManager />
             </div>
           )}
 
