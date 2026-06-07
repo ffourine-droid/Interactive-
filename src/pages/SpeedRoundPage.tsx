@@ -190,6 +190,7 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const feedbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scoreSavedRef = useRef<boolean>(false);
 
   // ── Load questions ──
   const loadQuestions = useCallback(async () => {
@@ -269,9 +270,12 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
     try {
       let playerId = player.id;
       
+      const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+      const invalidId = !playerId || !isUuid(playerId);
+
       // Self-healing: if player_id is missing or invalid, resolve or create in arena_players
-      if (!playerId) {
-        console.log('Player has no id, resolving or creating entry in arena_players...');
+      if (invalidId) {
+        console.log('Player has no id or invalid UUID, resolving or creating entry in arena_players...');
         const { data: existing } = await supabase
           .from('arena_players')
           .select('id')
@@ -458,8 +462,13 @@ export default function SpeedRoundPage({ onBack }: SpeedRoundPageProps) {
   // Save score when result phase starts
   useEffect(() => {
     if (phase === 'result') {
+      if (scoreSavedRef.current) return;
+      scoreSavedRef.current = true;
       const finalScore = calcScore(correct, answered, bestStreak);
       saveScore(finalScore, correct, answered, bestStreak);
+    } else {
+      // Reset so that score can be saved dynamically when next result is triggered
+      scoreSavedRef.current = false;
     }
   }, [phase, correct, answered, bestStreak, saveScore]);
 

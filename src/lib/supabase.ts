@@ -25,7 +25,13 @@ const getSupabaseConfig = () => {
 
 const { url, key } = getSupabaseConfig();
 
-export const supabase = createClient(url, key);
+export const supabase = createClient(url, key, {
+  auth: {
+    persistSession: true,
+    detectSessionInUrl: false,
+    lock: async (name, acquireTimeout, fn) => fn(), // bypass LockManager
+  }
+});
 
 /**
  * Set the teacher_id context session variable inside Postgres.
