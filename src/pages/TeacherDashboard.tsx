@@ -16,7 +16,10 @@ import {
   Clock,
   Check,
   Trophy,
-  Shield
+  Shield,
+  Edit2,
+  Trash2,
+  X
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -79,6 +82,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [importCode, setImportCode] = useState('');
   const [importing, setImporting] = useState(false);
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [editingClassName, setEditingClassName] = useState<string>('');
 
   const handleImportByCode = async (passedCode?: string) => {
     const finalCode = (passedCode || importCode).trim().toUpperCase();
@@ -304,12 +309,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       }
 
       // Fetch Classes and Assignments in parallel
-      const [classesResponse, assignmentsResponse, examsResponse] = await Promise.all([
-        supabase
-          .from('classes')
-          .select('id, name, created_at')
-          .eq('teacher_id', teacherId)
-          .order('created_at', { ascending: false }),
+      const [assignmentsResponse, examsResponse] = await Promise.all([
         supabase
           .from('assignments')
           .select('id, title, subject, grade, due_date, created_at, class_id, share_code')
@@ -322,11 +322,51 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           .order('created_at', { ascending: false })
       ]);
 
-      if (classesResponse.error) throw classesResponse.error;
       if (assignmentsResponse.error) throw assignmentsResponse.error;
       if (examsResponse.error) throw examsResponse.error;
 
-      setClasses(classesResponse.data || []);
+      let fetchedClasses: any[] = [];
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_classes', {
+          p_teacher_id: teacherId
+        });
+        if (!rpcError && rpcData) {
+          if (Array.isArray(rpcData)) {
+            fetchedClasses = rpcData;
+          } else if (typeof rpcData === 'object') {
+            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+            if (innerArray) {
+              fetchedClasses = innerArray as any[];
+            } else if ((rpcData as any).id) {
+              fetchedClasses = [rpcData];
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC teacher_get_classes failed, using fallback:", rpcErr);
+      }
+
+      // Robust fallback if RPC was not successful, returned nothing, or was empty
+      if (!fetchedClasses || fetchedClasses.length === 0) {
+        try {
+          const { data: dbData, error: dbError } = await supabase
+            .from('classes')
+            .select('id, name, created_at, grade')
+            .eq('teacher_id', teacherId);
+          if (!dbError && dbData) {
+            fetchedClasses = dbData;
+          }
+        } catch (dbErr) {
+          console.error("Direct classes table query fallback failed:", dbErr);
+        }
+      }
+
+      // Sort classes by created_at desc if available
+      const sortedClasses = [...(fetchedClasses || [])].sort((a: any, b: any) => {
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      });
+
+      setClasses(sortedClasses);
       setAssignments(assignmentsResponse.data || []);
       setExams(examsResponse.data || []);
     } catch (err: any) {
@@ -344,14 +384,13 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     try {
       setLoading(true);
       // 1. Create Class
-      const { data: classData, error: classError } = await supabase
-        .from('classes')
-        .insert([{
-          name: newClassName.trim(),
-          teacher_id: teacher.id
-        }])
-        .select()
-        .maybeSingle();
+      const { data: rawClassData, error: classError } = await supabase.rpc('teacher_create_class', {
+        p_teacher_id: teacher.id,
+        p_name: newClassName.trim(),
+        p_grade: selectedGrade
+      });
+
+      const classData = Array.isArray(rawClassData) ? rawClassData[0] : rawClassData;
 
       if (classError || !classData) {
         throw classError || new Error("Failed to create class record");
@@ -440,6 +479,47 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       onViewClass(classData.id, classData.name);
     } catch (err: any) {
       showToast(err.message || "Failed to create class", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRenameClass = async (classId: string, newName: string) => {
+    if (!teacher || !newName.trim()) return;
+    try {
+      setLoading(true);
+      const { error } = await supabase.rpc('teacher_update_class', {
+        p_teacher_id: teacher.id,
+        p_class_id: classId,
+        p_name: newName.trim()
+      });
+      if (error) throw error;
+      showToast("Class renamed successfully!", "success");
+      setEditingClassId(null);
+      fetchDashboardData(teacher.id);
+    } catch (err: any) {
+      showToast(err.message || "Failed to rename class", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteClass = async (classId: string) => {
+    if (!teacher) return;
+    const confirmDelete = window.confirm("Are you sure you want to delete this class? This will permanently delete the class and all associated students.");
+    if (!confirmDelete) return;
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.rpc('teacher_delete_class', {
+        p_teacher_id: teacher.id,
+        p_class_id: classId
+      });
+      if (error) throw error;
+      showToast("Class deleted successfully!", "success");
+      fetchDashboardData(teacher.id);
+    } catch (err: any) {
+      showToast(err.message || "Failed to delete class", "error");
     } finally {
       setLoading(false);
     }
@@ -691,11 +771,61 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <div className={`p-3 rounded-2xl ${index % 3 === 0 ? 'bg-blue-500/10 text-blue-500' : index % 3 === 1 ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'} group-hover:scale-110 transition-transform`}>
                           <Users size={24} />
                         </div>
-                        <div className="bg-brand-bg border border-brand-border px-3 py-1.5 rounded-xl whitespace-nowrap">
-                          <span className="text-[10px] font-black tracking-wider text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
+                        <div className="flex items-center gap-1.5 ms-2">
+                          <div className="bg-brand-bg border border-brand-border px-3 py-1.5 rounded-xl whitespace-nowrap">
+                            <span className="text-[10px] font-black tracking-wider text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingClassId(cls.id);
+                              setEditingClassName(cls.name);
+                            }}
+                            className="p-2 bg-brand-bg hover:bg-brand-accent/10 border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl transition-all"
+                            title="Rename Class"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClass(cls.id);
+                            }}
+                            className="p-2 bg-brand-bg hover:bg-red-500/10 border border-brand-border text-brand-muted hover:text-red-500 rounded-xl transition-all"
+                            title="Delete Class"
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         </div>
                       </div>
-                      <h3 className="text-lg font-black tracking-tight mb-4 truncate text-brand-text">{cls.name}</h3>
+                      
+                      {editingClassId === cls.id ? (
+                        <div className="flex items-center gap-2 mb-4" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            value={editingClassName}
+                            onChange={(e) => setEditingClassName(e.target.value)}
+                            className="flex-1 px-3 py-1.5 bg-brand-bg border border-brand-accent rounded-xl text-xs font-bold text-brand-text outline-none focus:ring-2 focus:ring-brand-accent/20"
+                            placeholder="Class Name"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleRenameClass(cls.id, editingClassName)}
+                            className="p-2 bg-brand-accent text-white rounded-xl hover:scale-105 active:scale-95 transition-all shadow-md shadow-brand-accent/10"
+                          >
+                            <Check size={12} />
+                          </button>
+                          <button
+                            onClick={() => setEditingClassId(null)}
+                            className="p-2 bg-brand-bg border border-brand-border text-brand-muted rounded-xl hover:scale-105 active:scale-95 transition-all"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <h3 className="text-lg font-black tracking-tight mb-4 truncate text-brand-text">{cls.name}</h3>
+                      )}
+
                       <div className="flex items-center justify-between text-brand-muted">
                         <div className="flex items-center gap-2 text-[10px] font-black tracking-wider uppercase whitespace-nowrap">
                           View Class

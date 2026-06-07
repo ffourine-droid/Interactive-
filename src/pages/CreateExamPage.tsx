@@ -60,17 +60,42 @@ export default function CreateExamPage({ onBack, initialData, preSelectedClassId
       const teacherData = JSON.parse(teacherStr);
       setTeacher(teacherData);
 
-      const { data, error } = await supabase
-        .from('classes')
-        .select('id, name, grade')
-        .eq('teacher_id', teacherData.id);
+      let fetchedClasses: any[] = [];
+      try {
+        const { data, error } = await supabase.rpc('teacher_get_classes', {
+          p_teacher_id: teacherData.id
+        });
+        if (!error && data) {
+          if (Array.isArray(data)) {
+            fetchedClasses = data;
+          } else if (typeof data === 'object') {
+            const innerArray = Object.values(data).find(v => Array.isArray(v));
+            if (innerArray) {
+              fetchedClasses = innerArray as any[];
+            } else if ((data as any).id) {
+              fetchedClasses = [data];
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC fetch failed, using fallback:", rpcErr);
+      }
 
-      if (error) throw error;
-      setClasses(data || []);
-      if (data && data.length > 0) {
-        const defaultClass = preSelectedClassId ? data.find(c => c.id === preSelectedClassId) : data[0];
-        const finalClassId = defaultClass?.id || data[0].id;
-        const finalGrade = defaultClass?.grade || data[0].grade || formData.grade;
+      if (!fetchedClasses || fetchedClasses.length === 0) {
+        const { data: dbData, error: dbError } = await supabase
+          .from('classes')
+          .select('id, name, grade')
+          .eq('teacher_id', teacherData.id);
+        if (!dbError && dbData) {
+          fetchedClasses = dbData;
+        }
+      }
+
+      setClasses(fetchedClasses);
+      if (fetchedClasses && fetchedClasses.length > 0) {
+        const defaultClass = preSelectedClassId ? fetchedClasses.find(c => c.id === preSelectedClassId) : fetchedClasses[0];
+        const finalClassId = defaultClass?.id || fetchedClasses[0].id;
+        const finalGrade = defaultClass?.grade || fetchedClasses[0].grade || formData.grade;
         
         setFormData(prev => ({ 
           ...prev, 

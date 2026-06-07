@@ -55,6 +55,7 @@ interface AssignmentForm {
 interface Class {
   id: string;
   name: string;
+  grade?: string;
 }
 
 export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelectedClassId?: string, importCode?: string, initialData?: any }> = ({ onBack, preSelectedClassId, importCode: initialImportCode, initialData }) => {
@@ -151,13 +152,37 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     const teacherId = JSON.parse(teacherData).id;
 
     try {
-      const { data, error } = await supabase
-        .from('classes')
-        .select('id, name')
-        .eq('teacher_id', teacherId);
+      let fetchedClasses: any[] = [];
+      try {
+        const { data, error } = await supabase.rpc('teacher_get_classes', {
+          p_teacher_id: teacherId
+        });
+        if (!error && data) {
+          if (Array.isArray(data)) {
+            fetchedClasses = data;
+          } else if (typeof data === 'object') {
+            const innerArray = Object.values(data).find(v => Array.isArray(v));
+            if (innerArray) {
+              fetchedClasses = innerArray as any[];
+            } else if ((data as any).id) {
+              fetchedClasses = [data];
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC fetch failed, using fallback:", rpcErr);
+      }
 
-      if (error) throw error;
-      const fetchedClasses = data || [];
+      if (!fetchedClasses || fetchedClasses.length === 0) {
+        const { data: dbData, error: dbError } = await supabase
+          .from('classes')
+          .select('id, name, grade')
+          .eq('teacher_id', teacherId);
+        if (!dbError && dbData) {
+          fetchedClasses = dbData;
+        }
+      }
+
       setClasses(fetchedClasses);
 
       // If we have a pre-selected class, initialize its data
@@ -200,14 +225,38 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     // Fetch students and class info
     try {
       setLoading(true);
-      const { data: classData } = await supabase
-        .from('classes')
-        .select('grade')
-        .eq('id', classId)
-        .maybeSingle();
+      const selectedClass = classes.find(c => c.id === classId);
+      let grade = selectedClass?.grade;
 
-      if (classData?.grade) {
-        setForm(prev => ({ ...prev, grade: classData.grade }));
+      if (!grade) {
+        const teacherData = localStorage.getItem('azilearn_teacher');
+        if (teacherData) {
+          const teacherId = JSON.parse(teacherData).id;
+          const { data: classData } = await supabase.rpc('teacher_get_classes', {
+            p_teacher_id: teacherId
+          });
+          let fetched: any[] = [];
+          if (classData) {
+            if (Array.isArray(classData)) {
+              fetched = classData;
+            } else if (typeof classData === 'object') {
+              const innerArray = Object.values(classData).find(v => Array.isArray(v));
+              if (innerArray) {
+                fetched = innerArray as any[];
+              } else if ((classData as any).id) {
+                fetched = [classData];
+              }
+            }
+          }
+          const cls = fetched.find((c: any) => c.id === classId);
+          if (cls?.grade) {
+            grade = cls.grade;
+          }
+        }
+      }
+
+      if (grade) {
+        setForm(prev => ({ ...prev, grade: grade }));
       }
 
       const { data, error } = await supabase
