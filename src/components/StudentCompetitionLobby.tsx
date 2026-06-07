@@ -45,6 +45,7 @@ export const StudentCompetitionLobby: React.FC<{
   const [hasFinished, setHasFinished] = useState(false);
   
   // Search state
+  const [searchCode, setSearchCode] = useState('');
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchSchool, setSearchSchool] = useState('');
   const [searchGrade, setSearchGrade] = useState(initialGrade);
@@ -247,7 +248,11 @@ export const StudentCompetitionLobby: React.FC<{
         `)
         .in('status', ['active', 'marking', 'finished']);
 
-      if (searchGrade) query = query.eq('grade', searchGrade);
+      if (searchCode.trim()) {
+        query = query.eq('share_code', searchCode.trim().toUpperCase());
+      } else {
+        if (searchGrade) query = query.eq('grade', searchGrade);
+      }
       
       const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -258,7 +263,11 @@ export const StudentCompetitionLobby: React.FC<{
             .from('teacher_competitions')
             .select('*')
             .in('status', ['active', 'marking', 'finished']);
-          if (searchGrade) basicQuery = basicQuery.eq('grade', searchGrade);
+          if (searchCode.trim()) {
+            basicQuery = basicQuery.eq('share_code', searchCode.trim().toUpperCase());
+          } else {
+            if (searchGrade) basicQuery = basicQuery.eq('grade', searchGrade);
+          }
           
           const { data: basicData, error: basicErr } = await basicQuery.order('created_at', { ascending: false });
           
@@ -1158,6 +1167,18 @@ export const StudentCompetitionLobby: React.FC<{
       {/* Search Section */}
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-3">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-accent/50 group-focus-within:text-brand-accent transition-colors" size={16} />
+            <input 
+              type="text"
+              value={searchCode}
+              onChange={e => setSearchCode(e.target.value)}
+              className="w-full bg-brand-surface border border-brand-border rounded-2xl py-4 pl-12 pr-4 text-[11px] font-bold focus:border-brand-accent outline-none transition-all text-brand-text placeholder:text-brand-muted/70"
+              placeholder="Enter Game Code (e.g. SQUAD-512)"
+            />
+            <span className="absolute left-10 -top-2 px-2 bg-brand-surface text-[8px] font-black uppercase text-brand-accent tracking-widest border border-brand-border/30 rounded">Game Code</span>
+          </div>
+
           <div className="relative group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={16} />
             <input 

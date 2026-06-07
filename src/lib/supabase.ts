@@ -26,3 +26,24 @@ const getSupabaseConfig = () => {
 const { url, key } = getSupabaseConfig();
 
 export const supabase = createClient(url, key);
+
+/**
+ * Set the teacher_id context session variable inside Postgres.
+ * This is used to bypass RLS or identify which teacher is performing writes.
+ */
+export async function setTeacherConfig(teacherId: string): Promise<void> {
+  if (!teacherId) return;
+  try {
+    const { error } = await supabase.rpc('set_config', {
+      name: 'app.teacher_id',
+      value: teacherId,
+      is_local: true
+    });
+    if (error) {
+      console.warn("set_config RPC execution warning:", error.message);
+    }
+  } catch (err) {
+    console.warn("Could not execute set_config RPC context helper:", err);
+  }
+}
+

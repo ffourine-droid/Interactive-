@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from './Toast';
 import { UploadCloud, FileText, CheckCircle2, AlertCircle, X, AlignLeft, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -127,6 +127,8 @@ export const TeacherMaterialsUpload: React.FC<TeacherMaterialsUploadProps> = ({
       if (uploadError) throw uploadError;
 
       // 2. Save material metadata record to DB inside 'teacher_materials' table
+      await setTeacherConfig(teacherId);
+
       const { error: dbError } = await supabase
         .from('teacher_materials')
         .insert({
@@ -136,6 +138,7 @@ export const TeacherMaterialsUpload: React.FC<TeacherMaterialsUploadProps> = ({
           description: description.trim() || null,
           file_name: file.name,
           file_type: fileType,
+          material_category: fileType,
           storage_path: storagePath,
           file_size: file.size,
           grade: grade || null,

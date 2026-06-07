@@ -84,7 +84,19 @@ export const CurriculumNotesManager: React.FC = () => {
 
     try {
       const parsed = JSON.parse(input);
-      const rawItems = Array.isArray(parsed) ? parsed : [parsed];
+      let rawItems: any[] = [];
+
+      // Check if it's an envelope object with a 'topics' array
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray(parsed.topics)) {
+        rawItems = parsed.topics.map((item: any) => ({
+          ...item,
+          grade: item.grade !== undefined && item.grade !== null ? item.grade : parsed.grade,
+          subject: item.subject || parsed.subject
+        }));
+      } else {
+        rawItems = Array.isArray(parsed) ? parsed : [parsed];
+      }
+
       const validItems: any[] = [];
 
       for (let i = 0; i < rawItems.length; i++) {
@@ -464,19 +476,26 @@ export const CurriculumNotesManager: React.FC = () => {
                   value={jsonInput}
                   onChange={e => handleJsonChange(e.target.value)}
                   className="w-full h-96 bg-brand-bg border border-brand-border rounded-2rem p-5 font-mono text-xs leading-relaxed outline-none focus:ring-2 focus:ring-brand-accent/20 transition-all resize-none shadow-sm"
-                  placeholder={`Example schema:
+                  placeholder={`Example Schema (now accepts both flat array items and nested topics format):
 {
-  "topic_id": "math-grade7-fractions",
-  "topic": "Fractions",
-  "chapter": "Numbers",
-  "subject": "Mathematics",
   "grade": 7,
-  "sections": [
+  "subject": "Social Studies",
+  "topics": [
     {
-      "id": "sec-1",
-      "type": "keypoint",
-      "style": "info",
-      "content": "A fraction represents part of a whole."
+      "topic_id": "ss-grade7-self-exploration",
+      "chapter": "Strand 1: Personal Development",
+      "topic": "Self-Exploration",
+      "sections": [
+        {
+          "type": "definition",
+          "term": "Self-Exploration",
+          "meaning": "The practice of examining your own thoughts, feelings, values..."
+        },
+        {
+          "type": "keypoint",
+          "content": "The purpose of self-exploration is to determine the gap between what you are and what you really want to be."
+        }
+      ]
     }
   ]
 }`}

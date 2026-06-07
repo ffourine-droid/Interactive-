@@ -46,6 +46,7 @@ export const StudentAssignmentView: React.FC<{
   preSelectedAssignmentId?: string 
 }> = ({ onBack, onExamsClick, preSelectedAssignmentId }) => {
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
+  const [searchCode, setSearchCode] = useState('');
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchSchool, setSearchSchool] = useState('');
   const [searchGrade, setSearchGrade] = useState('Grade 7');
@@ -86,7 +87,7 @@ export const StudentAssignmentView: React.FC<{
     setLoading(true);
     setHasSearched(true);
     try {
-      const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool);
+      const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool, searchCode);
       setAssignments(data);
     } catch (err: any) {
       showToast(err.message, "error");
@@ -472,6 +473,18 @@ export const StudentAssignmentView: React.FC<{
           </div>
 
           <div className="space-y-4">
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-accent/50 group-focus-within:text-brand-accent transition-colors" size={18} />
+              <input 
+                type="text"
+                placeholder="Assignment Code (Optional)"
+                value={searchCode}
+                onChange={e => setSearchCode(e.target.value)}
+                className="w-full bg-white dark:bg-brand-card border border-brand-accent/20 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm placeholder:text-brand-muted/70"
+              />
+              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-accent tracking-widest transition-all rounded-md border border-brand-accent/30">Assignment Code</span>
+            </div>
+
             <div className="relative group">
               <User className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
               <input 

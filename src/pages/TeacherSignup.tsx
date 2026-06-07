@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { GraduationCap, ArrowLeft, Loader2, User, School, Lock } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 
 interface TeacherSignupProps {
@@ -58,6 +58,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
           name: data.name,
           school_name: data.school_name
         }));
+        await setTeacherConfig(data.id);
         showToast("Welcome to AziLearn!", "success");
         onSuccess();
       }

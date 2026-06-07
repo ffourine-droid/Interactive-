@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from './Toast';
 import { 
   FileText, 
@@ -106,17 +106,39 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
     return data.publicUrl;
   };
 
-  const handleOpen = (material: Material) => {
-    const publicUrl = getFileUrl(material.storage_path);
-    if (!publicUrl) {
-      showToast('Could not fetch public download link.', 'error');
-      return;
+  const handleOpen = async (material: Material) => {
+    try {
+      // Generate a signed URL for 60 seconds of secure downloading access time 
+      const { data, error } = await supabase.storage
+        .from('materials')
+        .createSignedUrl(material.storage_path, 60);
+      
+      if (error || !data?.signedUrl) {
+        // Fall back to public URL
+        const publicUrl = getFileUrl(material.storage_path);
+        if (publicUrl) {
+          window.open(publicUrl, '_blank', 'noreferrer,noopener');
+        } else {
+          showToast('Could not fetch public download link.', 'error');
+        }
+        return;
+      }
+      window.open(data.signedUrl, '_blank', 'noreferrer,noopener');
+    } catch (err) {
+      const publicUrl = getFileUrl(material.storage_path);
+      if (publicUrl) {
+        window.open(publicUrl, '_blank', 'noreferrer,noopener');
+      } else {
+        showToast('Could not open file.', 'error');
+      }
     }
-    window.open(publicUrl, '_blank', 'noreferrer,noopener');
   };
 
   const handleToggleVisibility = async (material: Material) => {
     try {
+      if (teacherId) {
+        await setTeacherConfig(teacherId);
+      }
       const nextVisible = !material.is_visible;
       const { error } = await supabase
         .from('teacher_materials')
@@ -140,6 +162,9 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
     if (!window.confirm(`Are you sure you want to delete "${material.title}"?`)) return;
     setDeletingId(material.id);
     try {
+      if (teacherId) {
+        await setTeacherConfig(teacherId);
+      }
       // 1. Delete from storage bucket
       const { error: storageError } = await supabase.storage
         .from('materials')

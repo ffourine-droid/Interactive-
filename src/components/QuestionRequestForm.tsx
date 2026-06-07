@@ -4,9 +4,9 @@ import {
   Send, MessageCircle, BookOpen, 
   GraduationCap, Hash, Layout, 
   Loader2, CheckCircle2, AlertCircle,
-  Clock, X, History, FileText, Award, Users, Copy, Download
+  Clock, X, History, FileText, Award, Users, Copy, Download, Sparkles
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from './Toast';
 
 interface QuestionRequestFormProps {
@@ -31,34 +31,60 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
   const [topic, setTopic] = useState('');
   const [numQuestions, setNumQuestions] = useState(10);
   const [description, setDescription] = useState('');
-  const [requestType, setRequestType] = useState<'assessment' | 'assignment' | 'groupwork'>('assessment');
+  const [questionTypes, setQuestionTypes] = useState('Multiple Choice');
+  const [requestType, setRequestType] = useState<'assignment' | 'exam' | 'competition_questions' | 'group_work' | 'other'>('assignment');
 
   // History fields
   const [pastRequests, setPastRequests] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const fetchHistory = async () => {
-    setLoadingHistory(true);
+  const fetchHistory = async (silent = false) => {
+    if (!silent) setLoadingHistory(true);
     try {
-      const { data, error } = await supabase
-        .from('question_requests')
+      await setTeacherConfig(teacher.id);
+
+      // Try reading from teacher_admin_requests first
+      const { data: data1, error: err1 } = await supabase
+        .from('teacher_admin_requests')
         .select('*')
         .eq('teacher_id', teacher.id)
         .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      setPastRequests(data || []);
+
+      if (err1 && (err1.message?.includes('relation "public.teacher_admin_requests" does not exist') || err1.message?.includes('does not exist') || err1.code === 'PGRST116')) {
+        // Fallback to question_requests
+        const { data: data2, error: err2 } = await supabase
+          .from('question_requests')
+          .select('*')
+          .eq('teacher_id', teacher.id)
+          .order('created_at', { ascending: false });
+        
+        if (err2) throw err2;
+        // Map back
+        const mapped = (data2 || []).map(r => ({
+          ...r,
+          question_count: r.num_questions,
+          request_type: r.request_type === 'assessment' ? 'exam' : (r.request_type === 'groupwork' ? 'group_work' : r.request_type)
+        }));
+        setPastRequests(mapped);
+      } else {
+        if (err1) throw err1;
+        setPastRequests(data1 || []);
+      }
     } catch (e: any) {
       console.error(e);
-      showToast("Error loading request history", "error");
+      if (!silent) showToast("Error loading request history", "error");
     } finally {
-      setLoadingHistory(false);
+      if (!silent) setLoadingHistory(false);
     }
   };
 
   useEffect(() => {
     if (activeTab === 'history') {
       fetchHistory();
+      const interval = setInterval(() => {
+        fetchHistory(true);
+      }, 5000); // Poll every 5 seconds
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
@@ -71,9 +97,32 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('question_requests')
-        .insert([{
+      await setTeacherConfig(teacher.id);
+
+      const payload = {
+        teacher_id: teacher.id,
+        teacher_name: teacher.name,
+        school_name: teacher.school_name,
+        request_type: requestType, // assignment | exam | competition_questions | group_work | other
+        subject,
+        grade,
+        topic,
+        description,
+        question_count: numQuestions,
+        question_types: questionTypes || 'Multiple Choice',
+        status: 'pending'
+      };
+
+      let insertError = null;
+      // 1. Try teacher_admin_requests
+      const { data: data1, error: err1 } = await supabase
+        .from('teacher_admin_requests')
+        .insert([payload])
+        .select();
+
+      if (err1 && (err1.code === 'PGRST116' || err1.message?.includes('relation "public.teacher_admin_requests" does not exist') || err1.message?.includes('does not exist'))) {
+        // Fallback to question_requests with mapped columns
+        const fallbackPayload = {
           teacher_id: teacher.id,
           teacher_name: teacher.name,
           school_name: teacher.school_name,
@@ -83,10 +132,17 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
           num_questions: numQuestions,
           description,
           status: 'pending',
-          request_type: requestType
-        }]);
+          request_type: requestType === 'exam' ? 'assessment' : (requestType === 'group_work' ? 'groupwork' : requestType)
+        };
+        const { error: err2 } = await supabase
+          .from('question_requests')
+          .insert([fallbackPayload]);
+        insertError = err2;
+      } else if (err1) {
+        insertError = err1;
+      }
 
-      if (error) throw error;
+      if (insertError) throw insertError;
       
       setSubmitted(true);
       showToast("Request sent to Admin!", "success");
@@ -99,7 +155,8 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
         setTopic('');
         setNumQuestions(10);
         setDescription('');
-        setRequestType('assessment');
+        setQuestionTypes('Multiple Choice');
+        setRequestType('assignment');
       }, 1500);
     } catch (e: any) {
       showToast(e.message, 'error');
@@ -182,30 +239,46 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
               <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1">
                 Requested Material Type
               </label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRequestType('assessment')}
-                  className={`py-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${requestType === 'assessment' ? 'bg-brand-accent/5 border-brand-accent text-brand-accent shadow-lg shadow-brand-accent/5' : 'bg-brand-bg border-brand-border text-brand-muted hover:text-brand-text'}`}
-                >
-                  <Award size={20} />
-                  <span className="text-[9px] font-black uppercase tracking-wide">Assessment (Quiz)</span>
-                </button>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                 <button
                   type="button"
                   onClick={() => setRequestType('assignment')}
-                  className={`py-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${requestType === 'assignment' ? 'bg-brand-accent/5 border-brand-accent text-brand-accent shadow-lg shadow-brand-accent/5' : 'bg-brand-bg border-brand-border text-brand-muted hover:text-brand-text'}`}
+                  className={`py-3.5 px-2 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${requestType === 'assignment' ? 'bg-brand-accent/5 border-brand-accent text-brand-accent shadow-lg shadow-brand-accent/5' : 'bg-brand-bg border-brand-border text-brand-muted hover:text-brand-text'}`}
                 >
-                  <FileText size={20} />
-                  <span className="text-[9px] font-black uppercase tracking-wide">Assignment (Work)</span>
+                  <FileText size={16} />
+                  <span className="text-[8px] font-black uppercase tracking-tight">Assignment</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setRequestType('groupwork')}
-                  className={`py-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${requestType === 'groupwork' ? 'bg-brand-accent/5 border-brand-accent text-brand-accent shadow-lg shadow-brand-accent/5' : 'bg-brand-bg border-brand-border text-brand-muted hover:text-brand-text'}`}
+                  onClick={() => setRequestType('exam')}
+                  className={`py-3.5 px-2 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${requestType === 'exam' ? 'bg-brand-accent/5 border-brand-accent text-brand-accent shadow-lg shadow-brand-accent/5' : 'bg-brand-bg border-brand-border text-brand-muted hover:text-brand-text'}`}
                 >
-                  <Users size={20} />
-                  <span className="text-[9px] font-black uppercase tracking-wide">Group Work (Arena)</span>
+                  <Award size={16} />
+                  <span className="text-[8px] font-black uppercase tracking-tight">Exam</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRequestType('competition_questions')}
+                  className={`py-3.5 px-2 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${requestType === 'competition_questions' ? 'bg-brand-accent/5 border-[#FF6B2C] text-[#FF6B2C] shadow-lg shadow-brand-accent/5' : 'bg-brand-bg border-brand-border text-brand-muted hover:text-brand-text'}`}
+                >
+                  <Sparkles size={16} />
+                  <span className="text-[8px] font-black uppercase tracking-tight">Competition</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRequestType('group_work')}
+                  className={`py-3.5 px-2 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${requestType === 'group_work' ? 'bg-brand-accent/5 border-brand-accent text-brand-accent shadow-lg shadow-brand-accent/5' : 'bg-brand-bg border-brand-border text-brand-muted hover:text-brand-text'}`}
+                >
+                  <Users size={16} />
+                  <span className="text-[8px] font-black uppercase tracking-tight">Group Work</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRequestType('other')}
+                  className={`py-3.5 px-2 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${requestType === 'other' ? 'bg-brand-accent/5 border-brand-accent text-brand-accent shadow-lg shadow-brand-accent/5' : 'bg-brand-bg border-brand-border text-brand-muted hover:text-brand-text'}`}
+                >
+                  <MessageCircle size={16} />
+                  <span className="text-[8px] font-black uppercase tracking-tight">Other</span>
                 </button>
               </div>
             </div>
@@ -304,68 +377,84 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
               </div>
             ) : (
               <div className="space-y-3">
-                {pastRequests.map((req) => (
-                  <div 
-                    key={req.id} 
-                    className="p-5 bg-brand-surface border border-brand-border rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 hover:shadow-md transition-shadow relative overflow-hidden"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider ${req.request_type === 'groupwork' ? 'bg-sky-500/10 text-sky-600' : req.request_type === 'assignment' ? 'bg-amber-500/10 text-amber-600' : 'bg-purple-500/10 text-purple-600'}`}>
-                          {req.request_type || 'assessment'}
-                        </span>
-                        <span className="text-xs font-black text-brand-text">{req.topic}</span>
-                        <span className="text-[10px] font-bold text-brand-muted">({req.subject} • {req.grade})</span>
-                      </div>
-                      <p className="text-[10px] text-brand-muted line-clamp-1">{req.description}</p>
-                      
-                      <div className="flex items-center gap-4 mt-2 text-[8px] font-black text-brand-muted uppercase tracking-wider">
-                        <span>Requested: {new Date(req.created_at).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span>Size: {req.num_questions} questions</span>
-                      </div>
-                    </div>
+                {pastRequests.map((req) => {
+                  const getCategoryLabel = (type: string) => {
+                    const t = type?.toLowerCase() || 'assignment';
+                    if (t === 'assessment' || t === 'exam') return { name: 'Exam', color: 'bg-purple-500/10 text-purple-600 border-purple-500/20' };
+                    if (t === 'groupwork' || t === 'group_work') return { name: 'Group Work', color: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' };
+                    if (t === 'competition_questions') return { name: 'Competition', color: 'bg-rose-500/10 text-rose-500 border-rose-500/20' };
+                    if (t === 'other') return { name: 'Other Content', color: 'bg-slate-500/10 text-slate-600 border-slate-500/20' };
+                    return { name: 'Assignment', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20' };
+                  };
+                  const label = getCategoryLabel(req.request_type);
 
-                    <div className="flex items-center gap-3 shrink-0">
-                      {req.status === 'completed' ? (
-                        <div className="flex flex-col items-end gap-1.5 w-full md:w-auto">
-                          <span className="bg-emerald-500/10 text-emerald-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
-                            Completed ✓
+                  return (
+                    <div 
+                      key={req.id} 
+                      className="p-5 bg-brand-surface border border-brand-border rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 hover:shadow-md transition-shadow relative overflow-hidden"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border ${label.color}`}>
+                            {label.name}
                           </span>
-                          {req.share_code ? (
-                            <div className="flex items-center gap-2">
-                              <div 
-                                onClick={() => copyToClipboard(req.share_code)}
-                                className="bg-brand-bg border border-brand-border px-3 py-2 rounded-xl text-xs font-mono font-black tracking-widest text-brand-accent cursor-pointer flex items-center gap-2 hover:bg-brand-accent/5 transition-colors"
-                              >
-                                {req.share_code}
-                                <Copy size={12} className="text-brand-muted hover:text-brand-accent" />
-                              </div>
-                              {onImportCode && (
-                                <button
-                                  onClick={() => onImportCode(req.share_code)}
-                                  className="px-3 py-2 bg-brand-accent/10 hover:bg-brand-accent text-brand-accent hover:text-white rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
-                                  title="Import code directly"
-                                >
-                                  <Download size={12} />
-                                  Quick Import
-                                </button>
-                              )}
-                            </div>
-                          ) : req.request_type === 'groupwork' ? (
-                            <span className="text-[8px] font-black uppercase tracking-wider text-brand-muted italic mt-1 text-right">
-                              Live directly in Groups tab! 🚀
-                            </span>
-                          ) : null}
+                          <span className="text-xs font-black text-brand-text">{req.topic}</span>
+                          <span className="text-[10px] font-bold text-brand-muted">({req.subject} • {req.grade})</span>
                         </div>
-                      ) : (
-                        <span className="bg-amber-500/10 text-amber-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
-                          <Clock size={10} /> Pending
-                        </span>
-                      )}
+                        <p className="text-[10px] text-brand-muted line-clamp-1">{req.description}</p>
+                        
+                        <div className="flex items-center gap-4 mt-2 text-[8px] font-black text-brand-muted uppercase tracking-wider">
+                          <span>Requested: {new Date(req.created_at).toLocaleDateString()}</span>
+                          <span>•</span>
+                          <span>Size: {req.question_count || req.num_questions || 10} questions</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        {req.status === 'completed' ? (
+                          <div className="flex flex-col items-end gap-1 w-full md:w-auto">
+                            <span className="bg-emerald-500/10 text-emerald-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 select-none">
+                              Completed ✓
+                            </span>
+                            <span className="text-[8px] font-black uppercase tracking-wider text-brand-muted mb-1">
+                              Category: {label.name}
+                            </span>
+                            {req.share_code ? (
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  onClick={() => copyToClipboard(req.share_code)}
+                                  className="bg-brand-bg border border-brand-border px-3 py-2 rounded-xl text-xs font-mono font-black tracking-widest text-brand-accent cursor-pointer flex items-center gap-2 hover:bg-brand-accent/5 transition-colors"
+                                  title="Click to copy code"
+                                >
+                                  {req.share_code}
+                                  <Copy size={12} className="text-brand-muted hover:text-brand-accent" />
+                                </div>
+                                {onImportCode && (
+                                  <button
+                                    onClick={() => onImportCode(req.share_code)}
+                                    className="px-3 py-2 bg-brand-accent/10 hover:bg-brand-accent text-brand-accent hover:text-white rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
+                                    title="Import code directly"
+                                  >
+                                    <Download size={12} />
+                                    Quick Import
+                                  </button>
+                                )}
+                              </div>
+                            ) : req.request_type === 'groupwork' || req.request_type === 'group_work' ? (
+                              <span className="text-[8px] font-black uppercase tracking-wider text-brand-muted italic mt-1 text-right">
+                                Live directly in Groups tab! 🚀
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="bg-amber-500/10 text-amber-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                            <Clock size={10} /> Pending
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </motion.div>
