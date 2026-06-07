@@ -57,14 +57,46 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
   const fetchStudents = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('students')
-        .select('id, name, parent_code, grade')
-        .eq('class_id', classId)
-        .order('parent_code', { ascending: true });
+      let fetchedStudents: Student[] = [];
+      try {
+        const teacherStr = localStorage.getItem('azilearn_teacher');
+        if (teacherStr) {
+          const teacher = JSON.parse(teacherStr);
+          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+            p_teacher_id: teacher.id,
+            p_class_id: classId
+          });
+          if (!rpcError && rpcData) {
+            if (Array.isArray(rpcData)) {
+              fetchedStudents = rpcData;
+            } else if (typeof rpcData === 'object') {
+              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+              if (innerArray) {
+                fetchedStudents = innerArray as any[];
+              } else if ((rpcData as any).id) {
+                fetchedStudents = [rpcData];
+              }
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC fetch failed, using fallback:", rpcErr);
+      }
 
-      if (error) throw error;
-      setStudents(data || []);
+      if (!fetchedStudents || fetchedStudents.length === 0) {
+        const { data, error } = await supabase
+          .from('students')
+          .select('id, name, parent_code, grade')
+          .eq('class_id', classId);
+        if (error) throw error;
+        fetchedStudents = data || [];
+      }
+
+      const sorted = [...fetchedStudents].sort((a, b) => {
+        return (a.parent_code || '').localeCompare(b.parent_code || '');
+      });
+
+      setStudents(sorted);
     } catch (err: any) {
       showToast("Error loading students", "error");
     } finally {
@@ -82,19 +114,47 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
       let parent_code = newStudentCode.trim();
 
       // Get school students to check for duplicates
-      const { data: schoolStudents } = await supabase
-        .from('students')
-        .select(`
-          name,
-          parent_code,
-          classes!inner (
-            teachers!inner (
-              school_name
+      let schoolStudents: any[] = [];
+      try {
+        const teacherStr = localStorage.getItem('azilearn_teacher');
+        if (teacherStr) {
+          const teacher = JSON.parse(teacherStr);
+          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+            p_teacher_id: teacher.id
+          });
+          if (!rpcError && rpcData) {
+            if (Array.isArray(rpcData)) {
+              schoolStudents = rpcData;
+            } else if (typeof rpcData === 'object') {
+              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+              if (innerArray) {
+                schoolStudents = innerArray as any[];
+              } else if ((rpcData as any).id) {
+                schoolStudents = [rpcData];
+              }
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC schoolStudents fetch failed:", rpcErr);
+      }
+
+      if (!schoolStudents || schoolStudents.length === 0) {
+        const { data: directData } = await supabase
+          .from('students')
+          .select(`
+            name,
+            parent_code,
+            classes!inner (
+              teachers!inner (
+                school_name
+              )
             )
-          )
-        `)
-        .eq('classes.teachers.school_name', schoolName)
-        .eq('grade', grade);
+          `)
+          .eq('classes.teachers.school_name', schoolName)
+          .eq('grade', grade);
+        schoolStudents = directData || [];
+      }
 
       // Check if student with this name already exists in this school/grade
       const existingStudent = (schoolStudents || []).find(s => s.name.toLowerCase() === newStudentName.trim().toLowerCase());
@@ -197,21 +257,49 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
     try {
       setAdding(true);
       
-      const { data: schoolStudents, error: fetchError } = await supabase
-        .from('students')
-        .select(`
-          name,
-          parent_code,
-          classes!inner (
-            teachers!inner (
-              school_name
-            )
-          )
-        `)
-        .eq('classes.teachers.school_name', schoolName)
-        .eq('grade', grade);
+      let schoolStudents: any[] = [];
+      try {
+        const teacherStr = localStorage.getItem('azilearn_teacher');
+        if (teacherStr) {
+          const teacher = JSON.parse(teacherStr);
+          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+            p_teacher_id: teacher.id
+          });
+          if (!rpcError && rpcData) {
+            if (Array.isArray(rpcData)) {
+              schoolStudents = rpcData;
+            } else if (typeof rpcData === 'object') {
+              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+              if (innerArray) {
+                schoolStudents = innerArray as any[];
+              } else if ((rpcData as any).id) {
+                schoolStudents = [rpcData];
+              }
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC fetch error for bulk add:", rpcErr);
+      }
 
-      if (fetchError) throw fetchError;
+      if (!schoolStudents || schoolStudents.length === 0) {
+        const { data: directData, error: fetchError } = await supabase
+          .from('students')
+          .select(`
+            name,
+            parent_code,
+            classes!inner (
+              teachers!inner (
+                school_name
+              )
+            )
+          `)
+          .eq('classes.teachers.school_name', schoolName)
+          .eq('grade', grade);
+
+        if (fetchError) throw fetchError;
+        schoolStudents = directData || [];
+      }
 
       const existingCodes = new Set(
         (schoolStudents || [])
@@ -284,20 +372,48 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
     try {
       setAutoAssigning(true);
       
-      const { data: schoolStudents, error: schoolFetchError } = await supabase
-        .from('students')
-        .select(`
-          parent_code,
-          classes!inner (
-            teachers!inner (
-              school_name
-            )
-          )
-        `)
-        .eq('classes.teachers.school_name', schoolName)
-        .eq('grade', grade);
+      let schoolStudents: any[] = [];
+      try {
+        const teacherStr = localStorage.getItem('azilearn_teacher');
+        if (teacherStr) {
+          const teacher = JSON.parse(teacherStr);
+          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+            p_teacher_id: teacher.id
+          });
+          if (!rpcError && rpcData) {
+            if (Array.isArray(rpcData)) {
+              schoolStudents = rpcData;
+            } else if (typeof rpcData === 'object') {
+              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+              if (innerArray) {
+                schoolStudents = innerArray as any[];
+              } else if ((rpcData as any).id) {
+                schoolStudents = [rpcData];
+              }
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC auto assign school fetch failed:", rpcErr);
+      }
 
-      if (schoolFetchError) throw schoolFetchError;
+      if (!schoolStudents || schoolStudents.length === 0) {
+        const { data: directData, error: schoolFetchError } = await supabase
+          .from('students')
+          .select(`
+            parent_code,
+            classes!inner (
+              teachers!inner (
+                school_name
+              )
+            )
+          `)
+          .eq('classes.teachers.school_name', schoolName)
+          .eq('grade', grade);
+
+        if (schoolFetchError) throw schoolFetchError;
+        schoolStudents = directData || [];
+      }
 
       const existingCodes = new Set(
         (schoolStudents || [])

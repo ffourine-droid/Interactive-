@@ -81,11 +81,40 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
 
       // Fetch students in this class to see who hasn't submitted
       if (asgnData?.class_id) {
-        const { data: studentsData, error: studentsError } = await supabase
-          .from('students')
-          .select('id, name')
-          .eq('class_id', asgnData.class_id);
-        if (!studentsError) setClassStudents(studentsData || []);
+        let studentsData: any[] = [];
+        try {
+          const teacherStr = localStorage.getItem('azilearn_teacher');
+          if (teacherStr) {
+            const teacher = JSON.parse(teacherStr);
+            const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+              p_teacher_id: teacher.id,
+              p_class_id: asgnData.class_id
+            });
+            if (!rpcError && rpcData) {
+              if (Array.isArray(rpcData)) {
+                studentsData = rpcData;
+              } else if (typeof rpcData === 'object') {
+                const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+                if (innerArray) {
+                  studentsData = innerArray as any[];
+                } else if ((rpcData as any).id) {
+                  studentsData = [rpcData];
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("RPC fetch failed in AssignmentResultsPage:", e);
+        }
+
+        if (studentsData.length === 0) {
+          const { data, error } = await supabase
+            .from('students')
+            .select('id, name')
+            .eq('class_id', asgnData.class_id);
+          if (!error) studentsData = data || [];
+        }
+        setClassStudents(studentsData);
       }
     } catch (err: any) {
       showToast(err.message, 'error');

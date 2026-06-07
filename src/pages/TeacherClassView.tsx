@@ -190,10 +190,36 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           .eq('teacher_id', teacherId)
           .eq('class_id', classId)
           .order('created_at', { ascending: false }),
-        supabase
-          .from('students')
-          .select('id, name, parent_code, grade')
-          .eq('class_id', classId),
+        (async () => {
+          try {
+            const { data, error } = await supabase.rpc('teacher_get_class_students', {
+              p_teacher_id: teacherId,
+              p_class_id: classId
+            });
+            if (!error && data) {
+              let fetchedStudents: any[] = [];
+              if (Array.isArray(data)) {
+                fetchedStudents = data;
+              } else if (typeof data === 'object') {
+                const innerArray = Object.values(data).find(v => Array.isArray(v));
+                if (innerArray) {
+                  fetchedStudents = innerArray as any[];
+                } else if ((data as any).id) {
+                  fetchedStudents = [data];
+                }
+              }
+              if (fetchedStudents.length > 0) {
+                return { data: fetchedStudents, error: null };
+              }
+            }
+          } catch (e) {
+            console.warn("RPC student load failed in ClassView, trying direct:", e);
+          }
+          return supabase
+            .from('students')
+            .select('id, name, parent_code, grade')
+            .eq('class_id', classId);
+        })(),
         supabase
           .from('teachers')
           .select('id, name, school_name')

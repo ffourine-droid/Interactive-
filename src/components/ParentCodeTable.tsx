@@ -48,20 +48,44 @@ export const ParentCodeTable: React.FC<ParentCodeTableProps> = ({ students: init
         grade = students[0].grade;
       }
       
-      const { data: schoolStudents, error: schoolFetchError } = await supabase
-        .from('students')
-        .select(`
-          parent_code,
-          classes!inner (
-            teachers!inner (
-              school_name
-            )
-          )
-        `)
-        .eq('classes.teachers.school_name', teacher.school_name)
-        .eq('grade', grade);
+      let schoolStudents: any[] = [];
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+          p_teacher_id: teacher.id
+        });
+        if (!rpcError && rpcData) {
+          if (Array.isArray(rpcData)) {
+            schoolStudents = rpcData;
+          } else if (typeof rpcData === 'object') {
+            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+            if (innerArray) {
+              schoolStudents = innerArray as any[];
+            } else if ((rpcData as any).id) {
+              schoolStudents = [rpcData];
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC fetch failed in ParentCodeTable:", rpcErr);
+      }
 
-      if (schoolFetchError) throw schoolFetchError;
+      if (!schoolStudents || schoolStudents.length === 0) {
+        const { data: directData, error: schoolFetchError } = await supabase
+          .from('students')
+          .select(`
+            parent_code,
+            classes!inner (
+              teachers!inner (
+                school_name
+              )
+            )
+          `)
+          .eq('classes.teachers.school_name', teacher.school_name)
+          .eq('grade', grade);
+
+        if (schoolFetchError) throw schoolFetchError;
+        schoolStudents = directData || [];
+      }
 
       const existingCodes = new Set(
         (schoolStudents || [])

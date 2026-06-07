@@ -259,15 +259,44 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         setForm(prev => ({ ...prev, grade: grade }));
       }
 
-      const { data, error } = await supabase
-        .from('students')
-        .select('id, name, parent_code')
-        .eq('class_id', classId)
-        .order('name');
+      let fetchedStudents: any[] = [];
+      try {
+        const teacherStr = localStorage.getItem('azilearn_teacher');
+        if (teacherStr) {
+          const teacher = JSON.parse(teacherStr);
+          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+            p_teacher_id: teacher.id,
+            p_class_id: classId
+          });
+          if (!rpcError && rpcData) {
+            if (Array.isArray(rpcData)) {
+              fetchedStudents = rpcData;
+            } else if (typeof rpcData === 'object') {
+              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+              if (innerArray) {
+                fetchedStudents = innerArray as any[];
+              } else if ((rpcData as any).id) {
+                fetchedStudents = [rpcData];
+              }
+            }
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("RPC fetch failed, using fallback:", rpcErr);
+      }
 
-      if (error) throw error;
+      if (!fetchedStudents || fetchedStudents.length === 0) {
+        const { data, error } = await supabase
+          .from('students')
+          .select('id, name, parent_code')
+          .eq('class_id', classId)
+          .order('name');
+        if (error) throw error;
+        fetchedStudents = data || [];
+      } else {
+        fetchedStudents = [...fetchedStudents].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      }
 
-      const fetchedStudents = data || [];
       setStudents(fetchedStudents);
       
       const studentNames = fetchedStudents.map(s => s.name).join(', ');
@@ -301,20 +330,28 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       const schoolName = teacherData?.school_name || '';
 
       // 2. Check if student already exists in this grade and school
-      const { data: existingStudent } = await supabase
-        .from('students')
-        .select(`
-          id, parent_code,
-          classes!inner (
-            teachers!inner (
-              school_name
-            )
-          )
-        `)
-        .ilike('name', newStudentName.trim())
-        .eq('grade', form.grade)
-        .eq('classes.teachers.school_name', schoolName)
-        .maybeSingle();
+      let allTeacherStudents: any[] = [];
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+          p_teacher_id: tId
+        });
+        if (!rpcError && rpcData) {
+          if (Array.isArray(rpcData)) {
+            allTeacherStudents = rpcData;
+          } else if (typeof rpcData === 'object') {
+            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+            if (innerArray) {
+              allTeacherStudents = innerArray as any[];
+            } else if ((rpcData as any).id) {
+              allTeacherStudents = [rpcData];
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+
+      const existingStudent = allTeacherStudents.find(s => s.name?.toLowerCase() === newStudentName.trim().toLowerCase() && s.grade === form.grade);
 
       let parent_code = newStudentCode.trim();
 
@@ -325,20 +362,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         if (!confirmUseExisting) return;
         parent_code = existingStudent.parent_code;
       } else if (!parent_code) {
-        const { data: schoolStudents, error: fetchError } = await supabase
-          .from('students')
-          .select(`
-            parent_code,
-            classes!inner (
-              teachers!inner (
-                school_name
-              )
-            )
-          `)
-          .eq('classes.teachers.school_name', schoolName)
-          .eq('grade', form.grade);
-
-        if (fetchError) throw fetchError;
+        const schoolStudents = allTeacherStudents.filter(s => s.grade === form.grade);
 
         let nextIndex = 1;
         if (schoolStudents && schoolStudents.length > 0) {
@@ -403,21 +427,45 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       const schoolName = teacherData?.school_name || '';
 
       // Get current school students for index
-      const { data: schoolStudents, error: fetchError } = await supabase
-        .from('students')
-        .select(`
-          name,
-          parent_code,
-          classes!inner (
-            teachers!inner (
-              school_name
-            )
-          )
-        `)
-        .eq('classes.teachers.school_name', schoolName)
-        .eq('grade', `Grade ${form.grade}`);
+      let schoolStudents: any[] = [];
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+          p_teacher_id: bulkTId
+        });
+        if (!rpcError && rpcData) {
+          if (Array.isArray(rpcData)) {
+            schoolStudents = rpcData;
+          } else if (typeof rpcData === 'object') {
+            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+            if (innerArray) {
+              schoolStudents = innerArray as any[];
+            } else if ((rpcData as any).id) {
+              schoolStudents = [rpcData];
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(e);
+      }
 
-      if (fetchError) throw fetchError;
+      if (!schoolStudents || schoolStudents.length === 0) {
+        const { data: directData, error: fetchError } = await supabase
+          .from('students')
+          .select(`
+            name,
+            parent_code,
+            classes!inner (
+              teachers!inner (
+                school_name
+              )
+            )
+          `)
+          .eq('classes.teachers.school_name', schoolName)
+          .eq('grade', `Grade ${form.grade}`);
+
+        if (fetchError) throw fetchError;
+        schoolStudents = directData || [];
+      }
 
       const existingCodes = new Set(
         (schoolStudents || [])
@@ -694,27 +742,27 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
             <h1 className="text-2xl font-black tracking-tight">Create Assignment</h1>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button 
             onClick={() => setShowImport(!showImport)}
-            className="flex items-center gap-2 px-4 py-4 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-2xl font-black uppercase tracking-widest transition-all"
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl font-bold uppercase tracking-wider text-xs transition-all"
           >
-            <Download size={20} />
-            {showImport ? 'Cancel Import' : 'Use Code'}
+            <Download size={16} />
+            {showImport ? 'Cancel' : 'Use Code'}
           </button>
           <button 
             onClick={() => window.open('https://wa.me/254799426863?text=Hello%20Azilearn%2C%20I%20would%20like%20to%20request%20an%20assignment%20upload%20for%20my%20class.', '_blank')}
-            className="flex items-center gap-2 px-6 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-500 text-white rounded-xl font-bold uppercase tracking-wider text-xs shadow-md shadow-emerald-500/10 hover:scale-102 active:scale-95 transition-all"
           >
-            <MessageCircle size={20} />
+            <MessageCircle size={16} />
             Request Upload
           </button>
           <button 
             onClick={publishAssignment}
             disabled={loading}
-            className="flex items-center gap-2 px-8 py-4 bg-brand-accent text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-5 py-2.5 bg-brand-accent text-white rounded-xl font-bold uppercase tracking-wider text-xs shadow-md shadow-brand-accent/10 hover:scale-102 active:scale-95 transition-all disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+            {loading ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
             Publish
           </button>
         </div>
@@ -1035,85 +1083,85 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <AnimatePresence>
               {questions.map((q, idx) => (
                 <motion.div 
                   key={q.id}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-brand-surface border border-brand-border rounded-3xl p-8 space-y-6 relative group overflow-hidden shadow-sm"
+                  className="bg-brand-surface border border-brand-border rounded-2xl p-5 space-y-4 relative group overflow-hidden shadow-sm"
                 >
-                  <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => removeQuestion(q.id)}
-                      className="p-2 text-red-500/40 hover:text-red-500 bg-red-500/5 rounded-xl transition-all"
+                      className="p-1.5 text-red-500/40 hover:text-red-500 bg-red-500/5 rounded-lg transition-all"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-border pb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-brand-accent text-white rounded-lg flex items-center justify-center font-black text-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-border pb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-brand-accent text-white rounded-lg flex items-center justify-center font-black text-xs">
                         {idx + 1}
                       </div>
-                      <span className="font-bold">Question {idx + 1}</span>
+                      <span className="font-bold text-sm text-brand-text">Question {idx + 1}</span>
                     </div>
                     
-                    <div className="flex bg-brand-bg p-1 rounded-2xl border border-brand-border">
+                    <div className="flex bg-brand-bg p-1 rounded-xl border border-brand-border">
                       <button 
                         onClick={() => updateQuestion(q.id, { type: 'mcq' })}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${q.type === 'mcq' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'mcq' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
                       >
-                        <LayoutDashboard size={12} />
+                        <LayoutDashboard size={10} />
                         MCQ
                       </button>
                       <button 
                         onClick={() => updateQuestion(q.id, { type: 'short_answer' })}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${q.type === 'short_answer' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'short_answer' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
                       >
-                        <Type size={12} />
+                        <Type size={10} />
                         Short
                       </button>
                       <button 
                         onClick={() => updateQuestion(q.id, { type: 'photo' })}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${q.type === 'photo' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'photo' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
                       >
-                        <ImageIcon size={12} />
+                        <ImageIcon size={10} />
                         Photo
                       </button>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <textarea 
                       placeholder="Enter question text here..."
-                      rows={3}
-                      className="w-full bg-transparent border-none outline-none resize-none font-sans text-lg font-bold placeholder:text-brand-text/10"
+                      rows={2}
+                      className="w-full bg-transparent border-none outline-none resize-none font-sans text-base font-bold placeholder:text-brand-text/10"
                       value={q.text}
                       onChange={e => updateQuestion(q.id, { text: e.target.value })}
                     />
 
                     {q.type === 'mcq' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {q.options.map((opt, optIdx) => (
                           <div 
                             key={`${q.id}-opt-${optIdx}`} 
-                            className={`flex items-center gap-3 p-4 rounded-2xl border transition-all ${q.correct_option === optIdx ? 'bg-emerald-500/5 border-emerald-500/30 ring-2 ring-emerald-500/10' : 'bg-brand-bg/50 border-brand-border hover:border-brand-accent/30'}`}
+                            className={`flex items-center gap-2 p-3 rounded-xl border transition-all ${q.correct_option === optIdx ? 'bg-emerald-500/5 border-emerald-500/30 ring-2 ring-emerald-500/10' : 'bg-brand-bg/50 border-brand-border hover:border-brand-accent/30'}`}
                           >
                             <button 
                               type="button"
                               onClick={() => updateQuestion(q.id, { correct_option: optIdx })}
-                              className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all flex-shrink-0 ${q.correct_option === optIdx ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-brand-surface border border-brand-border text-transparent'}`}
+                              className={`w-5 h-5 rounded-md flex items-center justify-center transition-all flex-shrink-0 ${q.correct_option === optIdx ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/10' : 'bg-brand-surface border border-brand-border text-transparent'}`}
                             >
-                              <Check size={14} />
+                              <Check size={12} />
                             </button>
                             <input 
                               type="text"
                               placeholder={`Option ${String.fromCharCode(65 + optIdx)}`}
-                              className="flex-1 bg-transparent border border-transparent focus:border-brand-accent/20 rounded-lg px-2 py-1 outline-none font-bold placeholder:text-brand-muted/20 transition-all"
+                              className="flex-1 bg-transparent border border-transparent focus:border-brand-accent/20 rounded-lg px-2 py-0.5 outline-none text-sm font-bold placeholder:text-brand-muted/20 transition-all"
                               value={opt}
                               onChange={e => handleOptionChange(q.id, optIdx, e.target.value)}
                             />
@@ -1123,15 +1171,15 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                     )}
 
                     {q.type === 'short_answer' && (
-                      <div className="p-4 bg-brand-bg/30 border border-brand-border border-dashed rounded-2xl flex items-center justify-center text-brand-muted/40 italic text-sm">
+                      <div className="p-3 bg-brand-bg/30 border border-brand-border border-dashed rounded-xl flex items-center justify-center text-brand-muted/40 italic text-xs">
                         Students will type their answer here
                       </div>
                     )}
 
                     {q.type === 'photo' && (
-                      <div className="p-8 bg-brand-bg/30 border border-brand-border border-dashed rounded-3xl flex flex-col items-center justify-center gap-3">
-                        <ImageIcon className="text-brand-muted/20" size={32} />
-                        <span className="text-xs font-bold text-brand-muted/40 uppercase tracking-widest text-center">Students will upload a photo of their work</span>
+                      <div className="p-5 bg-brand-bg/30 border border-brand-border border-dashed rounded-2xl flex flex-col items-center justify-center gap-2">
+                        <ImageIcon className="text-brand-muted/20" size={24} />
+                        <span className="text-[10px] font-bold text-brand-muted/40 uppercase tracking-widest text-center">Students will upload a photo of their work</span>
                       </div>
                     )}
                   </div>
@@ -1141,12 +1189,12 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
             <button 
               onClick={addQuestion}
-              className="w-full py-8 border-2 border-dashed border-brand-border rounded-[2.5rem] flex flex-col items-center justify-center gap-2 hover:border-brand-accent/50 hover:bg-brand-accent/5 transition-all group"
+              className="w-full py-5 border-2 border-dashed border-brand-border rounded-2xl flex flex-col items-center justify-center gap-1.5 hover:border-brand-accent/50 hover:bg-brand-accent/5 transition-all group"
             >
-              <div className="w-12 h-12 bg-brand-surface rounded-2xl flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-colors">
-                <Plus size={24} />
+              <div className="w-9 h-9 bg-brand-surface rounded-xl flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-colors">
+                <Plus size={18} />
               </div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted group-hover:text-brand-accent">Add Another Question</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted group-hover:text-brand-accent">Add Another Question</span>
             </button>
           </div>
         </div>
@@ -1156,9 +1204,9 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         <button 
           onClick={publishAssignment}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 py-5 bg-brand-accent text-white rounded-2xl font-black uppercase tracking-widest shadow-2xl shadow-brand-accent/40 active:scale-95 transition-all disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 py-3.5 bg-brand-accent text-white rounded-xl font-bold uppercase tracking-wider shadow-lg shadow-brand-accent/20 active:scale-95 transition-all disabled:opacity-50"
         >
-          {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+          {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
           Publish Assignment
         </button>
       </div>

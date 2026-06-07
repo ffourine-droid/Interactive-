@@ -325,33 +325,33 @@ export const StudentAssignmentView: React.FC<{
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.1 }}
-                className="bg-brand-surface border border-brand-border rounded-3xl p-6 shadow-sm"
+                className="bg-brand-surface border border-brand-border rounded-2xl p-4 shadow-sm"
               >
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-7 h-7 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0">
                     {idx + 1}
                   </div>
-                  <h3 className="font-bold text-lg leading-tight pt-1">{q.text}</h3>
+                  <h3 className="font-bold text-base leading-tight pt-0.5 text-brand-text">{q.text}</h3>
                 </div>
 
-                <div className="pl-12">
+                <div className="mt-3 pl-0 sm:pl-10">
                   {q.type === 'mcq' && (
                     <div className="space-y-2">
                       {q.options.map((opt, optIdx) => (
                         <button
                           key={optIdx}
                           onClick={() => handleAnswerChange(q.id, optIdx.toString())}
-                          className={`w-full text-left p-4 rounded-2xl border transition-all flex items-center justify-between group ${
+                          className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between group ${
                             answers[q.id] === optIdx.toString()
                               ? 'bg-brand-accent border-brand-accent text-white'
                               : 'bg-brand-bg border-brand-border hover:border-brand-accent/50 text-brand-text/80'
                           }`}
                         >
-                          <span className="font-bold text-[15px]">{opt}</span>
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          <span className="font-bold text-sm">{opt}</span>
+                          <div className={`w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center ${
                             answers[q.id] === optIdx.toString() ? 'border-white' : 'border-brand-border/40 group-hover:border-brand-accent/40'
                           }`}>
-                            {answers[q.id] === optIdx.toString() && <div className="w-2 h-2 bg-white rounded-full" />}
+                            {answers[q.id] === optIdx.toString() && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                           </div>
                         </button>
                       ))}
@@ -361,22 +361,22 @@ export const StudentAssignmentView: React.FC<{
                   {q.type === 'short_answer' && (
                     <textarea 
                       placeholder="Type your answer here..."
-                      className="w-full bg-brand-bg border border-brand-border rounded-2xl p-4 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold text-sm min-h-[100px] resize-none"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl p-3.5 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold text-sm min-h-[90px] resize-none"
                       value={answers[q.id] || ''}
                       onChange={e => handleAnswerChange(q.id, e.target.value)}
                     />
                   )}
 
                   {q.type === 'photo' && (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {files[q.id] ? (
-                        <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex items-center justify-between">
+                        <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="p-2 bg-emerald-500/10 rounded-xl">
-                              <Camera className="text-emerald-500" size={20} />
+                            <div className="p-2 bg-emerald-500/10 rounded-lg">
+                              <Camera className="text-emerald-500" size={18} />
                             </div>
                             <div className="max-w-[150px]">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500/40 leading-none mb-1">Uploaded</p>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-500/40 leading-none mb-1">Uploaded</p>
                               <p className="text-xs font-bold truncate">{files[q.id].name}</p>
                             </div>
                           </div>
@@ -389,17 +389,17 @@ export const StudentAssignmentView: React.FC<{
                               delete newAnswers[q.id];
                               setAnswers(newAnswers);
                             }}
-                            className="p-2 text-brand-muted hover:text-red-500 transition-colors"
+                            className="p-1.5 text-brand-muted hover:text-red-500 transition-colors"
                           >
-                            <AlertCircle size={18} />
+                            <AlertCircle size={16} />
                           </button>
                         </div>
                       ) : (
-                        <label className="w-full flex flex-col items-center justify-center gap-3 py-10 border-2 border-dashed border-brand-border rounded-3xl cursor-pointer hover:bg-brand-accent/5 hover:border-brand-accent/30 transition-all group">
-                          <Camera className="text-brand-muted group-hover:text-brand-accent transition-colors" size={32} />
+                        <label className="w-full flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-brand-border rounded-2xl cursor-pointer hover:bg-brand-accent/5 hover:border-brand-accent/30 transition-all group">
+                          <Camera className="text-brand-muted group-hover:text-brand-accent transition-colors" size={24} />
                           <div className="text-center">
-                            <p className="text-sm font-bold text-brand-text">Capture Work</p>
-                            <p className="text-[10px] uppercase font-black tracking-widest text-brand-muted">Camera or Upload</p>
+                            <p className="text-xs font-bold text-brand-text">Capture Work</p>
+                            <p className="text-[9px] uppercase font-black tracking-widest text-brand-muted">Camera or Upload</p>
                           </div>
                           <input 
                             type="file" 
@@ -420,16 +420,16 @@ export const StudentAssignmentView: React.FC<{
           <button 
             onClick={submitAssignment}
             disabled={submitting}
-            className="w-full bg-brand-accent text-white py-5 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-brand-accent/30 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+            className="w-full bg-brand-accent text-white py-3.5 rounded-xl font-bold uppercase tracking-wider shadow-lg shadow-brand-accent/10 hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {submitting ? (
               <>
-                <Loader2 className="animate-spin" size={20} />
+                <Loader2 className="animate-spin" size={18} />
                 Submitting Work...
               </>
             ) : (
               <>
-                <Send size={20} />
+                <Send size={18} />
                 Submit Assignment
               </>
             )}
@@ -557,7 +557,7 @@ export const StudentAssignmentView: React.FC<{
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
-                className="bg-white dark:bg-brand-card rounded-3xl p-5 border border-brand-accent/5 shadow-xl shadow-brand-accent/5 overflow-hidden group cursor-pointer active:scale-[0.98] transition-all"
+                className="bg-white dark:bg-brand-card rounded-2xl p-4 border border-brand-accent/5 shadow-md overflow-hidden group cursor-pointer active:scale-[0.98] transition-all"
                 onClick={() => handleJoinAssignment(asgn.id)}
               >
                 <div className="flex flex-col gap-4">

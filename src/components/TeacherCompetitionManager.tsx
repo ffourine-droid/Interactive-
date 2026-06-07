@@ -64,8 +64,34 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
   }, [teacherId, classId]);
 
   const fetchStudents = async () => {
-    const { data } = await supabase.from('students').select('*').eq('class_id', classId);
-    setStudents(data || []);
+    let fetchedStudents: any[] = [];
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+        p_teacher_id: teacherId,
+        p_class_id: classId
+      });
+      if (!rpcError && rpcData) {
+        if (Array.isArray(rpcData)) {
+          fetchedStudents = rpcData;
+        } else if (typeof rpcData === 'object') {
+          const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+          if (innerArray) {
+            fetchedStudents = innerArray as any[];
+          } else if ((rpcData as any).id) {
+            fetchedStudents = [rpcData];
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("RPC fetchStudents failed in CompetitionManager:", e);
+    }
+
+    if (!fetchedStudents || fetchedStudents.length === 0) {
+      const { data } = await supabase.from('students').select('*').eq('class_id', classId);
+      fetchedStudents = data || [];
+    }
+
+    setStudents(fetchedStudents);
   };
 
   const fetchCompetitions = async () => {
@@ -607,14 +633,55 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
   };
 
   const fetchAvailableStudents = async () => {
-    if (classId) {
-      const { data } = await supabase.from('students').select('*').eq('class_id', classId);
-      setAvailableStudents(data || []);
-    } else {
-      const { data: compData } = await supabase.from('teacher_competitions').select('grade').eq('id', competition.id).single();
-      const { data } = await supabase.from('students').select('*').eq('grade', compData?.grade);
-      setAvailableStudents(data || []);
+    let fetchedStudents: any[] = [];
+    try {
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      const resolvedTeacherId = teacherStr ? JSON.parse(teacherStr).id : (competition as any).teacher_id;
+      if (resolvedTeacherId) {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+          p_teacher_id: resolvedTeacherId,
+          ...(classId ? { p_class_id: classId } : {})
+        });
+        if (!rpcError && rpcData) {
+          if (Array.isArray(rpcData)) {
+            fetchedStudents = rpcData;
+          } else if (typeof rpcData === 'object') {
+            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+            if (innerArray) {
+              fetchedStudents = innerArray as any[];
+            } else if ((rpcData as any).id) {
+              fetchedStudents = [rpcData];
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("RPC fetchAvailableStudents failed in CompetitionManager:", e);
     }
+
+    if (!fetchedStudents || fetchedStudents.length === 0) {
+      if (classId) {
+        const { data } = await supabase.from('students').select('*').eq('class_id', classId);
+        fetchedStudents = data || [];
+      } else {
+        const { data: compData } = await supabase.from('teacher_competitions').select('grade').eq('id', competition.id).single();
+        const { data } = await supabase.from('students').select('*').eq('grade', compData?.grade);
+        fetchedStudents = data || [];
+      }
+    } else {
+      if (!classId) {
+        try {
+          const { data: compData } = await supabase.from('teacher_competitions').select('grade').eq('id', competition.id).single();
+          if (compData?.grade) {
+            fetchedStudents = fetchedStudents.filter(s => s.grade === compData.grade);
+          }
+        } catch (compErr) {
+          console.warn("Error filtering by competition grade:", compErr);
+        }
+      }
+    }
+
+    setAvailableStudents(fetchedStudents);
   };
 
   const fetchParticipants = async () => {
