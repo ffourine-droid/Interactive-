@@ -1087,6 +1087,10 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
   const [dbNotes, setDbNotes] = useState<any>(null);
   const [loadingDb, setLoadingDb] = useState(false);
 
+  // Curriculum Version Selector States
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [allVersions, setAllVersions] = useState<any[]>([]);
+
   // Confetti triggering particles state
   const [particles, setParticles] = useState<Array<{ id: number, x: number, y: number, color: string }>>([]);
 
@@ -1101,21 +1105,42 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
       const topicId = String(notes?.id || notes?.topic_id || "");
       if (!topicId) return;
       
-      if (notes?.sections && Array.isArray(notes.sections) && notes.sections.length > 0) {
-        setDbNotes(notes);
-        return;
-      }
-      
       setLoadingDb(true);
       try {
-        const { data, error } = await supabase
+        // Fetch all versions for a version picker
+        const { data: versionsData, error: versionsErr } = await supabase
+          .from('notes_topics')
+          .select('version, topic, chapter')
+          .eq('topic_id', topicId)
+          .order('version');
+
+        if (active && !versionsErr && versionsData && versionsData.length > 0) {
+          setAllVersions(versionsData);
+        }
+
+        // Get latest or specified version for a topic
+        let query = supabase
           .from('notes_topics')
           .select('*')
-          .eq('topic_id', topicId)
-          .maybeSingle();
+          .eq('topic_id', topicId);
+
+        if (selectedVersion !== null) {
+          query = query.eq('version', selectedVersion);
+        } else {
+          query = query.order('version', { ascending: false }).limit(1);
+        }
+
+        const { data: targetNote, error: targetNoteErr } = await query.maybeSingle();
         
-        if (active && data) {
-          setDbNotes(data);
+        if (active) {
+          if (targetNote) {
+            setDbNotes(targetNote);
+            if (selectedVersion === null) {
+              setSelectedVersion(targetNote.version);
+            }
+          } else if (notes?.sections && Array.isArray(notes.sections) && notes.sections.length > 0) {
+            setDbNotes(notes);
+          }
         }
       } catch (err) {
         console.error("Error checking notes_topics table:", err);
@@ -1128,7 +1153,7 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
     return () => {
       active = false;
     };
-  }, [notes?.id, notes?.topic_id, notes?.sections]);
+  }, [notes?.id, notes?.topic_id, notes?.sections, selectedVersion]);
 
   // Merge database values with fallback props
   const activeNotes: any = dbNotes ? {
@@ -1176,6 +1201,46 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
     if (interactiveBlocks.length === 0) return 100;
     return Math.min(100, Math.round((progressCount / interactiveBlocks.length) * 100));
   }, [progressCount, interactiveBlocks.length]);
+
+  // Auto-save student progress to student_note_sessions in the background
+  useEffect(() => {
+    const saveProgressSession = async () => {
+      const topicId = String(notes?.id || notes?.topic_id || "");
+      if (!topicId) return;
+
+      const studentProfile = JSON.parse(localStorage.getItem('azilearn_student_profile') || '{}');
+      const arenaPlayer = JSON.parse(localStorage.getItem('azilearn_arena_player') || '{}');
+      const cachedStudent = JSON.parse(localStorage.getItem('azilearn_student') || '{}');
+      const finalUsername = username || studentProfile.username || arenaPlayer.username || cachedStudent.name || "Guest";
+
+      const noteVersion = selectedVersion || dbNotes?.version || 1;
+
+      try {
+        await supabase.from('student_note_sessions').upsert({
+          username: finalUsername,
+          topic_id: topicId,
+          version: noteVersion,
+          topic: activeNotes.title || dbNotes?.topic || notes.title || "Study Topic",
+          subject: activeNotes.subject || dbNotes?.subject || notes.subject || "Study Subject",
+          grade: String(activeNotes.grade || dbNotes?.grade || notes.grade || "Grade 9"),
+          progress_pct: progressPercent,
+          blocks_completed: progressCount,
+          total_blocks: interactiveBlocks.length,
+          xp_earned: xpEarned,
+          completed: progressPercent >= 100,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'username,topic_id,version' });
+      } catch (err) {
+        console.error("Error upserting student note session progress:", err);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      saveProgressSession();
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [progressPercent, progressCount, interactiveBlocks.length, xpEarned, selectedVersion, dbNotes?.version, username]);
 
   const triggerParticlesBurst = () => {
     const freshParticles = Array.from({ length: 24 }).map((_, i) => ({
@@ -1541,6 +1606,28 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
                     ))}
                   </div>
                 </div>
+
+                {/* 4. Curriculum study version selector picker */}
+                {allVersions.length > 1 && (
+                  <div className="space-y-1.5 md:col-span-3 border-t border-white/10 pt-4">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-[#FF6B2C]">Study Topic Version Picker</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {allVersions.map((v) => (
+                        <button
+                          key={v.version}
+                          onClick={() => { setSelectedVersion(v.version); synth.playTap(); }}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${
+                            selectedVersion === v.version 
+                              ? "bg-white/10 text-[#FF6B2C] border-[#FF6B2C]/30" 
+                              : "bg-black/10 text-white/40 border-transparent hover:text-white"
+                          }`}
+                        >
+                          Version {v.version} {v.chapter ? `(${v.chapter})` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
               </div>
             </motion.div>

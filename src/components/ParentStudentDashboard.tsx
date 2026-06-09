@@ -86,6 +86,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [examAttempts, setExamAttempts] = useState<ExamAttempt[]>([]);
   const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([]);
+  const [noteSessions, setNoteSessions] = useState<any[]>([]);
   const [ackLoading, setAckLoading] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<{assignment: Assignment, submission: Submission} | null>(null);
   const [selectedExam, setSelectedExam] = useState<ExamAttempt | null>(null);
@@ -170,6 +171,25 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       setSubmissions(progressData.submissions || []);
       setExamAttempts(examsRes.data || []);
       setAcknowledgements(progressData.acknowledgements || []);
+
+      // Fetch dynamic note sessions progress
+      const usernamesToQuery = [student.name];
+      if ((student as any).username) {
+        usernamesToQuery.push((student as any).username);
+      }
+      if (student.id) {
+        usernamesToQuery.push(student.id);
+      }
+
+      const { data: noteSessionsData, error: noteSessionsError } = await supabase
+        .from('student_note_sessions')
+        .select('*')
+        .in('username', usernamesToQuery)
+        .order('updated_at', { ascending: false });
+
+      if (!noteSessionsError && noteSessionsData) {
+        setNoteSessions(noteSessionsData);
+      }
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
       showToast(`Error loading dashboard: ${err.message || 'Unknown error'}`, "error");
@@ -570,6 +590,97 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
             })
           )}
         </div>
+      </div>
+
+      {/* Curriculum Study & Revisions Progress Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-brand-accent px-0" />
+            Curriculum Study & Revision Progress
+          </h2>
+          <span className="text-[10px] font-black text-brand-muted shrink-0">
+            {noteSessions.length} active {noteSessions.length === 1 ? 'session' : 'sessions'}
+          </span>
+        </div>
+
+        {noteSessions.length === 0 ? (
+          <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-8 text-center text-brand-muted">
+            <p className="text-xs font-bold uppercase tracking-widest opacity-50">No study sessions logged yet</p>
+            <p className="text-[10px] text-brand-muted mt-1 leading-relaxed max-w-sm mx-auto">
+              When {student.name} opens, reads, and practices revision package topics, their dynamic progress and XP logs will show up here in real-time!
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {noteSessions.map((session) => (
+              <div key={session.id} className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#F97316]">
+                        {session.subject}
+                      </span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand-border" />
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-brand-muted">
+                        Grade {session.grade}
+                      </span>
+                      {session.version && (
+                        <>
+                          <div className="w-1.5 h-1.5 rounded-full bg-brand-border" />
+                          <span className="text-[10px] font-extrabold text-brand-muted">
+                            Version: {session.version}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    <h3 className="text-xl font-black text-brand-text mb-2 leading-tight">
+                      {session.topic}
+                    </h3>
+
+                    <div className="flex flex-wrap items-center gap-3 text-[10px]">
+                      {session.completed || session.progress_pct >= 100 ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-full font-black uppercase tracking-wider">
+                          <CheckCircle2 size={11} /> Completed ✓
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-full font-black uppercase tracking-wider">
+                          <Hourglass size={11} className="animate-pulse" /> Studying ({session.progress_pct || 0}%)
+                        </span>
+                      )}
+
+                      <span className="text-brand-muted font-bold">
+                        Last Active: {new Date(session.updated_at || session.started_at).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Circular progress or score badge right side */}
+                  <div className="flex flex-wrap items-center gap-3 shrink-0">
+                    <div className="flex flex-col items-center justify-center p-4 bg-brand-bg rounded-2xl border border-brand-border min-w-[90px]">
+                      <span className="text-xl font-black text-brand-text font-mono">
+                        {session.progress_pct || 0}%
+                      </span>
+                      <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">
+                        Study Progress
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col items-center justify-center p-4 bg-brand-bg rounded-2xl border border-brand-border min-w-[90px]">
+                      <span className="text-xl font-black text-[#FF6B2C] font-mono">
+                        +{session.xp_earned || 0}
+                      </span>
+                      <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">
+                        XP Gained
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Detailed Work Modal */}
