@@ -4,12 +4,11 @@ import {
   ShieldCheck, 
   ArrowLeft, 
   Loader2, 
-  Search,
-  FlaskConical,
-  MessageSquare,
   HelpCircle,
   ChevronRight,
-  GraduationCap
+  GraduationCap,
+  Lock,
+  LockKeyhole
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -21,33 +20,274 @@ interface ParentPageProps {
 
 const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
   const { showToast } = useToast();
+  
+  // Transition steps: 'lookup' | 'set_pin' | 'enter_pin'
+  const [step, setStep] = useState<'lookup' | 'set_pin' | 'enter_pin'>('lookup');
+  
+  // Storage of student ID and details after successful lookup
+  const [studentId, setStudentId] = useState<string>('');
+  const [student, setStudent] = useState<any>(null);
+  
+  // PIN states
+  const [pinValue, setPinValue] = useState<string>('');
+  const [confirmPinValue, setConfirmPinValue] = useState<string>('');
+  
+  // Look up details
   const [formData, setFormData] = useState({
     studentName: '',
     schoolName: '',
     grade: '',
-    pin: ''
+    indexNumber: ''
   });
+  
   const [loading, setLoading] = useState(false);
-  const [student, setStudent] = useState<any>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Submits search details to lookup_student_for_parent RPC with client-side robust fallback
+  const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.studentName || !formData.schoolName || !formData.grade || !formData.pin) {
+    if (!formData.studentName.trim() || !formData.schoolName.trim() || !formData.grade || !formData.indexNumber.trim()) {
       showToast("Please fill in all details", "error");
-      return;
-    }
-
-    if (formData.pin.length !== 4) {
-      showToast("Code must be 4 digits", "error");
       return;
     }
 
     setLoading(true);
     try {
-      // Find all students matching name, grade and PIN part of parent_code
-      // A student might be in multiple classes (English, Math, etc.)
-      const { data: studentRecords, error: studentError } = await supabase
+      // 1. Try a robust client-side direct check on the database first.
+      // Since public RLS allows SELECT on students, classes, and teachers, this guarantees matching 
+      // under inconsistent/missing DB values (e.g. classes with NULL grade but student having Grade 9, or trailing spaces)
+      const { data: studentsList, error: directQueryError } = await supabase
+        .from('students')
+        .select(`
+          id,
+          name,
+          parent_code,
+          grade,
+          pin_attempts,
+          pin_locked,
+          parent_pin_hash,
+          classes (
+            id,
+            name,
+            grade,
+            teachers (
+              school_name
+            )
+          )
+        `)
+        .eq('parent_code', formData.indexNumber.trim());
+
+      let matchedStudent: any = null;
+
+      if (!directQueryError && studentsList && studentsList.length > 0) {
+        // Let's check matching criteria with forgiving comparisons
+        const inputName = formData.studentName.trim().toLowerCase();
+        const inputSchool = formData.schoolName.trim().toLowerCase();
+        const inputGrade = formData.grade.trim().toLowerCase();
+
+        // Helper to check if two grade patterns represent the same grade
+        const isGradeMatch = (dbStudentGrade: string, dbClassGrade: string, dbClassName: string, inpGrade: string) => {
+          const normInput = inpGrade.replace(/\s+/g, '').replace(/grade/g, ''); // e.g. "9", "7"
+          
+          const gradesToCheck = [dbStudentGrade, dbClassGrade, dbClassName].map(g => (g || '').trim().toLowerCase());
+          
+          for (const g of gradesToCheck) {
+            if (!g) continue;
+            const normG = g.replace(/\s+/g, '').replace(/grade/g, '');
+            if (normG === normInput) return true;
+            if (g.includes(inpGrade) || inpGrade.includes(g)) return true;
+            
+            // Textual translations (e.g., 9 -> nine, or nine -> 9)
+            const gradeWords: { [key: string]: string } = {
+              '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five',
+              '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
+              '11': 'eleven', '12': 'twelve'
+            };
+            const numPart = normG.match(/\d+/)?.[0] || normInput.match(/\d+/)?.[0];
+            if (numPart && gradeWords[numPart]) {
+              const word = gradeWords[numPart];
+              if (g.includes(word) || inpGrade.includes(word)) return true;
+            }
+          }
+          return false;
+        };
+
+        for (const s of studentsList) {
+          const nameMatch = s.name.trim().toLowerCase() === inputName;
+          
+          const classObj: any = Array.isArray(s.classes) ? s.classes[0] : s.classes;
+          const teacherObj = classObj && Array.isArray(classObj.teachers) ? classObj.teachers[0] : classObj?.teachers;
+          
+          const dbSchool = teacherObj?.school_name || '';
+          const schoolMatch = dbSchool.trim().toLowerCase() === inputSchool;
+          
+          const dbClassGrade = classObj?.grade || '';
+          const dbClassName = classObj?.name || '';
+          const gradeMatch = isGradeMatch(s.grade || '', dbClassGrade, dbClassName, inputGrade);
+
+          if (nameMatch && schoolMatch && gradeMatch) {
+            matchedStudent = s;
+            break;
+          }
+        }
+      }
+
+      // If we found a unique match via our robust client-side search, use it!
+      if (matchedStudent) {
+        if (matchedStudent.pin_locked) {
+          showToast("This account is temporarily locked due to too many failed attempts. Please contact the class teacher.", "error");
+          return;
+        }
+
+        setStudentId(matchedStudent.id);
+        setPinValue('');
+        setConfirmPinValue('');
+
+        const isPinSet = !!matchedStudent.parent_pin_hash;
+        if (!isPinSet) {
+          setStep('set_pin');
+          showToast("Student found! Please set a 4-digit access PIN.", "success");
+        } else {
+          setStep('enter_pin');
+          showToast("Student found! Enter your 4-digit PIN.", "success");
+        }
+        return;
+      }
+
+      // 2. If client-side SELECT didn't match (or there was an error), fall back to Postgres RPC:
+      const { data, error } = await supabase.rpc('lookup_student_for_parent', {
+        p_school_name: formData.schoolName.trim(),
+        p_grade: formData.grade,
+        p_index_number: formData.indexNumber.trim(),
+        p_name: formData.studentName.trim()
+      });
+
+      if (error) {
+        showToast(error.message || "Error searching child. Try again.", "error");
+        return;
+      }
+
+      if (!data || data.success === false) {
+        const errorMsg = data?.error === 'student_not_found' 
+          ? "Student not found. Please verify the Details."
+          : data?.error === 'account_locked'
+          ? "This account is temporarily locked due to too many failed attempts. Please contact the class teacher."
+          : "Lookup failed. Please check your inputs.";
+        showToast(errorMsg, "error");
+        return;
+      }
+
+      // Successful lookup fallback
+      const resolvedStudentId = data.student_id;
+      if (!resolvedStudentId) {
+        showToast("Unable to resolve Student ID. Contact teacher.", "error");
+        return;
+      }
+
+      setStudentId(resolvedStudentId);
+      setPinValue('');
+      setConfirmPinValue('');
+
+      if (data.pin_set === false) {
+        setStep('set_pin');
+        showToast("Student found! Please set a 4-digit access PIN.", "success");
+      } else {
+        setStep('enter_pin');
+        showToast("Student found! Enter your 4-digit PIN.", "success");
+      }
+    } catch (err: any) {
+      showToast("Error searching. Try again later.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submits first-time PIN to set_parent_pin RPC
+  const handleSetPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (pinValue.length !== 4 || confirmPinValue.length !== 4) {
+      showToast("PIN must be exactly 4 digits", "error");
+      return;
+    }
+
+    if (pinValue !== confirmPinValue) {
+      showToast("PINs do not match", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('set_parent_pin', {
+        p_student_id: studentId,
+        p_pin: pinValue
+      });
+
+      if (error) {
+        showToast(error.message || "Failed to set PIN", "error");
+        return;
+      }
+
+      const isSuccess = data === true || data?.success === true || (data !== false);
+      if (!isSuccess) {
+        showToast("Could not set PIN. Please try again.", "error");
+        return;
+      }
+
+      showToast("PIN set successfully!", "success");
+      await loginParent(studentId);
+    } catch (err: any) {
+      showToast("Error setting PIN", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submits returning parent's PIN to verify_parent_pin RPC
+  const handleVerifyPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (pinValue.length !== 4) {
+      showToast("Please enter 4 digits", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('verify_parent_pin', {
+        p_student_id: studentId,
+        p_pin: pinValue
+      });
+
+      if (error) {
+        showToast(error.message || "Verification failed. Try again.", "error");
+        return;
+      }
+
+      const isSuccess = data === true || data?.success === true;
+      if (!isSuccess) {
+        if (data?.attempts_left !== undefined) {
+          showToast(`Incorrect PIN. ${data.attempts_left} attempts left before account lockout.`, "error");
+        } else {
+          showToast("Incorrect PIN. Please try again.", "error");
+        }
+        return;
+      }
+
+      showToast("Access granted!", "success");
+      await loginParent(studentId);
+    } catch (err: any) {
+      showToast("Error verifying PIN", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Pulls full student data from the database and displays the dashboard
+  const loginParent = async (resolvedStudentId: string) => {
+    try {
+      // 1. Fetch primary student
+      const { data: primaryStudent, error: fetchErr } = await supabase
         .from('students')
         .select(`
           *,
@@ -58,41 +298,44 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
             )
           )
         `)
-        .ilike('name', formData.studentName.trim())
-        .eq('grade', formData.grade)
-        .eq('parent_code', formData.pin.padStart(4, '0'));
+        .eq('id', resolvedStudentId)
+        .single();
 
-      if (studentError) throw studentError;
-
-      if (studentRecords && studentRecords.length > 0) {
-        // Verify school name matches on at least one record
-        const inputSchoolName = formData.schoolName.trim().toLowerCase();
-        const validRecords = studentRecords.filter(record => {
-          const dbSchoolName = record.classes?.teachers?.school_name || '';
-          return dbSchoolName.toLowerCase().includes(inputSchoolName);
-        });
-        
-        if (validRecords.length > 0) {
-          // We found valid records. We take the "first" one as the primary profile
-          // but our dashboard will need to know about all of them to show all classes.
-          // For now, let's pass all valid student IDs to the dashboard.
-          setStudent({
-            ...validRecords[0],
-            all_student_ids: validRecords.map(r => r.id),
-            all_class_ids: validRecords.map(r => r.class_id)
-          });
-          showToast(`Welcome! Viewing results for ${validRecords[0].name}`, "success");
-        } else {
-          showToast("School name does not match our records for this student.", "error");
-        }
-      } else {
-        showToast("Student not found. Please verify the Name, Grade, and 4-digit Code.", "error");
+      if (fetchErr || !primaryStudent) {
+        showToast("Retrieval failed. Please try again.", "error");
+        return;
       }
+
+      // 2. Fetch companion student IDs for children registered in multiple classes with same name & index
+      const { data: companions } = await supabase
+        .from('students')
+        .select('id, class_id')
+        .eq('name', primaryStudent.name)
+        .eq('grade', primaryStudent.grade)
+        .eq('parent_code', primaryStudent.parent_code);
+
+      const allStudentIds = companions && companions.length > 0 
+        ? companions.map(c => c.id) 
+        : [primaryStudent.id];
+      const allClassIds = companions && companions.length > 0 
+        ? companions.map(c => c.class_id) 
+        : [primaryStudent.class_id];
+
+      setStudent({
+        ...primaryStudent,
+        all_student_ids: allStudentIds,
+        all_class_ids: allClassIds
+      });
     } catch (err: any) {
-      showToast("Error searching. Try again later.", "error");
-    } finally {
-      setLoading(false);
+      showToast("Error launching dashboard", "error");
     }
+  };
+
+  const handleResetToLookup = () => {
+    setStep('lookup');
+    setStudentId('');
+    setPinValue('');
+    setConfirmPinValue('');
   };
 
   const grades = Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`);
@@ -100,8 +343,11 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text p-4 pb-12">
       <main className="max-w-md mx-auto py-6">
-        {onBack && (
+        
+        {/* Navigation / Back Header */}
+        {!student && onBack && step === 'lookup' && (
           <button 
+            type="button"
             onClick={onBack}
             className="inline-flex items-center gap-2 text-brand-muted hover:text-brand-accent transition-colors mb-6 group"
           >
@@ -112,16 +358,12 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
           </button>
         )}
 
+        {/* Transition forms layout */}
         <AnimatePresence mode="wait">
           {!student ? (
-            <motion.div 
-              key="auth"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="space-y-6"
-            >
-              {/* Header */}
+            <div className="space-y-6">
+              
+              {/* Logo / Brand Header */}
               <div className="flex flex-col items-center text-center space-y-4">
                 <div className="w-16 h-16 bg-[#FF6B2C] rounded-[2rem] flex items-center justify-center text-white shadow-xl shadow-[#FF6B2C]/20 transform rotate-12">
                   <GraduationCap size={32} />
@@ -132,108 +374,265 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              {/* Form Card */}
+              {/* Form container card */}
               <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-2xl shadow-brand-accent/5 backdrop-blur-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-[#FF6B2C]/5 rounded-full -mr-12 -mt-12 blur-3xl" />
                 
-                <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
-                  <div className="space-y-2 text-center">
-                    <h2 className="text-lg font-black tracking-tight">Parent Access</h2>
-                    <p className="text-brand-muted text-[10px] font-medium px-4">Enter details as registered in school.</p>
-                  </div>
-                    
-                  <div className="grid grid-cols-1 gap-4">
-                    {/* Student Name */}
-                    <div className="space-y-1.5">
-                      <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
-                        Child's Full Name
-                      </label>
-                      <input 
-                        type="text"
-                        value={formData.studentName}
-                        onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
-                        placeholder="e.g. Brian Odhiambo"
-                        className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none transition-all placeholder:text-brand-muted/30"
-                      />
+                {step === 'lookup' && (
+                  <motion.div
+                    key="lookup"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    className="space-y-5"
+                  >
+                    <div className="space-y-2 text-center pb-1">
+                      <h2 className="text-lg font-black tracking-tight">Parent Access</h2>
+                      <p className="text-brand-muted text-[10px] font-medium px-4">Enter details as registered in school.</p>
                     </div>
 
-                    {/* School Name */}
-                    <div className="space-y-1.5">
-                      <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
-                        School Name
-                      </label>
-                      <input 
-                        type="text"
-                        value={formData.schoolName}
-                        onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
-                        placeholder="e.g. Hillcrest School"
-                        className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none transition-all placeholder:text-brand-muted/30"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Grade Selection */}
+                    <form onSubmit={handleLookup} className="space-y-5 relative z-10">
+                      {/* Name input */}
                       <div className="space-y-1.5">
                         <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
-                          Grade
-                        </label>
-                        <select 
-                          value={formData.grade}
-                          onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
-                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-4 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none appearance-none transition-all"
-                        >
-                          <option value="">Select...</option>
-                          {grades.map(g => (
-                            <option key={g} value={g}>{g}</option>
-                          ))}
-                          <option value="KCSE Revision">KCSE</option>
-                        </select>
-                      </div>
-
-                      {/* 4-digit Access Code */}
-                      <div className="space-y-1.5">
-                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2 text-right">
-                          4-Digit Code
+                          Child's Full Name
                         </label>
                         <input 
                           type="text"
-                          maxLength={4}
-                          value={formData.pin}
-                          onChange={(e) => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '') })}
-                          placeholder="0000"
-                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-2 font-black text-xl tracking-[0.2em] text-[#FF6B2C] focus:border-[#FF6B2C] outline-none transition-all text-center"
+                          value={formData.studentName}
+                          onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
+                          placeholder="e.g. John Mwangi"
+                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none transition-all placeholder:text-brand-muted/30"
                         />
                       </div>
+
+                      {/* School Name input */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                          School Name
+                        </label>
+                        <input 
+                          type="text"
+                          value={formData.schoolName}
+                          onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
+                          placeholder="e.g. Starehe Boys"
+                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none transition-all placeholder:text-brand-muted/30"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Grade selection dropdown */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                            Grade
+                          </label>
+                          <select 
+                            value={formData.grade}
+                            onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
+                            className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-4 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none appearance-none transition-all"
+                          >
+                            <option value="">Select...</option>
+                            {grades.map(g => (
+                              <option key={g} value={g}>{g}</option>
+                            ))}
+                            <option value="KCSE Revision">KCSE</option>
+                          </select>
+                        </div>
+
+                        {/* Student index number input */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2 text-right">
+                            Index Number
+                          </label>
+                          <input 
+                            type="text"
+                            value={formData.indexNumber}
+                            onChange={(e) => setFormData({ ...formData, indexNumber: e.target.value.replace(/\s/g, '') })}
+                            placeholder="e.g. 042"
+                            className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-4 font-black text-sm text-brand-text focus:border-[#FF6B2C] outline-none transition-all text-center"
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-[#FF6B2C] text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[#FF6B2C]/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-2 cursor-pointer"
+                      >
+                        {loading ? (
+                          <Loader2 size={20} className="animate-spin" />
+                        ) : (
+                          <>
+                            Check Progress
+                            <ChevronRight size={18} />
+                          </>
+                        )}
+                      </button>
+                    </form>
+
+                    <div className="mt-6 p-5 bg-brand-bg/50 rounded-2xl border border-brand-border/50 border-dashed flex items-start gap-4">
+                      <HelpCircle className="text-brand-muted shrink-0" size={18} />
+                      <div>
+                        <h4 className="text-[9px] font-black uppercase tracking-widest text-brand-muted mb-0.5">Dual-layer Access</h4>
+                        <p className="text-[10px] font-medium text-brand-muted/80 leading-relaxed">
+                          Enter your child's index number to lookup their profile, then authenticate with your secure parent PIN.
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  </motion.div>
+                )}
 
-                  <button 
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-[#FF6B2C] text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[#FF6B2C]/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+                {step === 'set_pin' && (
+                  <motion.div
+                    key="set_pin"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-5"
                   >
-                    {loading ? (
-                      <Loader2 size={20} className="animate-spin" />
-                    ) : (
-                      <>
-                        Check Progress
-                        <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
-                  </button>
-                </form>
+                    <div className="space-y-2 text-center pb-2">
+                      <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-2">
+                        <ShieldCheck size={24} />
+                      </div>
+                      <h2 className="text-lg font-black tracking-tight text-emerald-500 leading-tight">PIN Setup Required</h2>
+                      <p className="text-brand-muted text-[10px] font-medium px-2">
+                        First-time parent detected. Create a 4-digit PIN to secure future access to {formData.studentName}'s records.
+                      </p>
+                    </div>
 
-                <div className="mt-6 p-5 bg-brand-bg/50 rounded-2xl border border-brand-border/50 border-dashed flex items-start gap-4">
-                  <HelpCircle className="text-brand-muted shrink-0" size={18} />
-                  <div>
-                    <h4 className="text-[9px] font-black uppercase tracking-widest text-brand-muted mb-0.5">Simple Access</h4>
-                    <p className="text-[10px] font-medium text-brand-muted/80 leading-relaxed">
-                      Enter the 4-digit code from the teacher to view child's progress.
-                    </p>
-                  </div>
-                </div>
+                    <form onSubmit={handleSetPin} className="space-y-5 relative z-10">
+                      {/* PIN Selection */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                          Choose 4-Digit PIN
+                        </label>
+                        <input 
+                          type="password"
+                          name="pin_setup"
+                          id="pin_setup"
+                          maxLength={4}
+                          value={pinValue}
+                          onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ''))}
+                          placeholder="••••"
+                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-black text-center text-xl tracking-[0.3em] text-[#FF6B2C] focus:border-[#FF6B2C] outline-none transition-all"
+                        />
+                      </div>
+
+                      {/* PIN Confirmation */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                          Confirm 4-Digit PIN
+                        </label>
+                        <input 
+                          type="password"
+                          name="confirm_pin_setup"
+                          id="confirm_pin_setup"
+                          maxLength={4}
+                          value={confirmPinValue}
+                          onChange={(e) => setConfirmPinValue(e.target.value.replace(/\D/g, ''))}
+                          placeholder="••••"
+                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-black text-center text-xl tracking-[0.3em] text-[#FF6B2C] focus:border-[#FF6B2C] outline-none transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-2 pt-2">
+                        <button 
+                          type="submit"
+                          disabled={loading}
+                          className="w-full bg-[#FF6B2C] text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[#FF6B2C]/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          {loading ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <>
+                              Save PIN & View progress
+                              <ChevronRight size={16} />
+                            </>
+                          )}
+                        </button>
+
+                        <button 
+                          type="button"
+                          onClick={handleResetToLookup}
+                          className="w-full bg-transparent border border-brand-border text-brand-muted py-3 rounded-xl font-bold uppercase tracking-wider text-[10px] hover:text-brand-text transition-all mt-1 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                )}
+
+                {step === 'enter_pin' && (
+                  <motion.div
+                    key="enter_pin"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-5"
+                  >
+                    <div className="space-y-2 text-center pb-2">
+                      <div className="mx-auto w-12 h-12 rounded-full bg-[#FF6B2C]/10 flex items-center justify-center text-[#FF6B2C] mb-2">
+                        <LockKeyhole size={22} />
+                      </div>
+                      <h2 className="text-lg font-black tracking-tight text-brand-text leading-tight">Secure Access Required</h2>
+                      <p className="text-brand-muted text-[10px] font-medium px-4">
+                        Please enter your secure 4-digit parent PIN to authorize viewing {formData.studentName}'s records.
+                      </p>
+                    </div>
+
+                    <form onSubmit={handleVerifyPin} className="space-y-5 relative z-10">
+                      {/* Enter PIN */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                          Enter 4-Digit Parent PIN
+                        </label>
+                        <input 
+                          type="password"
+                          name="pin_verify"
+                          id="pin_verify"
+                          maxLength={4}
+                          value={pinValue}
+                          onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ''))}
+                          placeholder="••••"
+                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-black text-center text-xl tracking-[0.3em] text-[#FF6B2C] focus:border-[#FF6B2C] outline-none transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-2 pt-2">
+                        <button 
+                          type="submit"
+                          disabled={loading}
+                          className="w-full bg-[#FF6B2C] text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[#FF6B2C]/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          {loading ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <>
+                              Verify PIN & View
+                              <ChevronRight size={16} />
+                            </>
+                          )}
+                        </button>
+
+                        <button 
+                          type="button"
+                          onClick={handleResetToLookup}
+                          className="w-full bg-transparent border border-brand-border text-brand-muted py-3 rounded-xl font-bold uppercase tracking-wider text-[10px] hover:text-brand-text transition-all mt-1 cursor-pointer"
+                        >
+                          Find another student
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] text-center font-semibold text-brand-muted leading-relaxed pt-2 border-t border-brand-border/30">
+                        Forgot your parent PIN? Please contact {formData.studentName}'s class teacher to reset your parent security credentials.
+                      </p>
+                    </form>
+                  </motion.div>
+                )}
+
               </div>
-            </motion.div>
+            </div>
           ) : (
             <motion.div
               key="dashboard"
@@ -244,8 +643,9 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
             >
               <div className="flex items-center justify-between mb-2 px-2">
                 <button 
+                  type="button"
                   onClick={() => setStudent(null)}
-                  className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-muted hover:text-brand-accent transition-all group"
+                  className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-muted hover:text-brand-accent transition-all group cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border flex items-center justify-center group-hover:border-brand-accent group-hover:bg-brand-accent/5">
                     <ArrowLeft size={14} />
@@ -253,7 +653,7 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                   <span className="text-[10px] font-black uppercase tracking-widest">Switch Student</span>
                 </button>
               </div>
-              <ParentStudentDashboard student={student} />
+              <ParentStudentDashboard student={student} parentPin={pinValue} />
             </motion.div>
           )}
         </AnimatePresence>

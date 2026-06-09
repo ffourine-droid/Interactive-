@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Share2, Sparkles, Loader2 } from 'lucide-react';
+import { Copy, Check, Share2, Sparkles, Loader2, RotateCcw } from 'lucide-react';
 import { useToast } from './Toast';
 import { supabase } from '../lib/supabase';
 
@@ -33,6 +33,34 @@ export const ParentCodeTable: React.FC<ParentCodeTableProps> = ({ students: init
   useEffect(() => {
     setStudents(initialStudents);
   }, [initialStudents]);
+
+  const handleResetPin = async (studentId: string) => {
+    if (!teacher?.id) {
+      showToast("Teacher information is missing.", "error");
+      return;
+    }
+    
+    if (!window.confirm("Are you sure you want to reset this student's parent access PIN? This will unlock the account and let the parent set a new PIN next time they visit.")) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('reset_parent_pin', {
+        p_student_id: studentId,
+        p_teacher_id: teacher.id
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      showToast("Parent security PIN successfully reset!", "success");
+      if (onUpdate) onUpdate();
+    } catch (err: any) {
+      console.error("Error resetting parent PIN:", err);
+      showToast(err.message || "Failed to reset parent PIN", "error");
+    }
+  };
 
   const handleAutoAssign = async (silent = false) => {
     if (!teacher?.school_name || students.length === 0) return;
@@ -193,12 +221,21 @@ export const ParentCodeTable: React.FC<ParentCodeTableProps> = ({ students: init
                   </div>
                 </div>
               </div>
-              <button 
-                onClick={() => copyToClipboard(`Child: ${student.name}\nGrade: ${className}\nIndex Number: ${pin}`, student.id)}
-                className="p-2 bg-brand-surface border border-brand-border rounded-lg text-brand-muted hover:text-brand-accent transition-all active:scale-95"
-              >
-                {copiedId === student.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handleResetPin(student.id)}
+                  title="Reset Parent security PIN"
+                  className="p-2 bg-brand-surface border border-brand-border rounded-lg text-brand-muted hover:text-red-500 hover:border-red-500/30 transition-all active:scale-95"
+                >
+                  <RotateCcw size={14} />
+                </button>
+                <button 
+                  onClick={() => copyToClipboard(`Child: ${student.name}\nGrade: ${className}\nIndex Number: ${pin}`, student.id)}
+                  className="p-2 bg-brand-surface border border-brand-border rounded-lg text-brand-muted hover:text-brand-accent transition-all active:scale-95"
+                >
+                  {copiedId === student.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                </button>
+              </div>
             </div>
           );
         })}

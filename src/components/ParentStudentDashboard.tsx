@@ -76,9 +76,10 @@ interface Acknowledgement {
 
 interface ParentStudentDashboardProps {
   student: Student;
+  parentPin: string;
 }
 
-export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ student }) => {
+export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ student, parentPin }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -97,7 +98,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
 
   useEffect(() => {
     fetchData();
-  }, [student.id, student.all_student_ids?.join(',')]);
+  }, [student.id, student.all_student_ids?.join(','), parentPin]);
 
   useEffect(() => {
     if (selectedExam) {
@@ -134,21 +135,17 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       const studentIds = student.all_student_ids || [student.id];
       const classIds = student.all_class_ids || [student.class_id];
 
-      // Format student IDs for the .in filter in .or clause
-      // Postgrest .in expects (val1,val2)
-      const idsFormatted = studentIds.join(',');
-
-      // Fetch assignments, submissions, exam attempts, and acks
-      const [assignmentsRes, submissionsRes, examsRes, acksRes] = await Promise.all([
+      // Fetch assignments, exam attempts, and student progress securely via RPC
+      const [assignmentsRes, progressRes, examsRes] = await Promise.all([
         supabase
           .from('assignments')
           .select('id, title, subject, grade, due_date, class_id, questions, created_at')
           .in('class_id', classIds)
           .order('created_at', { ascending: false }),
-        supabase
-          .from('assignment_submissions')
-          .select('id, assignment_id, score, teacher_comment, parent_feedback, teacher_reply, status, submitted_at, answers, student_id, student_name')
-          .or(`student_id.in.(${idsFormatted}),student_name.ilike."${student.name.trim()}"`),
+        supabase.rpc('get_student_progress_for_parent', {
+          p_student_id: student.id,
+          p_pin: parentPin
+        }),
         supabase
           .from('exam_attempts')
           .select(`
@@ -157,30 +154,29 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           `)
           .in('student_id', studentIds)
           .eq('is_submitted', true)
-          .order('submitted_at', { ascending: false }),
-      // FIXED: query by student_id, not parent_code
-      supabase
-        .from('parent_acknowledgements')
-        .select('assignment_id, acknowledged_at')
-        .in('student_id', studentIds)
-    ]);
+          .order('submitted_at', { ascending: false })
+      ]);
 
-    if (assignmentsRes.error) throw assignmentsRes.error;
-    if (submissionsRes.error) throw submissionsRes.error;
-    if (examsRes.error) throw examsRes.error;
-    if (acksRes.error) throw acksRes.error;
+      if (assignmentsRes.error) throw assignmentsRes.error;
+      if (progressRes.error) throw progressRes.error;
+      if (examsRes.error) throw examsRes.error;
 
-    setAssignments(assignmentsRes.data || []);
-    setSubmissions(submissionsRes.data || []);
-    setExamAttempts(examsRes.data || []);
-    setAcknowledgements(acksRes.data || []);
-  } catch (err: any) {
-    console.error("Dashboard fetch error:", err);
-    showToast(`Error loading dashboard: ${err.message || 'Unknown error'}`, "error");
-  } finally {
-    setLoading(false);
-  }
-};
+      const progressData = progressRes.data || {};
+      if (progressData.success === false) {
+        throw new Error(progressData.error || "Wrong parent PIN / access denied.");
+      }
+
+      setAssignments(assignmentsRes.data || []);
+      setSubmissions(progressData.submissions || []);
+      setExamAttempts(examsRes.data || []);
+      setAcknowledgements(progressData.acknowledgements || []);
+    } catch (err: any) {
+      console.error("Dashboard fetch error:", err);
+      showToast(`Error loading dashboard: ${err.message || 'Unknown error'}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSaveParentFeedback = async (id: string, type: 'assignment' | 'exam', isFromModal = false) => {
     setSavingFeedback(true);
