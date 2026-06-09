@@ -37,7 +37,9 @@ export type Page =
   | 'story-quest'
   | 'community'
   | 'moderation'
-  | 'notes';
+  | 'notes'
+  | 'terms'
+  | 'privacy';
 
 export interface Question {
   index: number;

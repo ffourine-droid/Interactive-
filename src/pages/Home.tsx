@@ -34,13 +34,15 @@ interface HomeProps {
   setTheme: (theme: 'light' | 'dark') => void;
   selectedClass: string | null;
   setSelectedClass: (grade: string | null) => void;
+  onTermsClick?: () => void;
+  onPrivacyClick?: () => void;
 }
 
 export default function Home({ 
   onBack, onAdminClick, onAdminTerminalClick, onTeacherClick, onTeacherDashboardClick, 
   onAssignmentsClick, onExamsClick, onArenaClick, onParentClick, onStoriesClick,
   onCommunityClick, onNotesClick, theme, setTheme,
-  selectedClass, setSelectedClass
+  selectedClass, setSelectedClass, onTermsClick, onPrivacyClick
 }: HomeProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -1092,6 +1094,48 @@ export default function Home({
                   </div>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-brand-accent transition-all">
+                  <ChevronRight size={16} />
+                </div>
+              </button>
+
+              <div className="h-px bg-brand-border/50" />
+
+              {/* Terms of Use */}
+              <button 
+                onClick={onTermsClick}
+                className="w-full flex items-center justify-between group text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-[#FF6B2C]/10 rounded-xl flex items-center justify-center text-[#FF6B2C]">
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-brand-text text-sm group-hover:text-[#FF6B2C] transition-colors">Terms of Use</p>
+                    <p className="text-[11px] text-brand-muted">AziLearn student and teacher rules & agreements</p>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-[#FF6B2C] transition-all">
+                  <ChevronRight size={16} />
+                </div>
+              </button>
+
+              <div className="h-px bg-brand-border/50" />
+
+              {/* Privacy Policy */}
+              <button 
+                onClick={onPrivacyClick}
+                className="w-full flex items-center justify-between group text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-brand-text text-sm group-hover:text-emerald-500 transition-colors">Privacy Policy</p>
+                    <p className="text-[11px] text-brand-muted">Learn how we process and protect student records</p>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-muted group-hover:text-[#FF6B2C] transition-all">
                   <ChevronRight size={16} />
                 </div>
               </button>

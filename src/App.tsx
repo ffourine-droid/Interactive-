@@ -34,6 +34,7 @@ import CommunityPage from './pages/CommunityPage';
 import ForumPage from './pages/ForumPage';
 import ModerationPage from './pages/ModerationPage';
 import NotesPage from './components/NotesPage';
+import LegalPage from './pages/LegalPage';
 
 import { examService } from './services/examService';
 
@@ -459,6 +460,38 @@ function AppContent() {
             </motion.div>
           </Suspense>
         );
+      case 'terms':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading Terms..." />}>
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="terms"
+            >
+              <LegalPage 
+                initialTab="terms"
+                onBack={() => setCurrentPage('home')}
+              />
+            </motion.div>
+          </Suspense>
+        );
+      case 'privacy':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading Policies..." />}>
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              key="privacy"
+            >
+              <LegalPage 
+                initialTab="privacy"
+                onBack={() => setCurrentPage('home')}
+              />
+            </motion.div>
+          </Suspense>
+        );
       case 'home':
       default:
         return (
@@ -513,6 +546,8 @@ function AppContent() {
                 setSelectedClass={setSelectedClass}
                 theme={theme}
                 setTheme={setTheme}
+                onTermsClick={() => setCurrentPage('terms')}
+                onPrivacyClick={() => setCurrentPage('privacy')}
               />
             </motion.div>
           </Suspense>
