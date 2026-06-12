@@ -416,53 +416,61 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                 <div className="h-px bg-brand-accent/10 w-full" />
 
                 <div className="space-y-6">
-                  {assignment.questions.map((q: any, idx: number) => (
-                    <div key={idx} className="bg-white dark:bg-brand-card p-6 rounded-3xl border border-brand-accent/5 space-y-4 shadow-sm">
-                      <div className="flex items-start gap-4">
-                        <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0 mt-1">
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-bold text-brand-text mb-4 text-lg">{q.text}</p>
-                          <div className="space-y-4">
-                            <div>
-                              <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest mb-2">Student's Answer</p>
-                              {q.type === 'photo' ? (
-                                <div className="relative rounded-2xl overflow-hidden border-2 border-brand-accent/5 bg-brand-bg">
-                                  <img 
-                                    src={selectedSubmission.answers[q.id]} 
-                                    alt="Student work" 
-                                    className="w-full h-auto max-h-[400px] object-contain"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="p-4 rounded-2xl bg-brand-bg font-bold text-sm border-2 border-brand-accent/5">
-                                  {q.type === 'mcq' 
-                                    ? q.options[parseInt(selectedSubmission.answers[q.id])] 
-                                    : selectedSubmission.answers[q.id] || 'N/A'
-                                  }
-                                </div>
+                  {assignment.questions.map((q: any, idx: number) => {
+                    const submissionAnswers = selectedSubmission?.answers || {};
+                    const qAnswer = submissionAnswers[q.id];
+                    return (
+                      <div key={idx} className="bg-white dark:bg-brand-card p-6 rounded-3xl border border-brand-accent/5 space-y-4 shadow-sm">
+                        <div className="flex items-start gap-4">
+                          <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0 mt-1">
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-bold text-brand-text mb-4 text-lg">{q.text}</p>
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest mb-2">Student's Answer</p>
+                                {q.type === 'photo' ? (
+                                  <div className="relative rounded-2xl overflow-hidden border-2 border-brand-accent/5 bg-brand-bg">
+                                    {qAnswer ? (
+                                      <img 
+                                        src={qAnswer} 
+                                        alt="Student work" 
+                                        className="w-full h-auto max-h-[400px] object-contain"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    ) : (
+                                      <p className="p-4 text-xs font-semibold text-brand-muted">No photo uploaded</p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="p-4 rounded-2xl bg-brand-bg font-bold text-sm border-2 border-brand-accent/5">
+                                    {q.type === 'mcq' 
+                                      ? q.options?.[parseInt(qAnswer)] || 'No choice selected'
+                                      : qAnswer || 'N/A'
+                                    }
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {q.type === 'mcq' && (
+                                 <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-xl ${
+                                      parseInt(qAnswer) === q.correct_option ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+                                    }`}>
+                                      {parseInt(qAnswer) === q.correct_option ? <Check size={20}/> : <XCircle size={20}/>}
+                                    </div>
+                                    <p className="text-xs font-bold text-brand-muted uppercase tracking-widest">
+                                      Correct Option: {q.options?.[q.correct_option] || 'Unknown'}
+                                    </p>
+                                 </div>
                               )}
                             </div>
-                            
-                            {q.type === 'mcq' && (
-                               <div className="flex items-center gap-3">
-                                  <div className={`p-2 rounded-xl ${
-                                    parseInt(selectedSubmission.answers[q.id]) === q.correct_option ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
-                                  }`}>
-                                    {parseInt(selectedSubmission.answers[q.id]) === q.correct_option ? <Check size={20}/> : <XCircle size={20}/>}
-                                  </div>
-                                  <p className="text-xs font-bold text-brand-muted uppercase tracking-widest">
-                                    Correct Option: {q.options[q.correct_option]}
-                                  </p>
-                               </div>
-                            )}
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </motion.div>

@@ -98,8 +98,12 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const [loadingExamDetails, setLoadingExamDetails] = useState(false);
 
   useEffect(() => {
-    fetchData();
-  }, [student.id, student.all_student_ids?.join(','), parentPin]);
+    if (student) {
+      fetchData();
+    } else {
+      setLoading(false);
+    }
+  }, [student?.id, student?.all_student_ids?.join(','), parentPin]);
 
   useEffect(() => {
     if (selectedExam) {
@@ -131,10 +135,14 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   };
 
   const fetchData = async () => {
+    if (!student) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const studentIds = student.all_student_ids || [student.id];
-      const classIds = student.all_class_ids || [student.class_id];
+      const studentIds = student.all_student_ids || (student.id ? [student.id] : []);
+      const classIds = student.all_class_ids || (student.class_id ? [student.class_id] : []);
 
       // Fetch assignments, exam attempts, and student progress securely via RPC
       const [assignmentsRes, progressRes, examsRes] = await Promise.all([
@@ -144,7 +152,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           .in('class_id', classIds)
           .order('created_at', { ascending: false }),
         supabase.rpc('get_student_progress_for_parent', {
-          p_student_id: student.id,
+          p_student_id: student.id || '',
           p_pin: parentPin
         }),
         supabase
@@ -173,7 +181,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       setAcknowledgements(progressData.acknowledgements || []);
 
       // Fetch dynamic note sessions progress
-      const usernamesToQuery = [student.name];
+      const usernamesToQuery = student.name ? [student.name] : [];
       if ((student as any).username) {
         usernamesToQuery.push((student as any).username);
       }
@@ -181,14 +189,16 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         usernamesToQuery.push(student.id);
       }
 
-      const { data: noteSessionsData, error: noteSessionsError } = await supabase
-        .from('student_note_sessions')
-        .select('*')
-        .in('username', usernamesToQuery)
-        .order('updated_at', { ascending: false });
+      if (usernamesToQuery.length > 0) {
+        const { data: noteSessionsData, error: noteSessionsError } = await supabase
+          .from('student_note_sessions')
+          .select('*')
+          .in('username', usernamesToQuery)
+          .order('updated_at', { ascending: false });
 
-      if (!noteSessionsError && noteSessionsData) {
-        setNoteSessions(noteSessionsData);
+        if (!noteSessionsError && noteSessionsData) {
+          setNoteSessions(noteSessionsData);
+        }
       }
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
@@ -223,6 +233,10 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   };
 
   const handleAcknowledge = async (assignmentId: string) => {
+    if (!student?.id) {
+      showToast("Access denied: student not selected", "error");
+      return;
+    }
     setAckLoading(assignmentId);
     try {
       // FIXED: removed parent_code — column doesn't exist on parent_acknowledgements
@@ -256,24 +270,32 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
     );
   }
 
+  if (!student) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <p className="text-brand-muted font-bold text-xs uppercase tracking-widest">No student data selected</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-sm">
         <div className="flex items-center gap-6">
           <div className="w-20 h-20 bg-brand-accent rounded-[2rem] flex items-center justify-center text-white text-3xl font-black shadow-xl shadow-brand-accent/20">
-            {student.name.charAt(0)}
+            {(student.name || '').charAt(0)}
           </div>
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-brand-text">{student.name}</h1>
+            <h1 className="text-3xl font-black tracking-tight text-brand-text">{student.name || 'Student'}</h1>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span className="px-3 py-1 bg-brand-bg border border-brand-border rounded-full text-[10px] font-black uppercase tracking-widest text-brand-muted">
-                {student.grade}
+                {student.grade || 'No Grade'}
               </span>
               <span className="px-3 py-1 bg-brand-surface border border-brand-accent/30 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-accent font-mono">
-                Index: {student.parent_code}
+                Index: {student.parent_code || 'N/A'}
               </span>
               <span className="px-3 py-1 bg-brand-accent/10 border border-brand-accent/20 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-accent">
-                {student.classes?.name || 'Assigned Class'}
+                {(Array.isArray(student.classes) ? student.classes[0]?.name : student.classes?.name) || 'Assigned Class'}
               </span>
             </div>
           </div>
@@ -608,7 +630,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-8 text-center text-brand-muted">
             <p className="text-xs font-bold uppercase tracking-widest opacity-50">No study sessions logged yet</p>
             <p className="text-[10px] text-brand-muted mt-1 leading-relaxed max-w-sm mx-auto">
-              When {student.name} opens, reads, and practices revision package topics, their dynamic progress and XP logs will show up here in real-time!
+              When {student.name || 'the student'} opens, reads, and practices revision package topics, their dynamic progress and XP logs will show up here in real-time!
             </p>
           </div>
         ) : (
@@ -775,39 +797,48 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                     </div>
                   )}
 
-                  {selectedSubmission && selectedSubmission.assignment.questions?.map((q: any, idx: number) => (
-                    <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
-                      <div className="flex items-start gap-4 mb-4">
-                        <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
-                        <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
+                  {selectedSubmission && selectedSubmission.assignment.questions?.map((q: any, idx: number) => {
+                    const submissionAnswers = selectedSubmission.submission?.answers || {};
+                    const qAnswer = submissionAnswers[q.id];
+                    return (
+                      <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
+                        <div className="flex items-start gap-4 mb-4">
+                          <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
+                          <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
+                        </div>
+                        <div className="pl-10">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Submitted Answer</p>
+                          {q.type === 'mcq' ? (
+                            <div className="flex items-center gap-2">
+                               <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(qAnswer) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
+                                 {q.options?.[parseInt(qAnswer)] || 'No choice selected'}
+                               </div>
+                               {parseInt(qAnswer) === q.correct_option ? (
+                                 <CheckCircle2 size={16} className="text-emerald-500" />
+                               ) : (
+                                 <AlertTriangle size={16} className="text-red-500" />
+                               )}
+                            </div>
+                          ) : q.type === 'photo' ? (
+                            <div className="space-y-2">
+                              {qAnswer ? (
+                                <img 
+                                  src={qAnswer} 
+                                  alt="Work" 
+                                  className="rounded-2xl border border-brand-border w-full max-w-sm object-cover shadow-sm"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <p className="text-xs font-semibold text-brand-muted">No photo uploaded</p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{qAnswer || 'No answer provided'}</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="pl-10">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Submitted Answer</p>
-                        {q.type === 'mcq' ? (
-                          <div className="flex items-center gap-2">
-                             <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(selectedSubmission.submission.answers[q.id]) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
-                               {q.options[parseInt(selectedSubmission.submission.answers[q.id])]}
-                             </div>
-                             {parseInt(selectedSubmission.submission.answers[q.id]) === q.correct_option ? (
-                               <CheckCircle2 size={16} className="text-emerald-500" />
-                             ) : (
-                               <AlertTriangle size={16} className="text-red-500" />
-                             )}
-                          </div>
-                        ) : q.type === 'photo' ? (
-                          <div className="space-y-2">
-                            <img 
-                              src={selectedSubmission.submission.answers[q.id]} 
-                              alt="Work" 
-                              className="rounded-2xl border border-brand-border w-full max-w-sm object-cover shadow-sm"
-                            />
-                          </div>
-                        ) : (
-                          <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{selectedSubmission.submission.answers[q.id] || 'No answer provided'}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {selectedExam && examData && examData.questions?.map((q: any, idx: number) => {
                     const studentAnswer = (selectedExam as any).answers?.[idx];

@@ -951,41 +951,52 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
               <div className="flex-1 overflow-y-auto p-8 space-y-8">
                 <div className="space-y-6">
-                  {assignments.find(a => a.id === selectedSubmission.assignment_id)?.questions.map((q: any, idx: number) => (
-                    <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
-                      <div className="flex items-start gap-4 mb-4">
-                        <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
-                        <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
+                  {assignments.find(a => a.id === selectedSubmission.assignment_id)?.questions.map((q: any, idx: number) => {
+                    const submissionAnswers = selectedSubmission.answers || {};
+                    const qAnswer = submissionAnswers[q.id];
+                    return (
+                      <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
+                        <div className="flex items-start gap-4 mb-4">
+                          <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
+                          <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
+                        </div>
+                        <div className="pl-10">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Student Answer</p>
+                          {q.type === 'mcq' ? (
+                            <div className="flex items-center gap-2">
+                               <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(qAnswer) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
+                                 {q.options?.[parseInt(qAnswer)] || 'No choice selected'}
+                               </div>
+                               {parseInt(qAnswer) === q.correct_option ? (
+                                 <CheckCircle2 size={16} className="text-emerald-500" />
+                               ) : (
+                                 <XCircle size={16} className="text-red-500" />
+                               )}
+                            </div>
+                          ) : q.type === 'photo' ? (
+                            <div className="space-y-2">
+                              {qAnswer ? (
+                                <>
+                                  <img 
+                                    src={qAnswer} 
+                                    alt="Student work" 
+                                    className="rounded-2xl border border-brand-border w-full max-w-sm object-cover shadow-sm cursor-zoom-in"
+                                    onClick={() => window.open(qAnswer, '_blank')}
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  <p className="text-[10px] italic text-brand-muted">Click image to expand</p>
+                                </>
+                              ) : (
+                                <p className="text-xs font-semibold text-brand-muted">No photo uploaded</p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{qAnswer || 'No answer provided'}</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="pl-10">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Student Answer</p>
-                        {q.type === 'mcq' ? (
-                          <div className="flex items-center gap-2">
-                             <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(selectedSubmission.answers[q.id]) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
-                               {q.options[parseInt(selectedSubmission.answers[q.id])]}
-                             </div>
-                             {parseInt(selectedSubmission.answers[q.id]) === q.correct_option ? (
-                               <CheckCircle2 size={16} className="text-emerald-500" />
-                             ) : (
-                               <XCircle size={16} className="text-red-500" />
-                             )}
-                          </div>
-                        ) : q.type === 'photo' ? (
-                          <div className="space-y-2">
-                            <img 
-                              src={selectedSubmission.answers[q.id]} 
-                              alt="Student work" 
-                              className="rounded-2xl border border-brand-border w-full max-w-sm object-cover shadow-sm cursor-zoom-in"
-                              onClick={() => window.open(selectedSubmission.answers[q.id], '_blank')}
-                            />
-                            <p className="text-[10px] italic text-brand-muted">Click image to expand</p>
-                          </div>
-                        ) : (
-                          <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{selectedSubmission.answers[q.id] || 'No answer provided'}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-8 space-y-6">
