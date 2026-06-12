@@ -301,9 +301,11 @@ export default function ExamResultsPage({
     try {
       // Calculate new score
       let newScore = 0;
+      const answersSource = selectedAttempt.answers || {};
       exam.questions.forEach((q, idx) => {
         if (q.type === "mcq") {
-          if (selectedAttempt.answers[idx] === q.correct_answer) {
+          const ans = answersSource[idx] !== undefined ? answersSource[idx] : answersSource[String(idx)];
+          if (ans === q.correct_answer) {
             newScore += q.marks;
           }
         } else {
@@ -803,10 +805,11 @@ export default function ExamResultsPage({
                         {exam.questions.map((q, idx) => {
                           const qIdxStr = String(idx);
                           const decision = markingGrades[qIdxStr];
+                          const answersSource = selectedAttempt.answers || {};
                           const studentAns =
-                            selectedAttempt.answers[idx] !== undefined
-                              ? selectedAttempt.answers[idx]
-                              : selectedAttempt.answers[qIdxStr];
+                            answersSource[idx] !== undefined
+                              ? answersSource[idx]
+                              : answersSource[qIdxStr];
                           const gradingEntry =
                             selectedAttempt.grading?.[qIdxStr] ||
                             selectedAttempt.grading?.[idx];
@@ -947,10 +950,11 @@ export default function ExamResultsPage({
 
                           const qIdxStr = String(idx);
                           const decision = markingGrades[qIdxStr];
+                          const answersSource = selectedAttempt.answers || {};
                           const studentAns =
-                            selectedAttempt.answers[idx] !== undefined
-                              ? selectedAttempt.answers[idx]
-                              : selectedAttempt.answers[qIdxStr];
+                            answersSource[idx] !== undefined
+                              ? answersSource[idx]
+                              : answersSource[qIdxStr];
                           const gradingEntry =
                             selectedAttempt.grading?.[qIdxStr] ||
                             selectedAttempt.grading?.[idx];
@@ -1239,7 +1243,8 @@ export default function ExamResultsPage({
                     <div className="h-px bg-brand-accent/10 w-full" />
 
                     {exam.questions.map((q, idx) => {
-                      const studentAnswer = selectedAttempt.answers[idx];
+                      const answersSource = selectedAttempt.answers || {};
+                      const studentAnswer = answersSource[idx] !== undefined ? answersSource[idx] : answersSource[String(idx)];
                       const isCorrect =
                         q.type === "mcq"
                           ? studentAnswer === q.correct_answer

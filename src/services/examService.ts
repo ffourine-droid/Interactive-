@@ -238,11 +238,26 @@ export const examService = {
   async submitExam(attemptId: string, exam: Exam, answers: Record<string, string>, hasOvertime: boolean) {
     let score = 0;
     let totalMarks = 0;
+    const initialGrading: Record<string, any> = {};
 
     exam.questions.forEach((q, idx) => {
       totalMarks += q.marks;
-      if (q.type === 'mcq' && answers[idx] === q.correct_answer) {
-        score += q.marks;
+      const isCorrect = answers[idx] === q.correct_answer;
+      if (q.type === 'mcq') {
+        if (isCorrect) {
+          score += q.marks;
+        }
+        initialGrading[String(idx)] = {
+          correct: isCorrect,
+          marks_awarded: isCorrect ? q.marks : 0,
+          needs_grading: false
+        };
+      } else {
+        initialGrading[String(idx)] = {
+          correct: null,
+          marks_awarded: 0,
+          needs_grading: true
+        };
       }
     });
 
@@ -254,7 +269,8 @@ export const examService = {
         score,
         total_marks: totalMarks,
         has_overtime: hasOvertime,
-        grading: {}
+        answers: answers,
+        grading: initialGrading
       })
       .eq('id', attemptId)
       .select();

@@ -176,9 +176,42 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       }
 
       setAssignments(assignmentsRes.data || []);
-      setSubmissions(progressData.submissions || []);
       setExamAttempts(examsRes.data || []);
       setAcknowledgements(progressData.acknowledgements || []);
+
+      // Fetch the full assignment submissions with complete student answers directly
+      const [submissionsById, submissionsByName] = await Promise.all([
+        supabase
+          .from('assignment_submissions')
+          .select('*')
+          .in('student_id', studentIds),
+        student.name
+          ? supabase
+              .from('assignment_submissions')
+              .select('*')
+              .eq('student_name', student.name)
+          : Promise.resolve({ data: [], error: null })
+      ]);
+
+      const mergedSubmissionsMap: Record<string, any> = {};
+      if (submissionsByName.data) {
+        submissionsByName.data.forEach((s: any) => {
+          mergedSubmissionsMap[s.id] = s;
+        });
+      }
+      if (submissionsById.data) {
+        submissionsById.data.forEach((s: any) => {
+          mergedSubmissionsMap[s.id] = s;
+        });
+      }
+
+      const mergedList = Object.values(mergedSubmissionsMap);
+
+      if (mergedList.length > 0) {
+        setSubmissions(mergedList);
+      } else {
+        setSubmissions(progressData.submissions || []);
+      }
 
       // Fetch dynamic note sessions progress
       const usernamesToQuery = student.name ? [student.name] : [];
