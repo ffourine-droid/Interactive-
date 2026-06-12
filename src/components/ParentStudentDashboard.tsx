@@ -799,7 +799,9 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
 
                   {selectedSubmission && selectedSubmission.assignment.questions?.map((q: any, idx: number) => {
                     const submissionAnswers = selectedSubmission.submission?.answers || {};
-                    const qAnswer = submissionAnswers[q.id];
+                    const qAnswer = submissionAnswers[q.id] !== undefined
+                      ? submissionAnswers[q.id]
+                      : (submissionAnswers[idx] !== undefined ? submissionAnswers[idx] : submissionAnswers[String(idx)]);
                     return (
                       <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
                         <div className="flex items-start gap-4 mb-4">
@@ -841,9 +843,26 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                   })}
 
                   {selectedExam && examData && examData.questions?.map((q: any, idx: number) => {
-                    const studentAnswer = (selectedExam as any).answers?.[idx];
-                    const isCorrect = q.type === 'mcq' ? studentAnswer === q.correct_answer : false;
+                    const studentAnswer = (selectedExam as any).answers?.[idx] !== undefined
+                      ? (selectedExam as any).answers?.[idx]
+                      : (selectedExam as any).answers?.[String(idx)];
                     
+                    const gradingEntry = selectedExam.grading?.[idx] !== undefined
+                      ? selectedExam.grading[idx]
+                      : selectedExam.grading?.[String(idx)];
+                    
+                    const isGraded = q.type === 'mcq' || gradingEntry !== undefined;
+                    
+                    const isCorrect = q.type === 'mcq'
+                      ? studentAnswer === q.correct_answer
+                      : (typeof gradingEntry === 'object' && gradingEntry !== null
+                          ? (gradingEntry.correct === true || gradingEntry.correct === 'true')
+                          : false);
+                    
+                    const marksAwarded = typeof gradingEntry === 'object' && gradingEntry !== null
+                      ? (gradingEntry.marks_awarded ?? 0)
+                      : (typeof gradingEntry === 'number' ? gradingEntry : (isCorrect ? q.marks : 0));
+
                     return (
                       <div key={idx} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
                         <div className="flex items-start gap-4 mb-4">
@@ -853,13 +872,34 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                         <div className="pl-10 space-y-4">
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Student Response</p>
-                            <div className={`p-4 rounded-xl text-sm font-bold border-2 ${
-                              q.type === 'mcq' 
-                                ? isCorrect ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600' : 'bg-red-500/5 border-red-500/20 text-red-600'
-                                : 'bg-brand-surface border-brand-border/50 text-brand-text'
-                            }`}>
-                              {studentAnswer || 'No response'}
-                            </div>
+                            {q.type === 'image' ? (
+                              <div className="space-y-2">
+                                {studentAnswer ? (
+                                  <img 
+                                    src={studentAnswer} 
+                                    alt="Student's submission" 
+                                    className="rounded-2xl border-2 border-brand-border max-w-full max-h-64 object-contain shadow-sm bg-brand-surface"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <p className="text-xs font-bold text-brand-muted bg-brand-surface p-4 rounded-xl border border-dashed border-brand-border/50">
+                                    No upload provided
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <div className={`p-4 rounded-xl text-sm font-bold border-2 ${
+                                q.type === 'mcq' 
+                                  ? isCorrect ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600' : 'bg-red-500/5 border-red-500/20 text-red-600'
+                                  : isGraded 
+                                    ? isCorrect 
+                                      ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600' 
+                                      : 'bg-red-500/5 border-red-500/20 text-red-600'
+                                    : 'bg-brand-surface border-brand-border/50 text-brand-text'
+                              }`}>
+                                {studentAnswer || 'No response'}
+                              </div>
+                            )}
                           </div>
                           
                           {q.type === 'mcq' && (
@@ -871,10 +911,21 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                             </div>
                           )}
 
-                          {!isCorrect && q.type !== 'mcq' && selectedExam.grading?.[idx] !== undefined && (
-                            <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-accent/10 text-brand-accent rounded-lg border border-brand-accent/20 w-fit">
-                              <Star size={12} />
-                              <span className="text-[10px] font-black uppercase tracking-widest">Graded: {selectedExam.grading[idx]} / {q.marks} Marks</span>
+                          {q.type !== 'mcq' && (
+                            <div className="mt-2 flex items-center gap-2">
+                              {gradingEntry !== undefined ? (
+                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest w-fit ${
+                                  isCorrect ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'
+                                }`}>
+                                  <Star size={12} />
+                                  Marks: {marksAwarded} / {q.marks}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit animate-pulse">
+                                  <Hourglass size={12} />
+                                  Awaiting Teacher's Grading
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
