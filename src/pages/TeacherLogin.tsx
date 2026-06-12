@@ -32,24 +32,24 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
       const { data, error } = await supabase
         .from('teachers')
         .select('*')
-        .eq('name', formData.name.trim())
-        .eq('school_name', formData.schoolName.trim())
-        .eq('pin', formData.pin)
-        .maybeSingle();
+        .ilike('name', formData.name.trim())
+        .ilike('school_name', formData.schoolName.trim())
+        .eq('pin', formData.pin);
 
-      if (error || !data) {
+      if (error || !data || data.length === 0) {
         showToast("Incorrect details, please try again", "error");
         return;
       }
 
-      if (data) {
+      const teacher = data[0];
+      if (teacher) {
         localStorage.setItem('azilearn_teacher', JSON.stringify({
-          id: data.id,
-          name: data.name,
-          school_name: data.school_name
+          id: teacher.id,
+          name: teacher.name,
+          school_name: teacher.school_name
         }));
-        await setTeacherConfig(data.id);
-        showToast(`Welcome back, Teacher ${data.name.split(' ')[0]}!`, "success");
+        await setTeacherConfig(teacher.id);
+        showToast(`Welcome back, Teacher ${teacher.name.split(' ')[0]}!`, "success");
         onSuccess();
       }
     } catch (err: any) {

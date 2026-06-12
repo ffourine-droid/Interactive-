@@ -40,11 +40,24 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
 
     setLoading(true);
     try {
+      // Check if a teacher with the same name and school already exists (case-insensitive)
+      const { data: existingTeachers, error: checkError } = await supabase
+        .from('teachers')
+        .select('id')
+        .ilike('name', formData.name.trim())
+        .ilike('school_name', formData.schoolName.trim());
+
+      if (existingTeachers && existingTeachers.length > 0) {
+        showToast("An account with this name and school already exists. Please login instead.", "error");
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('teachers')
         .insert([{
-          name: formData.name,
-          school_name: formData.schoolName,
+          name: formData.name.trim(),
+          school_name: formData.schoolName.trim(),
           pin: formData.pin
         }])
         .select()
