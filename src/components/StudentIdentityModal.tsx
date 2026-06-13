@@ -77,7 +77,7 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
               </div>
 
               <div className="space-y-2">
-                <h3 className="font-black text-2xl text-brand-text uppercase tracking-tighter">Who Are You?</h3>
+                <h3 className="font-black text-2xl text-brand-text uppercase tracking-tighter">Enter Your Name</h3>
                 <p className="text-xs font-bold text-brand-muted max-w-[200px]">
                   Enter your name and grade so your teacher can identify you.
                 </p>

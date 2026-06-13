@@ -18,6 +18,33 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
     schoolName: '',
     pin: ''
   });
+  const [existingTeachers, setExistingTeachers] = useState<any[]>([]);
+  const [loadingTeachers, setLoadingTeachers] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchTeachers = async () => {
+      setLoadingTeachers(true);
+      try {
+        const { data, error } = await supabase
+          .from('teachers')
+          .select('id, name, school_name, pin');
+        
+        if (error) {
+          console.error("Failed to fetch teachers:", error);
+          setDbError(error.message);
+        } else {
+          setExistingTeachers(data || []);
+        }
+      } catch (err: any) {
+        console.error("Error fetching teachers list:", err);
+        setDbError(err.message || String(err));
+      } finally {
+        setLoadingTeachers(false);
+      }
+    };
+    fetchTeachers();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,31 +56,80 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('teachers')
-        .select('*')
-        .ilike('name', formData.name.trim())
-        .ilike('school_name', formData.schoolName.trim())
-        .eq('pin', formData.pin);
+      // 1. Try checking the credentials via our specialized PostgreSQL RPC
+      const { data, error: rpcError } = await supabase.rpc('teacher_login', {
+        p_name: formData.name.trim(),
+        p_school: formData.schoolName.trim(),
+        p_pin: formData.pin.trim()
+      });
 
-      if (error || !data || data.length === 0) {
-        showToast("Incorrect details, please try again", "error");
+      const isFunctionMissing = rpcError && (
+        rpcError.message.includes("could not find the public.teacher_login") ||
+        rpcError.code === '42883' ||
+        rpcError.code === 'P0001'
+      );
+
+      if (rpcError && !isFunctionMissing) {
+        console.error("Teacher login RPC error:", rpcError);
+        showToast(`Database error: ${rpcError.message}`, "error");
         return;
       }
 
-      const teacher = data[0];
-      if (teacher) {
+      if (data) {
+        const typedData = data as any;
+        if (!typedData.success) {
+          showToast(typedData.message || "Incorrect details.", "error");
+          return;
+        }
+
         localStorage.setItem('azilearn_teacher', JSON.stringify({
-          id: teacher.id,
-          name: teacher.name,
-          school_name: teacher.school_name
+          id: typedData.id,
+          name: typedData.name,
+          school_name: typedData.school_name
         }));
-        await setTeacherConfig(teacher.id);
-        showToast(`Welcome back, Teacher ${teacher.name.split(' ')[0]}!`, "success");
+        await setTeacherConfig(typedData.id);
+        showToast(`Welcome back, Teacher ${typedData.name.split(' ')[0]}!`, "success");
         onSuccess();
+        return;
       }
+
+      // 2. Elegant fallback if RPC is not deployed in the database yet
+      console.warn("teacher_login RPC not found. Falling back to direct select query...");
+      const { data: fallbackData, error: selectError } = await supabase
+        .from('teachers')
+        .select('*')
+        .ilike('name', formData.name.trim())
+        .ilike('school_name', formData.schoolName.trim());
+
+      if (selectError) {
+        console.error("Teacher login select error:", selectError);
+        showToast(`Database error: ${selectError.message}`, "error");
+        return;
+      }
+
+      if (!fallbackData || fallbackData.length === 0) {
+        showToast("No teacher account found with this Name and School on AziLearn.", "error");
+        return;
+      }
+
+      const teacher = fallbackData.find(t => String(t.pin).trim() === formData.pin.trim());
+      
+      if (!teacher) {
+        showToast("Incorrect 4-Digit PIN. Please try again.", "error");
+        return;
+      }
+
+      localStorage.setItem('azilearn_teacher', JSON.stringify({
+        id: teacher.id,
+        name: teacher.name,
+        school_name: teacher.school_name
+      }));
+      await setTeacherConfig(teacher.id);
+      showToast(`Welcome back, Teacher ${teacher.name.split(' ')[0]}!`, "success");
+      onSuccess();
     } catch (err: any) {
-      showToast("Incorrect details, please try again", "error");
+      console.error("Teacher login exception:", err);
+      showToast(`Login exception: ${err.message || err}`, "error");
     } finally {
       setLoading(false);
     }
@@ -143,6 +219,60 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
             Create account
           </button>
         </p>
+
+        {/* Database Diagnostic and Quick Login Helper */}
+        {dbError && (
+          <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs text-red-400 font-medium">
+            <p className="font-bold mb-1">⚠️ Database Connection Issue:</p>
+            <p>{dbError}</p>
+            <p className="mt-2 text-[10px] text-red-300">
+              Please ensure your Supabase parameters are correct and you have run the <span className="font-mono bg-red-950 px-1 py-0.5 rounded">supabase_setup.sql</span> script in your Supabase SQL Editor.
+            </p>
+          </div>
+        )}
+
+        {!dbError && !loadingTeachers && existingTeachers.length === 0 && (
+          <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-xs text-amber-400 font-medium text-center">
+            <p className="font-bold">⚠️ Database is empty</p>
+            <p className="mt-1 text-[10px] text-amber-300">
+              No teacher accounts found in the database. Please click "Create account" above to register!
+            </p>
+          </div>
+        )}
+
+        {existingTeachers.length > 0 && (
+          <div className="mt-6 border-t border-brand-border/40 pt-4">
+            <details className="group">
+              <summary className="text-xs font-bold text-brand-muted hover:text-brand-text cursor-pointer select-none flex items-center justify-between">
+                <span>Quick Login Directory ({existingTeachers.length})</span>
+                <span className="transition-transform group-open:rotate-180">▾</span>
+              </summary>
+              <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
+                {existingTeachers.map((t: any) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setFormData({
+                        name: t.name,
+                        schoolName: t.school_name,
+                        pin: String(t.pin)
+                      });
+                      showToast(`Autofilled details for Teacher ${t.name}!`, "success");
+                    }}
+                    className="w-full text-left p-2.5 bg-brand-bg hover:bg-brand-accent/10 border border-brand-border hover:border-brand-accent/30 rounded-xl transition-all flex flex-col gap-0.5"
+                  >
+                    <div className="flex justify-between items-center w-full">
+                      <span className="font-bold text-xs text-brand-text">{t.name}</span>
+                      <span className="font-mono text-[10px] bg-brand-surface px-1.5 py-0.5 rounded border border-brand-border text-brand-muted">PIN: {t.pin}</span>
+                    </div>
+                    <span className="text-[10px] text-brand-muted leading-tight">{t.school_name}</span>
+                  </button>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
       </motion.div>
     </div>
   );

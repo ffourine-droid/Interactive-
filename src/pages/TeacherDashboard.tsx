@@ -281,12 +281,13 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
       // If not found by ID, try finding by name and school (fallback for DB resets)
       if (!teacherCheck && !teacherError && t) {
-        const { data: fallbackTeacher, error: fallbackError } = await supabase
+        const { data: fallbackTeachers, error: fallbackError } = await supabase
           .from('teachers')
           .select('id, name, school_name')
-          .eq('name', t.name)
-          .eq('school_name', t.school_name)
-          .maybeSingle();
+          .ilike('name', t.name.trim())
+          .ilike('school_name', t.school_name.trim());
+        
+        const fallbackTeacher = fallbackTeachers?.[0];
         
         if (fallbackTeacher && !fallbackError) {
           teacherCheck = fallbackTeacher;

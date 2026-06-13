@@ -253,4 +253,49 @@ VALUES ('YOUR_LOCAL_STORAGE_ID', 'Admin', 'AziLearn Academy', '0000')
 ON CONFLICT (id) DO NOTHING;
 */
 
+-- 8. SECURE TEACHER LOGIN RPC FUNCTION
+CREATE OR REPLACE FUNCTION public.teacher_login(
+    p_name TEXT,
+    p_school TEXT,
+    p_pin TEXT
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_teacher RECORD;
+BEGIN
+    SELECT id, name, school_name, pin
+    INTO v_teacher
+    FROM public.teachers
+    WHERE LOWER(TRIM(name)) = LOWER(TRIM(p_name))
+      AND LOWER(TRIM(school_name)) = LOWER(TRIM(p_school))
+    LIMIT 1;
+
+    IF v_teacher.id IS NULL THEN
+        RETURN json_build_object(
+            'success', false,
+            'message', 'No teacher account found with this Name and School on AziLearn.'
+        );
+    END IF;
+
+    IF TRIM(v_teacher.pin) <> TRIM(p_pin) THEN
+        RETURN json_build_object(
+            'success', false,
+            'message', 'Incorrect 4-Digit PIN. Please try again.'
+        );
+    END IF;
+
+    RETURN json_build_object(
+        'success', true,
+        'message', 'Welcome back!',
+        'id', v_teacher.id,
+        'name', v_teacher.name,
+        'school_name', v_teacher.school_name
+    );
+END;
+$$;
+
+
 
