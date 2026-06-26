@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
-import { StudentIdentityModal } from '../components/StudentIdentityModal';
+import { useStudent } from '../contexts/StudentContext';
 
 interface ForumPageProps {
   onBack: () => void;
@@ -54,10 +54,12 @@ const formatTimeAgo = (dateStr: string) => {
 
 export default function ForumPage({ onBack }: ForumPageProps) {
   const { showToast } = useToast();
-  
-  // Student Context State
-  const [student, setStudent] = useState<any>(null);
-  const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
+  const { currentStudent, setIsIdentityModalOpen } = useStudent();
+  const student = currentStudent ? {
+    id: currentStudent.student_id,
+    name: currentStudent.name,
+    grade: currentStudent.grade
+  } : null;
 
   // Global Boards State
   const [boards, setBoards] = useState<any[]>([]);
@@ -94,27 +96,12 @@ export default function ForumPage({ onBack }: ForumPageProps) {
   // Press feedback helper
   const longPressRef = useRef<any>(null);
 
-  // 1. Load active student session from localStorage
+  // 1. Open identity modal if not logged in
   useEffect(() => {
-    const checkIdentity = () => {
-      const cached = localStorage.getItem('azilearn_student');
-      if (!cached) {
-        setIsIdentityModalOpen(true);
-      } else {
-        try {
-          const parsed = JSON.parse(cached);
-          if (parsed && parsed.id) {
-            setStudent(parsed);
-          } else {
-            setIsIdentityModalOpen(true);
-          }
-        } catch (e) {
-          setIsIdentityModalOpen(true);
-        }
-      }
-    };
-    checkIdentity();
-  }, []);
+    if (!currentStudent) {
+      setIsIdentityModalOpen(true);
+    }
+  }, [currentStudent]);
 
   // 2. Fetch all global boards on mount
   useEffect(() => {
@@ -1272,20 +1259,6 @@ export default function ForumPage({ onBack }: ForumPageProps) {
               </div>
             </motion.div>
           </div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── MISSING IDENTITY RECOVERY MODAL ─── */}
-      <AnimatePresence>
-        {isIdentityModalOpen && (
-          <StudentIdentityModal
-            isOpen={isIdentityModalOpen}
-            onClose={() => setIsIdentityModalOpen(false)}
-            onSuccess={(updatedStudent) => {
-              setStudent(updatedStudent);
-              setIsIdentityModalOpen(false);
-            }}
-          />
         )}
       </AnimatePresence>
 

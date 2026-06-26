@@ -17,6 +17,8 @@ import { SlidesViewer } from '../components/SlidesViewer';
 import { InteractiveNotes } from '../components/InteractiveNotes';
 import { fallbackMaterials } from '../data/fallbackMaterials';
 
+import { useStudent } from '../contexts/StudentContext';
+
 interface HomeProps {
   onBack: () => void;
   onAdminClick: () => void;
@@ -97,24 +99,17 @@ export default function Home({
   const lastRequestId = useRef(0);
   const { showToast } = useToast();
 
-  const [student, setStudent] = useState<any>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('azilearn_student');
-    try {
-      setStudent(saved ? JSON.parse(saved) : null);
-    } catch {
-      setStudent(null);
-    }
-  }, [isSidebarOpen, activeTab]);
+  const { currentStudent: studentObj, logoutStudent } = useStudent();
+  const student = studentObj ? {
+    id: studentObj.student_id,
+    name: studentObj.name,
+    grade: studentObj.grade,
+    class_id: studentObj.class_id,
+    total_xp: studentObj.total_xp
+  } : null;
 
   const handleLogout = () => {
-    localStorage.removeItem('azilearn_student');
-    localStorage.removeItem('azilearn_student_profile');
-    localStorage.removeItem('azilearn_arena_player');
-    sessionStorage.removeItem('azilearn_student_name');
-    setStudent(null);
-    showToast('Logged out successfully! 👋', 'success');
+    logoutStudent();
   };
 
   const handleClassSelect = (grade: string) => {
@@ -1332,7 +1327,7 @@ export default function Home({
                     <div className="absolute inset-0 flex flex-col overflow-hidden">
                       <InteractiveNotes 
                         material={selectedExperiment} 
-                        username={student?.username || student?.name}
+                        username={student?.name || 'Guest'}
                       />
                     </div>
                   )}

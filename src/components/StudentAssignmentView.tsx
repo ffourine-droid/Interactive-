@@ -20,6 +20,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
 import { assignmentService } from '../services/assignmentService';
+import { useStudent } from '../contexts/StudentContext';
 
 interface Question {
   id: string;
@@ -45,15 +46,26 @@ export const StudentAssignmentView: React.FC<{
   onExamsClick?: () => void,
   preSelectedAssignmentId?: string 
 }> = ({ onBack, onExamsClick, preSelectedAssignmentId }) => {
+  const { currentStudent } = useStudent();
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
   const [searchCode, setSearchCode] = useState('');
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchSchool, setSearchSchool] = useState('');
-  const [searchGrade, setSearchGrade] = useState('Grade 7');
+  const [searchGrade, setSearchGrade] = useState(currentStudent?.grade || 'Grade 7');
   const [hasSearched, setHasSearched] = useState(false);
   const [assignments, setAssignments] = useState<any[]>([]);
-  const [studentName, setStudentName] = useState(sessionStorage.getItem('azilearn_student_name') || '');
+  
+  const [studentName, setStudentName] = useState('');
   const [studentId, setStudentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentStudent) {
+      setStudentName(currentStudent.name || '');
+      setStudentId(currentStudent.student_id || null);
+      setSearchGrade(currentStudent.grade || 'Grade 7');
+    }
+  }, [currentStudent]);
+
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
@@ -64,18 +76,29 @@ export const StudentAssignmentView: React.FC<{
 
   useEffect(() => {
     if (step === 'entry') {
-      const studentStr = localStorage.getItem('azilearn_student');
-      if (studentStr) {
-        const student = JSON.parse(studentStr);
-        setSearchGrade(student.grade || 'Grade 7');
+      if (currentStudent) {
+        setSearchGrade(currentStudent.grade || 'Grade 7');
         if (!preSelectedAssignmentId) {
           fetchAssignments();
         }
       } else {
-        setLoading(false);
+        const studentStr = localStorage.getItem('azilearn_student');
+        if (studentStr) {
+          try {
+            const parsed = JSON.parse(studentStr);
+            setStudentName(parsed.name || '');
+            setStudentId(parsed.id || null);
+            setSearchGrade(parsed.grade || 'Grade 7');
+            if (!preSelectedAssignmentId) {
+              fetchAssignments();
+            }
+          } catch {}
+        } else {
+          setLoading(false);
+        }
       }
     }
-  }, [step]);
+  }, [step, currentStudent]);
 
   useEffect(() => {
     if (preSelectedAssignmentId && step === 'entry') {
@@ -465,9 +488,10 @@ export const StudentAssignmentView: React.FC<{
               <input 
                 type="text"
                 placeholder="e.g. John Kamau"
-                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
+                className={`w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm ${currentStudent ? 'opacity-70 bg-brand-bg/50 cursor-not-allowed' : ''}`}
                 value={studentName}
-                onChange={e => setStudentName(e.target.value)}
+                onChange={e => !currentStudent && setStudentName(e.target.value)}
+                readOnly={!!currentStudent}
               />
             </div>
           </div>

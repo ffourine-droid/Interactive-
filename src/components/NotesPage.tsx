@@ -13,6 +13,7 @@ import {
   FileText
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useStudent } from '../contexts/StudentContext';
 import AziLearnNotesRenderer from './AziLearnNotesRenderer';
 import { fallbackMaterials } from '../data/fallbackMaterials';
 
@@ -107,12 +108,22 @@ export default function NotesPage({
   username = '', 
   onBack 
 }: NotesPageProps) {
+  const { currentStudent } = useStudent();
   const [selectedGrade, setSelectedGrade] = useState<number>(grade);
   const [selectedSubject, setSelectedSubject] = useState<string>(subject);
   const [loading, setLoading] = useState<boolean>(true);
   const [topics, setTopics] = useState<NotesTopic[]>([]);
   const [activeTopic, setActiveTopic] = useState<NotesTopic | null>(null);
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (currentStudent?.grade) {
+      const numeric = parseInt(currentStudent.grade.replace(/\D/g, ''), 10);
+      if (!isNaN(numeric)) {
+        setSelectedGrade(numeric);
+      }
+    }
+  }, [currentStudent]);
 
   // Fetch functions with robust PostgreSQL and types conversion
   const fetchInteractiveNotes = async (g: number, sub: string) => {

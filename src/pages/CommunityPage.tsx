@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { communityService, Board, Post, Reply } from '../services/communityService';
 import { NotificationBell } from '../components/NotificationBell';
-import { StudentIdentityModal } from '../components/StudentIdentityModal';
+import { useStudent } from '../contexts/StudentContext';
 import { AttachmentUploader } from '../components/AttachmentUploader';
 import { AttachmentDisplay } from '../components/AttachmentDisplay';
 import { attachmentService, PostAttachment } from '../services/attachmentService';
@@ -20,8 +20,12 @@ interface CommunityPageProps {
 
 export default function CommunityPage({ onBack }: CommunityPageProps) {
   const { showToast } = useToast();
-  const [student, setStudent] = useState<{ id: string; name: string; grade?: string } | null>(null);
-  const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
+  const { currentStudent, setIsIdentityModalOpen } = useStudent();
+  const student = currentStudent ? {
+    id: currentStudent.student_id,
+    name: currentStudent.name,
+    grade: currentStudent.grade
+  } : null;
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
@@ -50,17 +54,10 @@ export default function CommunityPage({ onBack }: CommunityPageProps) {
 
   // 1. Resolve Student login info on startup
   useEffect(() => {
-    const cached = localStorage.getItem('azilearn_student');
-    if (cached) {
-      try {
-        setStudent(JSON.parse(cached));
-      } catch (e) {
-        setIsIdentityModalOpen(true);
-      }
-    } else {
+    if (!currentStudent) {
       setIsIdentityModalOpen(true);
     }
-  }, []);
+  }, [currentStudent]);
 
   // 2. Fetch Boards when student information is resolved
   useEffect(() => {
@@ -805,19 +802,6 @@ export default function CommunityPage({ onBack }: CommunityPageProps) {
           </div>
         )}
       </AnimatePresence>
-
-      {/* STUDENT INITIAL LOGIN IDENTITY MODAL */}
-      <StudentIdentityModal
-        isOpen={isIdentityModalOpen}
-        onClose={() => {
-          setIsIdentityModalOpen(false);
-          if (!student) onBack(); // Go back if authentication canceled
-        }}
-        onSuccess={(profile) => {
-          setStudent(profile);
-          showToast(`Signed into Community as student: ${profile.name}`, 'success');
-        }}
-      />
 
     </div>
   );

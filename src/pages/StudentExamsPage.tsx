@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { examService } from '../services/examService';
 import { Exam, ExamAttempt } from '../types';
 import { useToast } from '../components/Toast';
-import { StudentIdentityModal } from '../components/StudentIdentityModal';
+import { useStudent } from '../contexts/StudentContext';
 
 interface StudentExamsPageProps {
   onBack: () => void;
@@ -19,6 +19,7 @@ interface StudentExamsPageProps {
 
 export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7', classId }: StudentExamsPageProps) {
   const { showToast } = useToast();
+  const { currentStudent, setIsIdentityModalOpen } = useStudent();
   const [loading, setLoading] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [attempts, setAttempts] = useState<Record<string, ExamAttempt>>({});
@@ -27,28 +28,26 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
   const [searchCode, setSearchCode] = useState('');
   const [searchGrade, setSearchGrade] = useState(grade);
   const [filter, setFilter] = useState('all');
-  const [showIdentity, setShowIdentity] = useState(false);
   const [pendingExamId, setPendingExamId] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
-    setSearchGrade(grade);
-  }, [grade]);
+    if (currentStudent?.grade) {
+      setSearchGrade(currentStudent.grade);
+    } else {
+      setSearchGrade(grade);
+    }
+  }, [grade, currentStudent]);
 
   useEffect(() => {
-    const studentStr = localStorage.getItem('azilearn_student');
-    if (studentStr) {
-      fetchExams();
-    }
-  }, []);
+    fetchExams();
+  }, [currentStudent]);
 
   const fetchExams = async () => {
     setLoading(true);
     setHasSearched(true);
     try {
-      const studentStr = localStorage.getItem('azilearn_student');
-      const student = studentStr ? JSON.parse(studentStr) : null;
-      const effectiveGrade = searchGrade || student?.grade || grade;
+      const effectiveGrade = searchGrade || currentStudent?.grade || grade;
 
       const examData = await examService.searchExams(
         effectiveGrade,
@@ -59,8 +58,8 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
 
       setExams(examData);
 
-      if (student?.id) {
-        const attemptData = await Promise.all(examData.map((e: Exam) => examService.getAttempt(e.id, student.id)));
+      if (currentStudent?.student_id) {
+        const attemptData = await Promise.all(examData.map((e: Exam) => examService.getAttempt(e.id, currentStudent.student_id)));
         const attemptMap: Record<string, ExamAttempt> = {};
         attemptData.forEach((a: ExamAttempt | null) => {
           if (a) attemptMap[a.exam_id] = a;
@@ -75,14 +74,20 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
   };
 
   const handleStartExamClick = (id: string) => {
-    const studentStr = localStorage.getItem('azilearn_student');
-    if (!studentStr) {
+    if (!currentStudent) {
       setPendingExamId(id);
-      setShowIdentity(true);
+      setIsIdentityModalOpen(true);
     } else {
       onStartExam(id);
     }
   };
+
+  useEffect(() => {
+    if (currentStudent && pendingExamId) {
+      onStartExam(pendingExamId);
+      setPendingExamId(null);
+    }
+  }, [currentStudent, pendingExamId]);
 
   const filteredExams = exams.filter(e => {
     if (filter === 'completed') return attempts[e.id]?.is_submitted;
@@ -354,18 +359,6 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
           <p className="text-[9px] font-black text-brand-muted uppercase tracking-[0.5em]">AZILEARN ASSESSMENTS</p>
         </footer>
       </div>
-
-      <StudentIdentityModal
-        isOpen={showIdentity}
-        onClose={() => setShowIdentity(false)}
-        grade={searchGrade}
-        onSuccess={() => {
-          if (pendingExamId) {
-            onStartExam(pendingExamId);
-            setPendingExamId(null);
-          }
-        }}
-      />
     </div>
   );
 }

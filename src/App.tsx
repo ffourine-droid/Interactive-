@@ -37,18 +37,23 @@ import NotesPage from './components/NotesPage';
 import LegalPage from './pages/LegalPage';
 
 import { examService } from './services/examService';
+import { StudentProvider, useStudent } from './contexts/StudentContext';
+import { StudentIdentityModal } from './components/StudentIdentityModal';
 
 export default function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <AppContent />
+        <StudentProvider>
+          <AppContent />
+        </StudentProvider>
       </ToastProvider>
     </ErrorBoundary>
   );
 }
 
 function AppContent() {
+  const { currentStudent, loading: studentLoading, isIdentityModalOpen, setIsIdentityModalOpen } = useStudent();
   const [currentPage, setCurrentPage] = useState<Page>(() => {
     if (typeof window !== 'undefined') {
       const hasSeen = localStorage.getItem('azilearn_seen_landing');
@@ -573,6 +578,11 @@ function AppContent() {
       <AnimatePresence mode="wait">
         {renderPage()}
       </AnimatePresence>
+      <StudentIdentityModal
+        isOpen={isIdentityModalOpen}
+        onClose={() => setIsIdentityModalOpen(false)}
+        onSuccess={() => {}}
+      />
     </div>
   );
 }

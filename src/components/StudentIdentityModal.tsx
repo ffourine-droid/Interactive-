@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, ArrowRight, X, Loader2, BookOpen, GraduationCap } from 'lucide-react';
-import { examService } from '../services/examService';
 import { useToast } from './Toast';
+import { useStudent } from '../contexts/StudentContext';
 
 interface StudentIdentityModalProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
   grade = 'Grade 7'
 }) => {
   const { showToast } = useToast();
+  const { identifyStudent } = useStudent();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
   const [selectedGrade, setSelectedGrade] = useState(grade);
@@ -36,9 +37,9 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
 
     setLoading(true);
     try {
-      const student = await examService.identifyStudent(name.trim(), undefined, selectedGrade);
-      localStorage.setItem('azilearn_student', JSON.stringify(student));
-      onSuccess(student);
+      const student = await identifyStudent(name.trim(), selectedGrade);
+      const studentLegacy = { id: student.student_id, name: student.name, grade: student.grade, class_id: student.class_id };
+      onSuccess(studentLegacy);
       onClose();
     } catch (err: any) {
       showToast(err.message || 'Failed to identify student', 'error');

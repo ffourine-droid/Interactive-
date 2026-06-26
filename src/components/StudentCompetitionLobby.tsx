@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
-import { StudentIdentityModal } from './StudentIdentityModal';
+import { useStudent } from '../contexts/StudentContext';
 
 interface Competition {
   id: string;
@@ -35,6 +35,12 @@ export const StudentCompetitionLobby: React.FC<{
   onBack: () => void;
 }> = ({ username: initialUsername, grade: initialGrade, onBack }) => {
   const { showToast } = useToast();
+  const { currentStudent, setIsIdentityModalOpen } = useStudent();
+  const currentUser = currentStudent ? {
+    id: currentStudent.student_id,
+    name: currentStudent.name
+  } : null;
+
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeComp, setActiveComp] = useState<Competition | null>(null);
@@ -52,12 +58,7 @@ export const StudentCompetitionLobby: React.FC<{
   const [hasSearched, setHasSearched] = useState(false);
 
   // Identity state
-  const [showIdentity, setShowIdentity] = useState(false);
   const [pendingComp, setPendingComp] = useState<Competition | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ id: string, name: string } | null>(() => {
-    const saved = localStorage.getItem('azilearn_student');
-    return saved ? JSON.parse(saved) : null;
-  });
 
   // Real-time Student Team Hub States
   const [userGroup, setUserGroup] = useState<string | null>(null);
@@ -315,11 +316,18 @@ export const StudentCompetitionLobby: React.FC<{
   const handleStartComp = (comp: Competition) => {
     if (!currentUser) {
       setPendingComp(comp);
-      setShowIdentity(true);
+      setIsIdentityModalOpen(true);
     } else {
       startCompetition(comp);
     }
   };
+
+  useEffect(() => {
+    if (currentUser && pendingComp) {
+      startCompetition(pendingComp);
+      setPendingComp(null);
+    }
+  }, [currentUser, pendingComp]);
 
   const startCompetition = async (comp: Competition) => {
     try {
@@ -1290,19 +1298,6 @@ export const StudentCompetitionLobby: React.FC<{
           ))
         )}
       </div>
-
-      <StudentIdentityModal
-        isOpen={showIdentity}
-        onClose={() => setShowIdentity(false)}
-        grade={searchGrade}
-        onSuccess={(user) => {
-          setCurrentUser(user);
-          if (pendingComp) {
-            startCompetition(pendingComp);
-            setPendingComp(null);
-          }
-        }}
-      />
     </div>
   );
 };

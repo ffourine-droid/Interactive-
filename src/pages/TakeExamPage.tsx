@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { examService } from '../services/examService';
 import { Exam, ExamAttempt, Question } from '../types';
 import { useToast } from '../components/Toast';
+import { useStudent } from '../contexts/StudentContext';
 
 interface TakeExamPageProps {
   examId: string;
@@ -16,6 +17,7 @@ interface TakeExamPageProps {
 
 export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPageProps) {
   const { showToast } = useToast();
+  const { currentStudent } = useStudent();
   const [loading, setLoading] = useState(true);
   const [exam, setExam] = useState<Exam | null>(null);
   const [attempt, setAttempt] = useState<ExamAttempt | null>(null);
@@ -39,18 +41,16 @@ export default function TakeExamPage({ examId, onBack, onSubmitted }: TakeExamPa
 
   const initExam = async () => {
     try {
-      const studentStr = localStorage.getItem('azilearn_student');
-      if (!studentStr) {
+      if (!currentStudent) {
         showToast('Student data missing', 'error');
         onBack();
         return;
       }
-      const student = JSON.parse(studentStr);
 
       const examData = await examService.getExamById(examId);
       setExam(examData);
 
-      const attemptData = await examService.startExamAttempt(examId, student.id);
+      const attemptData = await examService.startExamAttempt(examId, currentStudent.student_id);
       
       if (attemptData.submitted_at) {
         setAttempt(attemptData);

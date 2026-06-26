@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
+import { useStudent } from '../contexts/StudentContext';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -682,13 +683,16 @@ interface StoryQuestProps {
 }
 
 export default function StoryQuest({ onBack }: StoryQuestProps) {
+  const { currentStudent } = useStudent();
   // ─── STATE MANAGEMENT ──────────────────────────────────────────────────────
-  const [screen, setScreen] = useState<'subject_select' | 'story_home' | 'scene' | 'result' | 'chapter_complete' | 'setup'>('subject_select');
+  const [screen, setScreen] = useState<'subject_select' | 'story_home' | 'scene' | 'result' | 'chapter_complete' | 'setup'>('setup');
   const [studentProfile, setStudentProfile] = useState<{ id: string; name: string; grade: string }>({
     id: 'guest',
     name: 'Learner',
     grade: 'Grade 7'
   });
+
+  const [sessionGrade, setSessionGrade] = useState('Grade 7');
 
   // Local setup state if player information is not already present
   const [setupName, setSetupName] = useState('');
@@ -853,101 +857,44 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
 
   // ─── INITIALIZATION ────────────────────────────────────────────────────────
   useEffect(() => {
-    // 1. Try to load student profile from various storage keys in priority order
-    let activeStudent: { id: string; name: string; grade: string } | null = null;
-    
-    const playerStr = localStorage.getItem('azilearn_player');
-    const arenaPlayerStr = localStorage.getItem('azilearn_arena_player');
-    const studentStr = localStorage.getItem('azilearn_student');
+    // We always start on setup screen so the user can choose their grade for this visit
+    setScreen('setup');
 
-    if (playerStr) {
-      try {
-        const parsed = JSON.parse(playerStr);
-        if (parsed.username) {
-          activeStudent = {
-            id: parsed.id || `p-${parsed.username}`,
-            name: parsed.username,
-            grade: parsed.grade ? (typeof parsed.grade === 'number' ? `Grade ${parsed.grade}` : parsed.grade) : 'Grade 7'
-          };
-        }
-      } catch (e) {
-        console.error('Failed to parse azilearn_player', e);
-      }
-    } else if (arenaPlayerStr) {
-      try {
-        const parsed = JSON.parse(arenaPlayerStr);
-        if (parsed.username) {
-          activeStudent = {
-            id: parsed.id || `p-${parsed.username}`,
-            name: parsed.username,
-            grade: parsed.grade ? (typeof parsed.grade === 'number' ? `Grade ${parsed.grade}` : parsed.grade) : 'Grade 7'
-          };
-        }
-      } catch (e) {
-        console.error('Failed to parse azilearn_arena_player', e);
-      }
-    } else if (studentStr) {
-      try {
-        const parsed = JSON.parse(studentStr);
-        if (parsed.name) {
-          activeStudent = {
-            id: parsed.id || 'student-local',
-            name: parsed.name,
-            grade: parsed.grade || 'Grade 7'
-          };
-        }
-      } catch (e) {
-        console.error('Failed to parse student profile', e);
-      }
+    if (currentStudent) {
+      setSetupGrade(currentStudent.grade || 'Grade 7');
+      setSetupName(currentStudent.name || '');
     }
-
-    if (activeStudent) {
-      setStudentProfile(activeStudent);
-      setScreen('subject_select');
-      
-      // 2. Load Local Progress fallback
-      const savedProgress = localStorage.getItem(`story_progress_${activeStudent.id}`);
-      if (savedProgress) {
-        try {
-          setProgressMap(JSON.parse(savedProgress));
-        } catch (e) {
-          console.error('Error loading story progress cache', e);
-        }
-      }
-
-      // 3. Trigger Supabase Fetch
-      fetchDatabaseData(activeStudent);
-    } else {
-      setScreen('setup');
-    }
-  }, []);
+  }, [currentStudent]);
 
   const handleCreatePlayer = (username: string, selectedGrade: string) => {
-    if (!username.trim()) {
-      showToast('Please enter a username or nickname', 'error');
-      return;
-    }
+    const activeName = currentStudent?.name || username.trim() || 'Learner';
+    const activeId = currentStudent?.student_id || `p-${activeName.toLowerCase()}-${Date.now()}`;
     const numericGrade = parseInt(selectedGrade.replace(/\D/g, ''), 10) || 7;
-    const newPlayer = {
-      id: `p-${username.trim().toLowerCase()}-${Date.now()}`,
-      username: username.trim(),
-      grade: numericGrade
-    };
+    const sessionGradeVal = `Grade ${numericGrade}`;
     
-    // Save to keys as requested
-    localStorage.setItem('azilearn_player', JSON.stringify(newPlayer));
-    localStorage.setItem('azilearn_arena_player', JSON.stringify(newPlayer));
+    setSessionGrade(sessionGradeVal);
 
     const activeStudent = {
-      id: newPlayer.id,
-      name: newPlayer.username,
-      grade: `Grade ${numericGrade}`
+      id: activeId,
+      name: activeName,
+      grade: sessionGradeVal
     };
 
     setStudentProfile(activeStudent);
     setScreen('subject_select');
+    
+    // 2. Load Local Progress fallback
+    const savedProgress = localStorage.getItem(`story_progress_${activeStudent.id}`);
+    if (savedProgress) {
+      try {
+        setProgressMap(JSON.parse(savedProgress));
+      } catch (e) {
+        console.error('Error loading story progress cache', e);
+      }
+    }
+
     fetchDatabaseData(activeStudent);
-    showToast(`Welcome ${newPlayer.username}! Let's start the quest! ⚔️`, 'success');
+    showToast(`Welcome ${activeStudent.name}! Let's start the quest! ⚔️`, 'success');
   };
 
   // ─── DATABASE FETCHING ─────────────────────────────────────────────────────
@@ -1095,26 +1042,27 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
     setProgressMap(newMap);
     localStorage.setItem(`story_progress_${studentProfile.id}`, JSON.stringify(newMap));
 
-    // Try pushing to Supabase
-    try {
-      const { error } = await supabase
-        .from('student_story_progress')
-        .upsert({
-          student_id: studentProfile.id,
-          subject_id: subjId,
-          current_chapter_id: chapId,
-          current_scene_number: sceneNum,
-          completed_chapters: updatedCompleted_chapters,
-          total_xp: nextProgress.total_xp,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'student_id,subject_id' });
+    // Try pushing to Supabase via RPC
+    if (isValidUUID(studentProfile.id) && isValidUUID(subjId) && isValidUUID(chapId)) {
+      try {
+        const { error } = await supabase.rpc('save_story_progress', {
+          p_student_id: studentProfile.id,
+          p_session_grade: studentProfile.grade,
+          p_subject_id: subjId,
+          p_current_chapter_id: chapId,
+          p_current_scene_number: sceneNum,
+          p_total_xp: xpGained
+        });
 
-      if (error) {
-        console.warn('Supabase progress save bypassed:', error.message);
+        if (error) {
+          console.warn('Supabase progress save bypassed via RPC error:', error.message);
+        }
+      } catch (e) {
+        console.warn('DB sync RPC unavailable. Progress preserved locally.');
+      } finally {
+        setSyncing(false);
       }
-    } catch (e) {
-      console.warn('DB sync unavailable or tables unprovisioned. Progress preserved locally.');
-    } finally {
+    } else {
       setSyncing(false);
     }
   };
@@ -1124,6 +1072,30 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
   const handleSelectSubject = async (sub: StorySubject) => {
     setSelectedSubject(sub);
     setLoading(true);
+
+    // Call get_story_progress with studentProfile.id and sub.id to resume correctly
+    if (isValidUUID(studentProfile.id) && isValidUUID(sub.id)) {
+      try {
+        const { data: progressResult, error: progErr } = await supabase.rpc('get_story_progress', {
+          p_student_id: studentProfile.id,
+          p_subject_id: sub.id
+        });
+        if (!progErr && progressResult && progressResult.success) {
+          setProgressMap(prev => ({
+            ...prev,
+            [sub.id]: {
+              subject_id: sub.id,
+              current_chapter_id: progressResult.current_chapter_id,
+              current_scene_number: progressResult.current_scene_number,
+              completed_chapters: progressResult.completed_chapters || [],
+              total_xp: progressResult.total_xp || 0
+            }
+          }));
+        }
+      } catch (e) {
+        console.warn("Could not retrieve progress from RPC:", e);
+      }
+    }
 
     if (!isValidUUID(sub.id)) {
       setChapters(PREBUILT_CHAPTERS[sub.id] || []);
@@ -1630,9 +1602,15 @@ export default function StoryQuest({ onBack }: StoryQuestProps) {
                       maxLength={18}
                       placeholder="e.g. Zawadi, Jasiri, Kofi"
                       value={setupName}
-                      onChange={(e) => setSetupName(e.target.value.replace(/[^a-zA-Z0-9 ]/g, ''))}
-                      className="w-full bg-[#0A1628] border border-[#1A2E44] rounded-2xl px-4 py-3 text-sm text-white placeholder-[#A0AEC0]/40 outline-none focus:border-[#FF6B00] transition-colors font-bold"
+                      onChange={(e) => !currentStudent && setSetupName(e.target.value.replace(/[^a-zA-Z0-9 ]/g, ''))}
+                      readOnly={!!currentStudent}
+                      className={`w-full bg-[#0A1628] border border-[#1A2E44] rounded-2xl px-4 py-3 text-sm text-white placeholder-[#A0AEC0]/40 outline-none focus:border-[#FF6B00] transition-colors font-bold ${
+                        currentStudent ? 'opacity-70 bg-[#07101E] cursor-not-allowed' : ''
+                      }`}
                     />
+                    {currentStudent && (
+                      <span className="text-[9px] text-[#A0AEC0] font-medium mt-1 block">✓ Profile identity synced via device ID</span>
+                    )}
                   </div>
 
                   {/* Grade Selector */}
