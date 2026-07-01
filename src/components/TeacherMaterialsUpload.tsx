@@ -126,25 +126,23 @@ export const TeacherMaterialsUpload: React.FC<TeacherMaterialsUploadProps> = ({
 
       if (uploadError) throw uploadError;
 
-      // 2. Save material metadata record to DB inside 'teacher_materials' table
-      await setTeacherConfig(teacherId);
-
-      const { error: dbError } = await supabase
-        .from('teacher_materials')
-        .insert({
-          teacher_id: teacherId,
-          class_id: classId || null,
-          title: title.trim(),
-          description: description.trim() || null,
-          file_name: file.name,
-          file_type: fileType,
-          material_category: fileType,
-          storage_path: storagePath,
-          file_size: file.size,
-          grade: grade || null,
-          subject: subject.trim() || initialSubject || 'General',
-          is_visible: true,
-        });
+      // 2. Save material metadata record via SECURITY DEFINER RPC
+      // (direct table insert fails RLS — current_teacher_id() is unreliable
+      // on PgBouncer pooled connections, so route through the RPC instead)
+      const { error: dbError } = await supabase.rpc('teacher_upload_material', {
+        p_teacher_id: teacherId,
+        p_title: title.trim(),
+        p_subject: subject.trim() || initialSubject || 'General',
+        p_grade: grade || null,
+        p_class_id: classId || null,
+        p_description: description.trim() || null,
+        p_file_name: file.name,
+        p_file_type: fileType,
+        p_storage_path: storagePath,
+        p_file_size: file.size,
+        p_material_category: fileType,
+        p_is_visible: true
+      });
 
       if (dbError) throw dbError;
 
