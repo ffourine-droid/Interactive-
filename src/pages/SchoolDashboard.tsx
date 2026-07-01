@@ -73,7 +73,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastDueDate, setBroadcastDueDate] = useState('');
   const [gradeBlocks, setGradeBlocks] = useState<GradeBlock[]>([]);
-  const [publishedCodes, setPublishedCodes] = useState<{ grade: string; code: string }[]>([]);
+  const [publishedCodes, setPublishedCodes] = useState<{ grade: string; subject?: string; code: string; teacherName?: string | null; hasWarning?: boolean }[]>([]);
 
   // Individual Grade block builder state
   const [blockGrade, setBlockGrade] = useState('');
@@ -426,6 +426,14 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
         console.warn("Invalid due date format:", broadcastDueDate);
       }
 
+      // Helper to find teacher for a grade
+      const findTeacherForGrade = (g: string) => {
+        const matchedTeacher = teachers.find(t => 
+          t.classes && Array.isArray(t.classes) && t.classes.some((cls: any) => cls.grade === g)
+        );
+        return matchedTeacher ? matchedTeacher.name : null;
+      };
+
       // Try RPC first as instructed
       const { data, error } = await supabase.rpc('create_assignment_broadcast', {
         p_title: broadcastTitle,
@@ -441,10 +449,16 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
 
       if (!error && data && data.success) {
         // Success using the RPC!
-        const publishedList = gradeBlocks.map(block => ({
-          grade: block.grade,
-          code: data.share_code || 'N/A'
-        }));
+        const publishedList = gradeBlocks.map(block => {
+          const teacherName = findTeacherForGrade(block.grade);
+          return {
+            grade: block.grade,
+            subject: block.subject,
+            code: data.share_code || 'N/A',
+            teacherName: teacherName,
+            hasWarning: !teacherName
+          };
+        });
         setPublishedCodes(publishedList);
         setCreationStep('success');
         showToast(`Broadcast holiday assignments published successfully! (${data.grades_created} grades created)`, "success");
@@ -511,7 +525,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
         }
       }
 
-      const publishedList: { grade: string; code: string }[] = [];
+      const publishedList: { grade: string; subject?: string; code: string; teacherName?: string | null; hasWarning?: boolean }[] = [];
 
       for (const block of gradeBlocks) {
         // Generate code e.g. AC8102
@@ -567,7 +581,14 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
             if (minimalError) throw minimalError;
           }
         }
-        publishedList.push({ grade: block.grade, code: randomCode });
+        const teacherName = findTeacherForGrade(block.grade);
+        publishedList.push({
+          grade: block.grade,
+          subject: block.subject,
+          code: randomCode,
+          teacherName: teacherName,
+          hasWarning: !teacherName
+        });
       }
 
       setPublishedCodes(publishedList);
@@ -1151,13 +1172,25 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
                 <p className="text-xs text-brand-muted font-bold uppercase tracking-wider">{publishedCodes.length} grades created successfully</p>
               </div>
 
-              <div className="p-4 bg-brand-bg rounded-2xl border border-brand-border space-y-3">
-                <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Share Codes Generated</p>
-                <div className="space-y-2">
+              <div className="p-4 bg-brand-bg rounded-2xl border border-brand-border space-y-4 max-h-[300px] overflow-y-auto">
+                <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest text-left">Share Codes & Routing Confirmation</p>
+                <div className="space-y-4">
                   {publishedCodes.map((c) => (
-                    <div key={c.grade} className="flex items-center justify-between border-b border-brand-border/40 pb-2 last:border-0 last:pb-0">
-                      <span className="text-xs font-black text-brand-text">{c.grade}</span>
-                      <span className="text-sm font-mono font-black text-brand-accent">{c.code}</span>
+                    <div key={c.grade} className="border-b border-brand-border/40 pb-3 last:border-0 last:pb-0 space-y-2 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-brand-text">{c.grade} {c.subject ? `• ${c.subject}` : ''}</span>
+                        <span className="text-sm font-mono font-black text-brand-accent">{c.code}</span>
+                      </div>
+                      
+                      {c.hasWarning ? (
+                        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl p-2 text-[10px] font-bold leading-relaxed">
+                          ⚠️ No teacher found for this grade — assignment created but won't appear in any teacher's grading queue until a teacher creates a class for this grade.
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-emerald-500 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg inline-block">
+                          ✅ Routed to: <span className="underline">{c.teacherName}</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

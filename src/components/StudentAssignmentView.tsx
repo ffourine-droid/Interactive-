@@ -41,6 +41,7 @@ interface Assignment {
   due_date: string;
   questions: Question[];
   is_broadcast?: boolean;
+  teacher_id?: string;
 }
 
 export const StudentAssignmentView: React.FC<{ 
@@ -299,18 +300,19 @@ export const StudentAssignmentView: React.FC<{
         setStep('success');
         showToast("School-wide assignment submitted! Excellent work! 🎉", "success");
       } else {
-        const { error: submitError } = await supabase
-          .from('assignment_submissions')
-          .insert([{
-            assignment_id: assignment.id,
-            student_id: studentId || studentName,
-            student_name: studentName,
-            answers: finalAnswers,
-            score: score,
-            status: 'pending'
-          }]);
+        const { data: submitData, error: submitError } = await supabase.rpc('submit_school_assignment', {
+          p_assignment_id: assignment.id,
+          p_student_name: studentName,
+          p_answers: finalAnswers,
+          p_teacher_id: assignment.teacher_id ?? null
+        });
 
         if (submitError) throw submitError;
+
+        const response = submitData as any;
+        if (response && response.success === false) {
+          throw new Error(response.message || "Failed to submit assignment.");
+        }
 
         setStep('success');
         showToast("Assignment submitted! Excellent work! 🎉", "success");
@@ -348,7 +350,7 @@ export const StudentAssignmentView: React.FC<{
             <Trophy className="text-emerald-500" size={40} />
           </div>
           <h2 className="text-2xl font-black tracking-tight mb-2">Great Job!</h2>
-          <p className="text-brand-text/60 font-bold mb-8">Your work has been submitted! 🎉</p>
+          <p className="text-brand-text/60 font-bold mb-8">Submitted — your teacher will see this in their grading queue.</p>
           
           <div className="bg-brand-bg/50 rounded-2xl p-6 mb-8 text-left space-y-4">
             <div>

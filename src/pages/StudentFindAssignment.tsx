@@ -189,6 +189,7 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
       p_assignment_id: assignment.id,
       p_student_name: studentName.trim(),
       p_answers: answers,
+      p_teacher_id: assignment.teacher_id ?? null,
     });
     setLoading(false);
 
@@ -304,7 +305,7 @@ function DoneScreen({ onRestart }: DoneScreenProps) {
   return (
     <div style={cardStyle as React.CSSProperties}>
       <h1 style={titleStyle as React.CSSProperties}>Submitted ✓</h1>
-      <p style={subtitleStyle as React.CSSProperties}>Your answers have been sent in. Your teacher will mark it soon.</p>
+      <p style={subtitleStyle as React.CSSProperties}>Submitted — your teacher will see this in their grading queue.</p>
       <button type="button" onClick={onRestart} style={buttonStyle as React.CSSProperties}>
         Find another assignment
       </button>

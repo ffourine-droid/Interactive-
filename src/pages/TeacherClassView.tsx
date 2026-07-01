@@ -90,7 +90,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [exams, setExams] = useState<any[]>([]);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'groupwork' | 'materials'>('assignments');
+  const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'groupwork' | 'materials' | 'broadcasts'>('assignments');
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedExamAttempt, setSelectedExamAttempt] = useState<any | null>(null);
   const [gradingExam, setGradingExam] = useState(false);
@@ -188,9 +188,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       const [assignmentsRes, studentsRes, teacherRes, examsRes] = await Promise.all([
         supabase
           .from('assignments')
-          .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at, share_code')
+          .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at, share_code, is_broadcast')
           .eq('teacher_id', teacherId)
-          .eq('class_id', classId)
           .order('created_at', { ascending: false }),
         (async () => {
           try {
@@ -252,7 +251,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       const examIds = examsData.map(e => e.id);
       
       const fetchSubmissionsAndAcks = [
-        supabase.rpc('teacher_get_submissions', { p_teacher_id: teacherId }),
+        supabase.from('assignment_submissions').select('*').eq('teacher_id', teacherId),
         assignmentsData.length > 0 ? supabase
           .from('parent_acknowledgements')
           .select('assignment_id, student_id, acknowledged_at')
@@ -358,10 +357,17 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                 <Users size={14} />
                 Roster
               </button>
+              <button 
+                onClick={() => setViewMode('broadcasts')}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 whitespace-nowrap ${viewMode === 'broadcasts' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/20' : 'text-brand-muted hover:text-brand-accent'}`}
+              >
+                <School size={14} />
+                Broadcasts
+              </button>
             </div>
           </div>
 
-          {viewMode !== 'students' && viewMode !== 'materials' && (
+          {viewMode !== 'students' && viewMode !== 'materials' && viewMode !== 'broadcasts' && (
             <div className="flex bg-brand-surface border border-brand-border p-2 rounded-2xl justify-end gap-2 overflow-x-auto no-scrollbar">
               <button 
                 onClick={() => onAddAssignment(classId)}
@@ -551,6 +557,88 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               />
             </div>
           </div>
+        ) : viewMode === 'broadcasts' ? (
+          <div className="space-y-6">
+            <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6.5 md:p-8 shadow-sm">
+              <div className="mb-6 px-1.5">
+                <h3 className="font-display text-lg font-black text-brand-text">School Broadcast Submissions</h3>
+                <p className="text-xs text-brand-muted font-bold mt-1">Submissions from school-wide holiday assignments routed automatically to you.</p>
+              </div>
+              
+              {(() => {
+                const broadcastSubs = submissions.filter(s => {
+                  if (s.is_broadcast) return true;
+                  const asgn = assignments.find(a => a.id === s.assignment_id);
+                  return asgn?.is_broadcast === true;
+                });
+
+                if (broadcastSubs.length === 0) {
+                  return (
+                    <div className="text-center py-12 bg-brand-bg/50 rounded-2xl border border-brand-border border-dashed text-brand-muted">
+                      <School className="mx-auto mb-3 opacity-30" size={32} />
+                      <p className="font-bold text-sm">No broadcast submissions found yet.</p>
+                      <p className="text-[10px] opacity-60 mt-1">When students submit broadcast assignments for your grades, they'll appear here.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {broadcastSubs.map((sub) => {
+                      const asgn = assignments.find(a => a.id === sub.assignment_id);
+                      const formattedDate = sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : 'N/A';
+                      
+                      return (
+                        <div key={sub.id} className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-brand-bg/40 border border-brand-border/60 rounded-2xl hover:border-brand-accent/50 transition-all gap-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-black text-brand-text">{sub.student_name}</span>
+                              <span className="text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/15 flex items-center gap-1">
+                                📢 Broadcast
+                              </span>
+                              {sub.status === 'graded' ? (
+                                <span className="text-[8px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/15">
+                                  Graded
+                                </span>
+                              ) : (
+                                <span className="text-[8px] font-black uppercase tracking-wider text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/15">
+                                  Pending
+                                </span>
+                              )}
+                            </div>
+                            
+                            <p className="text-xs font-bold text-brand-muted">
+                              Assignment: <span className="text-brand-text font-black">{asgn?.title || 'Unknown Assignment'}</span>
+                            </p>
+                            
+                            <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest">
+                              {asgn?.subject} • {asgn?.grade} • Submitted: {formattedDate}
+                            </p>
+                          </div>
+                          
+                          <div className="flex items-center gap-3 self-end md:self-auto">
+                            {sub.score !== null && (
+                              <div className="bg-emerald-500 text-white px-3 py-1.5 rounded-xl flex items-center gap-1">
+                                <Award size={12} />
+                                <span className="text-xs font-black">{sub.score}%</span>
+                              </div>
+                            )}
+                            <button
+                              onClick={() => openSubmissionDetails(sub)}
+                              className="px-4 py-2 bg-brand-surface hover:bg-brand-accent/10 border border-brand-border hover:border-brand-accent text-brand-muted hover:text-brand-accent rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5"
+                            >
+                              <FileText size={12} />
+                              {sub.status === 'graded' ? 'Review' : 'Grade'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
         ) : (
           <>
             {/* Class Members Summary Section */}
@@ -615,12 +703,16 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             <FileText size={14} />
             Assessments
           </h2>
-          {assignments.length === 0 ? (
-          <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">
-             <p className="font-bold font-lg">No assignments for this class.</p>
-          </div>
-        ) : (
-          assignments.map((assignment) => {
+          {(() => {
+            const classAssignments = assignments.filter(a => a.class_id === classId);
+            if (classAssignments.length === 0) {
+              return (
+                <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">
+                   <p className="font-bold font-lg">No assignments for this class.</p>
+                </div>
+              );
+            }
+            return classAssignments.map((assignment) => {
             const assignmentSubmissions = submissions.filter(s => s.assignment_id === assignment.id);
             const isExpanded = expandedAssignment === assignment.id;
             
@@ -781,8 +873,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                 </AnimatePresence>
               </div>
             );
-          })
-        )}
+          });
+          })()}
         </div>
       </>
     )}
