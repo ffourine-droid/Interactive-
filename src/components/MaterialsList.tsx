@@ -11,7 +11,9 @@ import {
   ExternalLink, 
   FolderOpen, 
   CircleDot, 
-  Loader2 
+  Loader2,
+  Video,
+  Music
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -211,7 +213,7 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
       return {
         icon: <File className="text-emerald-500" size={20} />,
         bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500',
-        label: 'Notes Document',
+        label: 'Word Document',
       };
     }
     if (norm === 'pptx') {
@@ -219,6 +221,34 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
         icon: <File className="text-amber-500" size={20} />,
         bg: 'bg-amber-500/10 border-amber-500/20 text-amber-500',
         label: 'PPT Presentation',
+      };
+    }
+    if (norm === 'xlsx') {
+      return {
+        icon: <File className="text-teal-500" size={20} />,
+        bg: 'bg-teal-500/10 border-teal-500/20 text-teal-500',
+        label: 'Excel Spreadsheet',
+      };
+    }
+    if (norm === 'txt') {
+      return {
+        icon: <FileText className="text-gray-500" size={20} />,
+        bg: 'bg-gray-500/10 border-gray-500/20 text-gray-500',
+        label: 'Plain Text',
+      };
+    }
+    if (norm === 'video') {
+      return {
+        icon: <Video className="text-purple-500" size={20} />,
+        bg: 'bg-purple-500/10 border-purple-500/20 text-purple-500',
+        label: 'Video Clip',
+      };
+    }
+    if (norm === 'audio') {
+      return {
+        icon: <Music className="text-pink-500" size={20} />,
+        bg: 'bg-pink-500/10 border-pink-500/20 text-pink-500',
+        label: 'Audio Track',
       };
     }
     return {
@@ -266,7 +296,14 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
           >
             {/* Top tiny colored highlight stripe for design consistency */}
             <div className={`absolute top-0 left-0 bottom-0 w-[4px] ${
-              mat.file_type === 'pdf' ? 'bg-red-500' : mat.file_type === 'image' ? 'bg-blue-500' : mat.file_type === 'pptx' ? 'bg-amber-500' : 'bg-emerald-500'
+              mat.file_type === 'pdf' ? 'bg-red-500' : 
+              mat.file_type === 'image' ? 'bg-blue-500' : 
+              mat.file_type === 'pptx' ? 'bg-amber-500' : 
+              mat.file_type === 'xlsx' ? 'bg-teal-500' : 
+              mat.file_type === 'txt' ? 'bg-gray-500' : 
+              mat.file_type === 'video' ? 'bg-purple-500' : 
+              mat.file_type === 'audio' ? 'bg-pink-500' : 
+              'bg-emerald-500'
             }`} />
 
             <div className="flex items-start gap-3.5 min-w-0 flex-1 pl-1">

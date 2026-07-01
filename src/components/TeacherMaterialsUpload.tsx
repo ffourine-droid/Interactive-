@@ -4,14 +4,24 @@ import { useToast } from './Toast';
 import { UploadCloud, FileText, CheckCircle2, AlertCircle, X, AlignLeft, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const ACCEPTED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx', 'docx', 'txt'];
+const ACCEPTED_EXTENSIONS = [
+  'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 
+  'ppt', 'pptx', 'doc', 'docx', 
+  'xls', 'xlsx', 'csv', 'txt', 
+  'mp4', 'mov', 'webm', 'avi', 
+  'mp3', 'wav', 'm4a', 'ogg'
+];
 
-const getFileTypeByExtension = (fileName: string): 'pdf' | 'image' | 'pptx' | 'notes' | null => {
+const getFileTypeByExtension = (fileName: string): 'pdf' | 'image' | 'docx' | 'pptx' | 'xlsx' | 'txt' | 'video' | 'audio' | null => {
   const ext = fileName.split('.').pop()?.toLowerCase();
   if (ext === 'pdf') return 'pdf';
-  if (['png', 'jpg', 'jpeg', 'gif'].includes(ext || '')) return 'image';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext || '')) return 'image';
+  if (['doc', 'docx'].includes(ext || '')) return 'docx';
   if (['ppt', 'pptx'].includes(ext || '')) return 'pptx';
-  if (['docx', 'txt'].includes(ext || '')) return 'notes';
+  if (['xls', 'xlsx', 'csv'].includes(ext || '')) return 'xlsx';
+  if (ext === 'txt') return 'txt';
+  if (['mp4', 'mov', 'webm', 'avi'].includes(ext || '')) return 'video';
+  if (['mp3', 'wav', 'm4a', 'ogg'].includes(ext || '')) return 'audio';
   return null;
 };
 
@@ -194,13 +204,13 @@ export const TeacherMaterialsUpload: React.FC<TeacherMaterialsUploadProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.gif,.ppt,.pptx,.docx,.txt"
+              accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.csv,.txt,.mp4,.mov,.webm,.avi,.mp3,.wav,.m4a,.ogg"
               onChange={handleFileChange}
               className="hidden"
             />
             <UploadCloud size={32} className="mx-auto text-brand-muted mb-2.5 transition-colors group-hover:text-brand-accent" />
             <h4 className="text-xs font-bold text-brand-text">Drag & drop your file here, or <span className="text-[#FF6B2C]">browse</span></h4>
-            <p className="text-[9px] text-brand-muted font-bold mt-1 uppercase tracking-wider">PDF, PowerPoint (PPT/PPTX), Images (PNG/JPG/GIF), or Notes (DOCX/TXT)</p>
+            <p className="text-[9px] text-brand-muted font-bold mt-1 uppercase tracking-wider">PDF, Docs, Presentations, Sheets, Images, Videos, Audio, or Notes</p>
           </div>
         ) : (
           <motion.div 
