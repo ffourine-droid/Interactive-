@@ -52,7 +52,17 @@ export const StudentAssignmentView: React.FC<{
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
   const [searchCode, setSearchCode] = useState('');
   const [searchTeacher, setSearchTeacher] = useState('');
-  const [searchSchool, setSearchSchool] = useState('');
+  const [searchSchool, setSearchSchool] = useState(() => {
+    if (currentStudent?.school_name) return currentStudent.school_name;
+    try {
+      const studentStr = localStorage.getItem('azilearn_student');
+      if (studentStr) {
+        const parsed = JSON.parse(studentStr);
+        return parsed.school_name || '';
+      }
+    } catch {}
+    return '';
+  });
   const [searchTitle, setSearchTitle] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -100,6 +110,7 @@ export const StudentAssignmentView: React.FC<{
         setStudentName(currentStudent.name || '');
         setStudentId(currentStudent.student_id || null);
         setSearchGrade(currentStudent.grade || 'Grade 7');
+        setSearchSchool(currentStudent.school_name || '');
         setIsInitialized(true);
       } else {
         const studentStr = localStorage.getItem('azilearn_student');
@@ -109,6 +120,7 @@ export const StudentAssignmentView: React.FC<{
             setStudentName(parsed.name || '');
             setStudentId(parsed.id || null);
             setSearchGrade(parsed.grade || 'Grade 7');
+            setSearchSchool(parsed.school_name || '');
           } catch {}
         }
         setIsInitialized(true);

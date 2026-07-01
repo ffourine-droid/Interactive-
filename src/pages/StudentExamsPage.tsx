@@ -172,7 +172,7 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
                 onChange={e => setSearchGrade(e.target.value)}
                 className="w-full bg-brand-surface border border-brand-border rounded-2xl py-4 pl-12 pr-4 text-sm font-bold focus:border-brand-accent outline-none transition-all appearance-none text-brand-text"
               >
-                {['Grade 6', 'Grade 7', 'Grade 8', 'Grade 9'].map(g => (
+                {['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => (
                   <option key={g} value={g}>{g}</option>
                 ))}
               </select>

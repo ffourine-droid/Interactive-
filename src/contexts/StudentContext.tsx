@@ -67,7 +67,8 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           id: studentObj.student_id,
           name: studentObj.name,
           grade: studentObj.grade,
-          class_id: studentObj.class_id
+          class_id: studentObj.class_id,
+          school_name: studentObj.school_name
         }));
         setLoading(false);
         return;
@@ -99,7 +100,8 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           id: studentObj.student_id,
           name: studentObj.name,
           grade: studentObj.grade,
-          class_id: studentObj.class_id
+          class_id: studentObj.class_id,
+          school_name: studentObj.school_name
         }));
         setLoading(false);
         return;
@@ -233,7 +235,8 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       id: studentObj.student_id,
       name: studentObj.name,
       grade: studentObj.grade,
-      class_id: studentObj.class_id
+      class_id: studentObj.class_id,
+      school_name: studentObj.school_name
     }));
     setIsIdentityModalOpen(false);
     return studentObj;

@@ -86,7 +86,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
   ]);
 
   const subjects = ['Mathematics', 'Science', 'English', 'Kiswahili', 'Social Studies'];
-  const grades = ['Grade 6', 'Grade 7', 'Grade 8', 'Grade 9'];
+  const grades = ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
 
   React.useEffect(() => {
     fetchClasses();

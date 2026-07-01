@@ -337,7 +337,7 @@ export default function CreateExamPage({ onBack, initialData, preSelectedClassId
                         onChange={e => setFormData({ ...formData, grade: e.target.value })}
                         className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3.5 text-sm font-bold appearance-none outline-none focus:border-brand-accent transition-all cursor-pointer"
                       >
-                        {['Grade 6', 'Grade 7', 'Grade 8', 'Grade 9'].map(g => (
+                        {['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => (
                           <option key={g} value={g}>{g}</option>
                         ))}
                       </select>

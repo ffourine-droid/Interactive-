@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabase";
 const NAVY = "#0A1628";
 const ORANGE = "#F97316";
 
-const GRADES = ["Grade 6", "Grade 7", "Grade 8", "Grade 9"];
+const GRADES = ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"];
 
 interface StudentFindAssignmentProps {
   onBack?: () => void;
