@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 
@@ -150,7 +150,7 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     loadStudent();
   }, []);
 
-  const identifyStudent = async (name: string, grade: string) => {
+  const identifyStudent = useCallback(async (name: string, grade: string) => {
     const deviceId = getOrCreateDeviceId();
     
     // Check if student with name + grade already exists
@@ -237,9 +237,9 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
     setIsIdentityModalOpen(false);
     return studentObj;
-  };
+  }, []);
 
-  const logoutStudent = () => {
+  const logoutStudent = useCallback(() => {
     localStorage.removeItem('azilearn_student');
     localStorage.removeItem('azilearn_student_profile');
     localStorage.removeItem('azilearn_arena_player');
@@ -247,9 +247,9 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCurrentStudent(null);
     setIsIdentityModalOpen(true);
     showToast('Logged out student portal 👋', 'success');
-  };
+  }, [showToast]);
 
-  const refreshStudent = async () => {
+  const refreshStudent = useCallback(async () => {
     const deviceId = getOrCreateDeviceId();
     try {
       const { data } = await supabase.rpc('get_student_by_device', { p_device_id: deviceId });
@@ -265,7 +265,7 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       }
     } catch {}
-  };
+  }, []);
 
   return (
     <StudentContext.Provider value={{

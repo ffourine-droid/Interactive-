@@ -473,22 +473,22 @@ USING (true);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 px-3 sm:px-0 max-w-full overflow-hidden">
       {/* Deck selection mode */}
       {!selectedTopic ? (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* Header */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
               <button
                 onClick={onBack}
-                className="w-10 h-10 flex items-center justify-center bg-brand-surface hover:bg-brand-accent/5 border border-brand-border rounded-xl transition-all active:scale-95"
+                className="w-9 h-9 flex items-center justify-center bg-brand-surface hover:bg-brand-accent/5 border border-brand-border rounded-xl transition-all active:scale-95"
               >
-                <ArrowLeft size={18} className="text-brand-text" />
+                <ArrowLeft size={16} className="text-brand-text" />
               </button>
               <div>
-                <h1 className="text-2xl font-black text-brand-text tracking-tight uppercase">📚 Study Flashcards</h1>
-                <p className="text-xs text-brand-muted font-bold">Select a topic from your teacher's syllabus and test your active recall.</p>
+                <h1 className="text-xl font-black text-brand-text tracking-tight uppercase">📚 Study Flashcards</h1>
+                <p className="text-[10px] text-brand-muted font-bold leading-none mt-0.5">Select a topic syllabus deck and test recall.</p>
               </div>
             </div>
 
@@ -499,81 +499,81 @@ USING (true);
                 setSoundEnabled(updated);
                 setSoundEffectsEnabled(updated);
               }}
-              className="w-10 h-10 flex items-center justify-center bg-brand-surface hover:bg-brand-accent/5 border border-brand-border rounded-xl transition-all active:scale-95 text-brand-text cursor-pointer"
+              className="w-9 h-9 flex items-center justify-center bg-brand-surface hover:bg-brand-accent/5 border border-brand-border rounded-xl transition-all active:scale-95 text-brand-text cursor-pointer"
               title={soundEnabled ? "Mute Flashcard Sounds" : "Unmute Flashcard Sounds"}
             >
               {soundEnabled ? (
-                <Volume2 size={18} className="text-emerald-500 animate-pulse" />
+                <Volume2 size={16} className="text-emerald-500 animate-pulse" />
               ) : (
-                <VolumeX size={18} className="text-brand-muted" />
+                <VolumeX size={16} className="text-brand-muted" />
               )}
             </button>
           </div>
 
           {/* Tab Selection */}
-          <div className="flex bg-brand-surface border border-brand-border rounded-2xl p-1 gap-1 max-w-md">
+          <div className="flex bg-brand-surface border border-brand-border rounded-2xl p-1 gap-1 w-full max-w-md">
             <button
               onClick={() => {
                 setActiveTab('syllabus');
                 playTransition();
               }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === 'syllabus'
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
                   : 'hover:bg-brand-bg text-brand-muted hover:text-brand-text font-bold'
               }`}
             >
-              <BookOpenCheck size={14} /> 🎓 Syllabus Decks
+              <BookOpenCheck size={12} className="shrink-0" /> <span className="truncate">Syllabus Decks</span>
             </button>
             <button
               onClick={() => {
                 setActiveTab('custom');
                 playTransition();
               }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === 'custom'
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
                   : 'hover:bg-brand-bg text-brand-muted hover:text-brand-text font-bold'
               }`}
             >
-              <PlusCircle size={14} /> ✍️ Custom Cards
+              <PlusCircle size={12} className="shrink-0" /> <span className="truncate">Custom Cards</span>
             </button>
           </div>
 
           {activeTab === 'syllabus' && (
             <>
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-20 text-brand-muted">
-                  <RefreshCw size={24} className="animate-spin text-brand-accent mb-2" />
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Retrieving Study Decks...</p>
+                <div className="flex flex-col items-center justify-center py-16 text-brand-muted">
+                  <RefreshCw size={20} className="animate-spin text-brand-accent mb-2" />
+                  <p className="text-[9px] font-black uppercase tracking-widest text-brand-muted">Retrieving Study Decks...</p>
                 </div>
               ) : topicList.length === 0 ? (
-                <div className="text-center py-16 bg-brand-surface rounded-[2.5rem] border border-brand-border space-y-4">
-                  <div className="w-16 h-16 rounded-[2rem] bg-brand-bg flex items-center justify-center mx-auto text-brand-muted/40">
-                    <Inbox size={28} />
+                <div className="text-center py-12 bg-brand-surface rounded-2xl border border-brand-border space-y-3">
+                  <div className="w-12 h-12 rounded-xl bg-brand-bg flex items-center justify-center mx-auto text-brand-muted/40">
+                    <Inbox size={22} />
                   </div>
                   <div className="space-y-1">
-                    <h3 className="font-black text-lg text-brand-text uppercase leading-none">No Decks Configured Yet</h3>
-                    <p className="text-xs text-brand-muted max-w-sm mx-auto font-bold">Your teacher hasn't uploaded flashcard libraries. Check back soon, or log in as a teacher to bulk upload via AI Studio!</p>
+                    <h3 className="font-black text-sm text-brand-text uppercase leading-none">No Decks Configured Yet</h3>
+                    <p className="text-[10px] text-brand-muted max-w-xs mx-auto font-bold leading-relaxed px-4">Your teacher hasn't uploaded flashcard libraries yet. Check back soon!</p>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-6 animate-fadeIn">
+                <div className="space-y-5 animate-fadeIn">
                   {/* Grade Selector Tabs / Pills */}
-                  <div className="flex bg-brand-surface border border-brand-border rounded-2xl p-1 gap-1 overflow-x-auto no-scrollbar max-w-md">
+                  <div className="flex bg-brand-surface border border-brand-border rounded-2xl p-1 gap-1 overflow-x-auto no-scrollbar w-full max-w-md">
                     {['All', ...sortedGrades.map(String)].map((gTab) => {
                       const isActive = selectedGradeTab === gTab;
                       return (
                         <button
                           key={gTab}
                           onClick={() => setSelectedGradeTab(gTab)}
-                          className={`flex-1 text-center py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer whitespace-nowrap ${
+                          className={`flex-1 text-center py-1.5 px-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                             isActive
                               ? 'bg-brand-accent text-white shadow-md shadow-brand-accent/20 font-black'
                               : 'hover:bg-brand-bg text-brand-muted hover:text-brand-text font-bold'
                           }`}
                         >
-                          {gTab === 'All' ? '🌐 All Grades' : `Grade ${gTab}`}
+                          {gTab === 'All' ? '🌐 All' : `G${gTab}`}
                         </button>
                       );
                     })}
@@ -586,60 +586,60 @@ USING (true);
 
                     if (gradesToRender.length === 0) {
                       return (
-                        <div className="text-center py-12 bg-brand-surface rounded-[2rem] border border-brand-border space-y-2">
+                        <div className="text-center py-10 bg-brand-surface rounded-2xl border border-brand-border space-y-2">
                           <p className="text-sm font-black text-brand-text uppercase leading-none">No Decks on File</p>
-                          <p className="text-xs text-brand-muted font-bold">There are no flashcard decks matching Grade {selectedGradeTab} right now. Click "All Grades" to check others!</p>
+                          <p className="text-xs text-brand-muted font-bold">There are no flashcard decks matching Grade {selectedGradeTab} right now. Click "All" to check others!</p>
                         </div>
                       );
                     }
 
                     return (
-                      <div className="space-y-10">
+                      <div className="space-y-8">
                         {gradesToRender.map((grade) => {
                           const gradeTopics = groupedByGrade[grade];
                           return (
-                            <div key={grade} className="space-y-4">
-                              <div className="flex items-center gap-3 border-b border-brand-border pb-2">
-                                <div className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black text-[10px] px-3 py-1 rounded-xl uppercase tracking-widest shadow-sm">
+                            <div key={grade} className="space-y-3">
+                              <div className="flex items-center gap-2.5 border-b border-brand-border pb-1.5">
+                                <div className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black text-[9px] px-2.5 py-0.5 rounded-xl uppercase tracking-widest shadow-sm">
                                   Grade {grade}
                                 </div>
-                                <span className="text-[11px] text-brand-muted font-black uppercase tracking-wider">
-                                  {gradeTopics.length} revision {gradeTopics.length === 1 ? 'deck' : 'decks'} available
+                                <span className="text-[10px] text-brand-muted font-black uppercase tracking-wider">
+                                  {gradeTopics.length} {gradeTopics.length === 1 ? 'deck' : 'decks'} available
                                 </span>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                                 {gradeTopics.map((topicData) => (
                                   <motion.div
                                     key={`${topicData.subject}-${topicData.topic}-${topicData.grade}`}
-                                    whileHover={{ y: -4 }}
-                                    className="bg-brand-surface border border-brand-border hover:border-brand-accent rounded-[2rem] p-6 text-left flex flex-col justify-between space-y-4 transition-all hover:shadow-lg hover:shadow-brand-accent/5"
+                                    whileHover={{ y: -2 }}
+                                    className="bg-brand-surface border border-brand-border hover:border-brand-accent rounded-2xl p-4 text-left flex flex-col justify-between space-y-3.5 transition-all hover:shadow-md"
                                   >
-                                    <div className="space-y-3">
+                                    <div className="space-y-2.5">
                                       <div className="flex items-center justify-between">
-                                        <span className="text-[8px] font-black text-brand-accent uppercase tracking-wider bg-brand-accent/10 sm:bg-brand-accent/10 border border-brand-accent/20 px-2.5 py-1 rounded-full">
+                                        <span className="text-[8px] font-black text-brand-accent uppercase tracking-wider bg-brand-accent/10 sm:bg-brand-accent/10 border border-brand-accent/20 px-2 py-0.5 rounded-full">
                                           {topicData.subject}
                                         </span>
-                                        <span className="text-[9px] font-black text-teal-600 uppercase bg-teal-500/10 px-2 py-0.5 rounded-full">
+                                        <span className="text-[8px] font-black text-teal-600 uppercase bg-teal-500/10 px-2 py-0.5 rounded-full">
                                           Grade {topicData.grade}
                                         </span>
                                       </div>
 
-                                      <div className="space-y-1">
-                                        <h3 className="text-md font-black text-brand-text tracking-tight uppercase leading-tight">
+                                      <div className="space-y-0.5">
+                                        <h3 className="text-sm font-black text-brand-text tracking-tight uppercase leading-tight">
                                           {topicData.topic}
                                         </h3>
-                                        <p className="text-xs font-bold text-brand-muted">Syllabus revision deck</p>
+                                        <p className="text-[10px] font-bold text-brand-muted">Syllabus revision deck</p>
                                       </div>
                                     </div>
 
                                     <div className="flex items-center justify-between pt-2 border-t border-brand-border">
-                                      <span className="text-xs font-black text-brand-text">{topicData.count} Cards</span>
+                                      <span className="text-[11px] font-black text-brand-text">{topicData.count} Cards</span>
                                       <button
                                         onClick={() => handleStartDeck(topicData)}
-                                        className="px-4 py-1.5 bg-brand-text hover:bg-brand-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all text-center cursor-pointer"
+                                        className="px-3 py-1 bg-brand-text hover:bg-brand-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest real-press active:translate-y-[1.5px] transition-all text-center cursor-pointer border border-brand-text border-b-[3px]"
                                       >
-                                        Start Studying
+                                        Start Deck
                                       </button>
                                     </div>
                                   </motion.div>
@@ -659,34 +659,34 @@ USING (true);
           {activeTab === 'custom' && (
             <div className="space-y-8 animate-fadeIn">
               {/* Introduction bar */}
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-[2rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1 text-left">
+              <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left">
+                <div className="space-y-0.5">
                   <h3 className="text-sm font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-wide flex items-center gap-1.5 leading-none">
-                    <Sparkles size={16} /> Student Custom Studio
+                    <Sparkles size={14} /> Student Custom Studio
                   </h3>
-                  <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80 font-bold leading-normal">
-                    Create your own personalized flashcard decks, search them instantly, and practice recall!
+                  <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 font-semibold leading-normal">
+                    Create personalized cards, search them instantly, and practice recall!
                   </p>
                 </div>
               </div>
 
               {/* Two Column Creator Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 
                 {/* COLUMN 1: CREATE CARD (5 cols) */}
-                <div className="lg:col-span-5 bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 space-y-5">
-                  <div className="border-b border-brand-border pb-3 flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                      <PlusCircle size={16} />
+                <div className="lg:col-span-5 bg-brand-surface border border-brand-border rounded-2xl p-4 sm:p-5 space-y-4">
+                  <div className="border-b border-brand-border pb-2.5 flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                      <PlusCircle size={14} />
                     </div>
                     <div className="text-left">
-                      <h3 className="text-sm font-black text-brand-text uppercase leading-none">Create New Card</h3>
-                      <p className="text-[10px] text-brand-muted font-bold">Save custom flashcards to your deck.</p>
+                      <h3 className="text-xs font-black text-brand-text uppercase leading-none">Create New Card</h3>
+                      <p className="text-[9px] text-brand-muted font-bold">Save custom flashcards to your deck.</p>
                     </div>
                   </div>
 
                   {/* Form Container */}
-                  <div className="space-y-4 text-left">
+                  <div className="space-y-3.5 text-left">
                     {/* Username input */}
                     <div className="space-y-1">
                       <label className="block text-[9px] font-black uppercase text-brand-muted tracking-widest px-1">
@@ -694,7 +694,7 @@ USING (true);
                       </label>
                       <div className="relative">
                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted">
-                          <User size={12} />
+                          <User size={11} />
                         </span>
                         <input
                           type="text"
@@ -710,29 +710,29 @@ USING (true);
                     </div>
 
                     {/* Subject & Topic side by side */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2.5">
                       <div className="space-y-1">
                         <label className="block text-[9px] font-black uppercase text-brand-muted tracking-widest px-1">
-                          Subject <span className="text-brand-muted font-normal">(Optional)</span>
+                          Subject
                         </label>
                         <input
                           type="text"
                           value={customSubject}
                           onChange={(e) => setCustomSubject(e.target.value)}
                           placeholder="E.g., Science"
-                          className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-2 px-3 text-xs font-bold outline-none transition-all placeholder:text-brand-muted/40"
+                          className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-1.5 px-2.5 text-xs font-bold outline-none transition-all placeholder:text-brand-muted/40"
                         />
                       </div>
                       <div className="space-y-1">
                         <label className="block text-[9px] font-black uppercase text-brand-muted tracking-widest px-1">
-                          Topic <span className="text-brand-muted font-normal">(Optional)</span>
+                          Topic
                         </label>
                         <input
                           type="text"
                           value={customTopic}
                           onChange={(e) => setCustomTopic(e.target.value)}
-                          placeholder="E.g., Photosynthesis"
-                          className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-2 px-3 text-xs font-bold outline-none transition-all placeholder:text-brand-muted/40"
+                          placeholder="E.g., Cells"
+                          className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-1.5 px-2.5 text-xs font-bold outline-none transition-all placeholder:text-brand-muted/40"
                         />
                       </div>
                     </div>
@@ -746,8 +746,8 @@ USING (true);
                         value={customQuestion}
                         onChange={(e) => setCustomQuestion(e.target.value)}
                         placeholder="E.g., What green pigment in leaves absorbs sunlight?"
-                        rows={3}
-                        className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-2 px-3.5 text-xs font-bold outline-none resize-none transition-all placeholder:text-brand-muted/40 leading-relaxed"
+                        rows={2}
+                        className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-2 px-3 text-xs font-bold outline-none resize-none transition-all placeholder:text-brand-muted/40 leading-relaxed"
                       />
                     </div>
 
@@ -760,20 +760,20 @@ USING (true);
                         value={customAnswer}
                         onChange={(e) => setCustomAnswer(e.target.value)}
                         placeholder="E.g., Chlorophyll."
-                        rows={3}
-                        className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-2 px-3.5 text-xs font-bold outline-none resize-none transition-all placeholder:text-brand-muted/40 leading-relaxed"
+                        rows={2}
+                        className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-2 px-3 text-xs font-bold outline-none resize-none transition-all placeholder:text-brand-muted/40 leading-relaxed"
                       />
                     </div>
 
                     {/* Status Message */}
                     {saveStatus && (
-                      <div className={`p-3 rounded-xl border text-left text-xs font-heavy leading-normal flex items-start gap-2 ${
+                      <div className={`p-2.5 rounded-xl border text-left text-[11px] font-semibold leading-normal flex items-start gap-1.5 ${
                         saveStatus.success 
                           ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400' 
                           : 'bg-red-500/10 border-red-500/20 text-red-600'
                       }`}>
-                        <div className="mt-0.5">
-                          {saveStatus.success ? <Check size={14} /> : <X size={14} />}
+                        <div className="mt-0.5 shrink-0">
+                          {saveStatus.success ? <Check size={12} /> : <X size={12} />}
                         </div>
                         <p className="font-bold">{saveStatus.message}</p>
                       </div>
@@ -783,21 +783,21 @@ USING (true);
                     <button
                       onClick={handleSaveCard}
                       disabled={isSaving}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-500/10"
+                      className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer border border-emerald-600 border-b-[4px] border-b-emerald-700 real-press active:translate-y-[2px] active:border-b-[1px] shadow-sm"
                     >
                       {isSaving ? (
-                        <RefreshCw size={12} className="animate-spin" />
+                        <RefreshCw size={11} className="animate-spin" />
                       ) : (
-                        <CheckCircle2 size={12} />
+                        <CheckCircle2 size={11} />
                       )}
                       Save Flashcard
                     </button>
                     
                     {/* Handy hint box */}
-                    <div className="p-3 bg-brand-bg rounded-xl border border-brand-border space-y-1">
+                    <div className="p-2.5 bg-brand-bg rounded-xl border border-brand-border space-y-0.5">
                       <span className="text-[8px] font-black text-brand-muted uppercase tracking-widest block">💡 Recall Practice Tips:</span>
-                      <p className="text-[9px] text-brand-muted font-bold leading-normal">
-                        Write cards in your own voice! Keep one direct question, idea, or scientific formula per card so they are easy to master before assessments.
+                      <p className="text-[9px] text-brand-muted font-semibold leading-normal">
+                        Write cards in your own voice! Keep one direct question, idea, or scientific formula per card so they are easy to master.
                       </p>
                     </div>
 
@@ -805,33 +805,33 @@ USING (true);
                 </div>
 
                 {/* COLUMN 2: RETRIEVE CARDS (7 cols) */}
-                <div className="lg:col-span-7 bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 space-y-5 flex flex-col justify-between">
+                <div className="lg:col-span-7 bg-brand-surface border border-brand-border rounded-2xl p-4 sm:p-5 space-y-4 flex flex-col justify-between">
                   <div className="space-y-4">
                     {/* Search / Action bar */}
-                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-brand-border pb-4">
-                      <div className="space-y-1 text-left">
-                        <h3 className="text-sm font-black text-brand-text uppercase leading-none">View My Custom Deck</h3>
-                        <p className="text-[10px] text-brand-muted font-bold">Search and test your student deck.</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-border pb-3 text-left">
+                      <div className="space-y-0.5 text-left">
+                        <h3 className="text-xs font-black text-brand-text uppercase leading-none">View My Custom Deck</h3>
+                        <p className="text-[9px] text-brand-muted font-bold">Search and test your student deck.</p>
                       </div>
                       
                       {/* Search controls */}
-                      <div className="flex items-center gap-2">
-                        <div className="relative max-w-xs">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <div className="relative flex-1 min-w-0 sm:w-44">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted">
-                            <Search size={12} />
+                            <Search size={11} />
                           </span>
                           <input
                             type="text"
                             value={searchUsername}
                             onChange={(e) => setSearchUsername(e.target.value)}
-                            placeholder="Fetch by username..."
-                            className="bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-1.5 pl-8 pr-3 text-[11px] font-bold outline-none transition-all placeholder:text-brand-muted/40"
+                            placeholder="Username..."
+                            className="w-full bg-brand-bg hover:bg-brand-surface focus:bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent focus:border-brand-accent rounded-xl py-1.5 pl-8 pr-3 text-[11px] font-semibold outline-none transition-all placeholder:text-brand-muted/45"
                           />
                         </div>
                         <button
                           onClick={() => fetchStudentCards(searchUsername)}
                           disabled={isFetchingCustom}
-                          className="px-3.5 py-1.5 bg-brand-text hover:bg-brand-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                          className="px-3 py-1.5 bg-brand-text hover:bg-brand-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center gap-1 real-press border border-brand-text border-b-[3px] disabled:opacity-50 shrink-0"
                         >
                           {isFetchingCustom ? <RefreshCw size={10} className="animate-spin" /> : 'Find'}
                         </button>
@@ -840,57 +840,57 @@ USING (true);
 
                     {/* Rendering area */}
                     {isFetchingCustom ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-brand-muted gap-2">
-                        <RefreshCw size={24} className="animate-spin text-emerald-500" />
-                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Retrieving My Custom Deck...</p>
+                      <div className="flex flex-col items-center justify-center py-16 text-brand-muted gap-2">
+                        <RefreshCw size={20} className="animate-spin text-emerald-500" />
+                        <p className="text-[9px] font-black uppercase tracking-widest text-brand-muted">Retrieving My Custom Deck...</p>
                       </div>
                     ) : studentCards.length === 0 ? (
-                      <div className="text-center py-20 bg-brand-bg rounded-[2rem] border border-brand-border border-dashed space-y-4 max-w-md mx-auto">
-                        <div className="w-12 h-12 rounded-[1.5rem] bg-brand-surface flex items-center justify-center mx-auto text-brand-muted/50">
-                          <BookOpen size={20} />
+                      <div className="text-center py-16 bg-brand-bg rounded-2xl border border-brand-border border-dashed space-y-3 max-w-sm mx-auto">
+                        <div className="w-10 h-10 rounded-xl bg-brand-surface flex items-center justify-center mx-auto text-brand-muted/50">
+                          <BookOpen size={18} />
                         </div>
                         <div className="space-y-1 px-4">
-                          <h4 className="font-heavy font-black text-xs text-brand-text uppercase leading-none">No Custom Cards Found</h4>
+                          <h4 className="font-black text-xs text-brand-text uppercase leading-none">No Custom Cards Found</h4>
                           <p className="text-[10px] text-brand-muted font-bold leading-normal">
-                            No student-created cards have been saved under username <span className="text-brand-accent font-black">"{searchUsername || 'empty'}"</span> yet.
+                            No student cards saved under <span className="text-brand-accent font-black">"{searchUsername || 'empty'}"</span> yet.
                           </p>
-                          <p className="text-[9px] text-brand-muted/70 font-bold leading-normal">
-                             Use the creator panel on the left to save your first revision card offline or online!
+                          <p className="text-[9px] text-brand-muted/70 font-semibold leading-normal">
+                             Use the creator panel on the left to save your first card offline or online!
                           </p>
                         </div>
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         {/* Summary Deck practice activator banner */}
-                        <div className="p-3 bg-brand-bg rounded-2xl border border-brand-border flex items-center justify-between text-left gap-4">
+                        <div className="p-2.5 bg-brand-bg rounded-2xl border border-brand-border flex items-center justify-between text-left gap-3">
                           <div className="space-y-0.5">
                             <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest block animate-pulse">Ready to Recall</span>
-                            <p className="text-xs font-black text-brand-text leading-none uppercase">{studentCards.length} Custom Study Cards Available</p>
+                            <p className="text-[11px] font-black text-brand-text leading-none uppercase">{studentCards.length} Cards Available</p>
                           </div>
                           <button
                             onClick={handleStartCustomDeck}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2 px-4 text-[9px] font-black uppercase tracking-widest transition-all duration-300 transform active:scale-95 hover:shadow-md hover:shadow-emerald-500/15 cursor-pointer flex items-center gap-1.5"
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl py-1.5 px-3 text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center gap-1 border border-emerald-600 border-b-[3.5px] border-b-emerald-700 real-press active:translate-y-[1.5px] active:border-b-[1px] shadow-sm shrink-0"
                           >
-                            <Trophy size={11} /> Practice My Deck!
+                            <Trophy size={11} /> Practice Deck!
                           </button>
                         </div>
 
                         {/* Interactive Grid of student cards */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[360px] overflow-y-auto pr-1 no-scrollbar">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[340px] overflow-y-auto pr-1 no-scrollbar">
                           {studentCards.map((card) => {
                             const isCardFlipped = !!activeFlippedCards[card.id];
                             return (
                               <motion.div
                                 key={card.id}
                                 layout
-                                className="relative h-[160px] [perspective:1000px] cursor-pointer group animate-fadeIn"
+                                className="relative h-[135px] [perspective:1000px] cursor-pointer group animate-fadeIn"
                                 onClick={() => {
                                   setActiveFlippedCards(prev => ({ ...prev, [card.id]: !prev[card.id] }));
                                   playTransition();
                                 }}
                               >
                                 <div 
-                                  className="relative w-full h-full transition-transform duration-500 shadow-sm rounded-3xl"
+                                  className="relative w-full h-full transition-transform duration-500 shadow-sm rounded-2xl"
                                   style={{ 
                                     transform: isCardFlipped ? 'rotateY(180deg)' : 'none',
                                     transformStyle: 'preserve-3d',
@@ -899,7 +899,7 @@ USING (true);
                                 >
                                   {/* Front Side */}
                                   <div 
-                                    className="absolute inset-0 w-full h-full bg-brand-surface p-4 rounded-3xl border border-brand-border flex flex-col justify-between"
+                                    className="absolute inset-0 w-full h-full bg-brand-surface p-3.5 rounded-2xl border border-brand-border flex flex-col justify-between shadow-sm"
                                     style={{
                                       backfaceVisibility: 'hidden',
                                       WebkitBackfaceVisibility: 'hidden'
@@ -918,7 +918,7 @@ USING (true);
                                       </span>
                                     </div>
                                     
-                                    <div className="text-center my-auto px-2 overflow-y-auto no-scrollbar">
+                                    <div className="text-center my-auto px-1 overflow-y-auto no-scrollbar">
                                       <p className="text-xs font-black text-brand-text uppercase leading-tight">
                                         {card.question}
                                       </p>
@@ -945,7 +945,7 @@ USING (true);
 
                                   {/* Back Side */}
                                   <div 
-                                    className="absolute inset-0 w-full h-full bg-emerald-950 p-4 rounded-3xl border border-emerald-500/20 flex flex-col justify-between"
+                                    className="absolute inset-0 w-full h-full bg-emerald-950 p-3.5 rounded-2xl border border-emerald-500/20 flex flex-col justify-between"
                                     style={{
                                       transform: 'rotateY(180deg)',
                                       WebkitTransform: 'rotateY(180deg)',
@@ -958,8 +958,8 @@ USING (true);
                                       <span className="max-w-[100px] overflow-hidden text-ellipsis whitespace-nowrap">Topic: {card.topic}</span>
                                     </div>
 
-                                    <div className="text-center my-auto px-2 overflow-y-auto no-scrollbar">
-                                      <p className="text-[11px] font-bold text-white leading-normal leading-relaxed">
+                                    <div className="text-center my-auto px-1 overflow-y-auto no-scrollbar">
+                                      <p className="text-[10px] font-semibold text-white leading-normal">
                                         {card.answer}
                                       </p>
                                     </div>
@@ -985,38 +985,38 @@ USING (true);
           </div>
       ) : (
         /* Deck study mode container */
-        <div className="max-w-xl mx-auto space-y-6">
+        <div className="max-w-md mx-auto space-y-5">
           {/* Header */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-3 text-left">
             <button
               onClick={handleExitDeck}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-surface hover:bg-brand-accent/10 hover:text-brand-accent border border-brand-border rounded-xl text-[9px] font-black uppercase tracking-widest text-brand-text transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1.5 bg-brand-surface hover:bg-brand-accent/10 hover:text-brand-accent border border-brand-border rounded-xl text-[9px] font-black uppercase tracking-widest text-brand-text transition-all real-press cursor-pointer border-b-[3px]"
             >
-              <ArrowLeft size={12} /> Exit Deck
+              <ArrowLeft size={11} /> Exit Deck
             </button>
             
             <div className="text-right">
-              <span className="text-[9px] font-black uppercase text-brand-muted tracking-widest block">Topic Study</span>
-              <span className="text-xs font-black text-brand-text uppercase block line-clamp-1">{selectedTopic.topic}</span>
+              <span className="text-[8px] font-black uppercase text-brand-muted tracking-widest block leading-none">Topic Study</span>
+              <span className="text-[11px] font-black text-brand-text uppercase block line-clamp-1 mt-0.5 leading-none">{selectedTopic.topic}</span>
             </div>
           </div>
 
           {!sessionComplete ? (
             /* Active card stage */
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Progress metrics */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-end">
-                  <span className="text-[10px] font-black text-brand-muted uppercase tracking-widest">
+                  <span className="text-[9px] font-black text-brand-muted uppercase tracking-widest">
                     CARD {currentIndex + 1} OF {activeDeck.length}
                   </span>
-                  <span className="text-xs font-black text-brand-accent">
+                  <span className="text-[10px] font-black text-brand-accent">
                     {Math.round(((currentIndex) / activeDeck.length) * 100)}% Complete
                   </span>
                 </div>
                 
                 {/* Progress bar boundary */}
-                <div className="w-full h-2 bg-brand-border/40 rounded-full overflow-hidden">
+                <div className="w-full h-1.5 bg-brand-border/40 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-brand-accent rounded-full transition-all duration-300"
                     style={{ width: `${((currentIndex + 1) / activeDeck.length) * 100}%` }}
@@ -1026,11 +1026,11 @@ USING (true);
 
               {/* Card Workspace (Tactile Flip interaction) */}
               <div 
-                className="relative h-[250px] w-full [perspective:1000px] cursor-pointer group"
+                className="relative h-[210px] sm:h-[240px] w-full [perspective:1000px] cursor-pointer group"
                 onClick={handleFlip}
               >
                 <div 
-                  className="relative w-full h-full transition-transform duration-500 shadow-xl rounded-[2.5rem]"
+                  className="relative w-full h-full transition-transform duration-500 shadow-lg rounded-2xl"
                   style={{ 
                     transform: isFlipped ? 'rotateY(180deg)' : 'none',
                     transformStyle: 'preserve-3d',
@@ -1039,17 +1039,17 @@ USING (true);
                 >
                   {/* FRONT SIDE (Question) */}
                   <div 
-                    className="absolute inset-0 w-full h-full bg-white dark:bg-brand-card p-8 rounded-[2.5rem] border-2 border-brand-border flex flex-col justify-between shadow-[0_8px_30px_rgb(0,0,0,0.02)]"
+                    className="absolute inset-0 w-full h-full bg-white dark:bg-brand-card p-5 sm:p-6 rounded-2xl border-2 border-brand-border flex flex-col justify-between shadow-[0_4px_20px_rgb(0,0,0,0.015)]"
                     style={{
                       backfaceVisibility: 'hidden',
                       WebkitBackfaceVisibility: 'hidden'
                     }}
                   >
-                    <div className="flex justify-between items-center text-[10px] font-black uppercase text-brand-muted tracking-wider">
+                    <div className="flex justify-between items-center text-[9px] font-black uppercase text-brand-muted tracking-wider">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span>Question Stem</span>
                         {activeDeck[currentIndex]?.difficulty && (
-                          <span className={`text-[8px] font-black tracking-widest uppercase border px-2 py-0.5 rounded-full ${
+                          <span className={`text-[8px] font-black tracking-widest uppercase border px-1.5 py-0.5 rounded-full ${
                             activeDeck[currentIndex].difficulty === 'easy' 
                               ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
                               : activeDeck[currentIndex].difficulty === 'hard'
@@ -1060,23 +1060,23 @@ USING (true);
                           </span>
                         )}
                       </div>
-                      <span className="flex items-center gap-1"><RotateCw size={10} className="animate-spin" /> Tap to Flip</span>
+                      <span className="flex items-center gap-1"><RotateCw size={10} className="animate-spin shrink-0" /> Tap to Flip</span>
                     </div>
 
-                    <div className="my-auto text-center px-4">
-                      <h2 className="text-lg md:text-xl font-heavy font-black text-brand-text tracking-tight leading-tight">
+                    <div className="my-auto text-center px-2">
+                      <h2 className="text-base sm:text-lg font-black text-brand-text tracking-tight leading-tight uppercase">
                         {activeDeck[currentIndex]?.question}
                       </h2>
                     </div>
 
-                    <p className="text-center text-[9px] font-black text-brand-muted uppercase tracking-widest leading-none">
+                    <p className="text-center text-[8px] font-black text-brand-muted uppercase tracking-widest leading-none">
                       AziLearn Recall Engine
                     </p>
                   </div>
 
                   {/* BACK SIDE (Answer) */}
                   <div 
-                    className="absolute inset-0 w-full h-full bg-slate-900 border-2 border-teal-500/20 p-8 rounded-[2.5rem] flex flex-col justify-between shadow-2xl"
+                    className="absolute inset-0 w-full h-full bg-slate-900 border-2 border-teal-500/20 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-xl"
                     style={{
                       transform: 'rotateY(180deg)',
                       WebkitTransform: 'rotateY(180deg)',
@@ -1084,18 +1084,18 @@ USING (true);
                       WebkitBackfaceVisibility: 'hidden'
                     }}
                   >
-                    <div className="flex justify-between items-center text-[10px] font-black uppercase text-teal-400 tracking-wider">
+                    <div className="flex justify-between items-center text-[9px] font-black uppercase text-teal-400 tracking-wider">
                       <span>Model Answer</span>
                       <span>Reveal Complete</span>
                     </div>
 
-                    <div className="my-auto text-center px-4">
-                      <p className="text-md font-bold text-slate-100 leading-relaxed font-heavy tracking-normal">
+                    <div className="my-auto text-center px-2">
+                      <p className="text-xs sm:text-sm font-semibold text-slate-100 leading-relaxed tracking-normal">
                         {activeDeck[currentIndex]?.answer}
                       </p>
                     </div>
 
-                    <p className="text-center text-[9px] font-black text-teal-500 uppercase tracking-widest leading-none">
+                    <p className="text-center text-[8px] font-black text-teal-500 uppercase tracking-widest leading-none">
                       Fact-accurate Kenya CBC Solution
                     </p>
                   </div>
@@ -1114,9 +1114,9 @@ USING (true);
                   >
                     <button 
                       onClick={handleFlip}
-                      className="inline-flex items-center gap-2 text-[10px] font-black text-brand-accent uppercase tracking-widest px-4 py-2 bg-brand-accent/5 hover:bg-brand-accent/15 border border-brand-accent/10 rounded-full transition-all duration-300 animate-bounce cursor-pointer"
+                      className="inline-flex items-center gap-1.5 text-[9px] font-black text-brand-accent uppercase tracking-widest px-3.5 py-2 bg-brand-accent/5 hover:bg-brand-accent/15 border border-brand-accent/10 rounded-full transition-all duration-300 animate-bounce cursor-pointer"
                     >
-                      <RotateCw size={12} /> Click Card to Reveal Answer
+                      <RotateCw size={11} /> Tap Card to Reveal Answer
                     </button>
                   </motion.div>
                 ) : (
@@ -1125,19 +1125,19 @@ USING (true);
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="flex justify-center gap-3"
+                    className="flex justify-center gap-2.5"
                   >
                     <button
                       onClick={() => handleAnswer(false)}
-                      className="px-6 py-3.5 bg-red-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 w-1/2 cursor-pointer"
+                      className="px-4 py-3 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors flex items-center justify-center gap-1.5 border border-red-600 border-b-[4px] border-b-red-700 real-press active:translate-y-[2px] active:border-b-[1px] w-1/2 cursor-pointer shadow-sm"
                     >
-                      <X size={14} /> Need Practice
+                      <X size={13} /> Need Practice
                     </button>
                     <button
                       onClick={() => handleAnswer(true)}
-                      className="px-6 py-3.5 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 w-1/2 cursor-pointer"
+                      className="px-4 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-colors flex items-center justify-center gap-1.5 border border-emerald-600 border-b-[4px] border-b-emerald-700 real-press active:translate-y-[2px] active:border-b-[1px] w-1/2 cursor-pointer shadow-sm"
                     >
-                      <Check size={14} /> Got It!
+                      <Check size={13} /> Got It!
                     </button>
                   </motion.div>
                 )}
@@ -1148,57 +1148,57 @@ USING (true);
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
-              className="bg-white dark:bg-brand-card rounded-[3rem] border border-brand-border p-8 text-center space-y-6 shadow-xl"
+              className="bg-white dark:bg-brand-card rounded-2xl border border-brand-border p-5 text-center space-y-4 shadow-md"
             >
-              <div className="space-y-2">
-                <div className="w-16 h-16 rounded-[2rem] bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto shadow-inner">
-                  <Award size={36} className="text-emerald-500" />
+              <div className="space-y-1.5">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto shadow-inner">
+                  <Award size={28} className="text-emerald-500" />
                 </div>
-                <h2 className="text-xl font-black text-brand-text uppercase tracking-tight">Study Deck Complete!</h2>
-                <p className="text-xs text-brand-muted font-bold">Awesome work completing the recall battle.</p>
+                <h2 className="text-base font-black text-brand-text uppercase tracking-tight">Study Deck Complete!</h2>
+                <p className="text-[10px] text-brand-muted font-bold leading-none">Awesome work completing the recall battle.</p>
               </div>
 
               {/* Standard circular SVG gauge */}
-              <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
+              <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
                 <svg className="w-full h-full transform -rotate-90">
                   <circle
-                    cx="64"
-                    cy="64"
-                    r="48"
-                    strokeWidth="8"
+                    cx="48"
+                    cy="48"
+                    r="36"
+                    strokeWidth="6"
                     stroke="#F1F5F9"
                     className="dark:stroke-brand-bg fill-none"
                   />
                   <circle
-                    cx="64"
-                    cy="64"
-                    r="48"
-                    strokeWidth="8"
+                    cx="48"
+                    cy="48"
+                    r="36"
+                    strokeWidth="6"
                     stroke="#10B981"
                     className="fill-none transition-all duration-1000"
-                    strokeDasharray={`${2 * Math.PI * 48}`}
-                    strokeDashoffset={`${2 * Math.PI * 48 * (1 - masteredCount / activeDeck.length)}`}
+                    strokeDasharray={`${2 * Math.PI * 36}`}
+                    strokeDashoffset={`${2 * Math.PI * 36 * (1 - masteredCount / activeDeck.length)}`}
                   />
                 </svg>
                 <div className="absolute text-center">
-                  <span className="text-2xl font-black text-brand-text tracking-tight block">
+                  <span className="text-xl font-black text-brand-text tracking-tight block">
                     {Math.round((masteredCount / activeDeck.length) * 100)}%
                   </span>
-                  <span className="text-[8px] font-black text-brand-muted uppercase tracking-widest block leading-none">
+                  <span className="text-[7px] font-black text-brand-muted uppercase tracking-widest block leading-none">
                     Mastery
                   </span>
                 </div>
               </div>
 
               {/* Statistics Panel */}
-              <div className="grid grid-cols-2 gap-3 bg-brand-bg/50 p-4 rounded-2xl border border-brand-border">
-                <div className="text-left space-y-0.5">
-                  <span className="text-[8px] font-black text-brand-muted uppercase tracking-widest block">Core Results</span>
-                  <p className="text-xs font-black text-brand-text leading-none">{masteredCount} of {activeDeck.length} Mastered</p>
+              <div className="grid grid-cols-2 gap-2 bg-brand-bg/50 p-3 rounded-xl border border-brand-border text-left">
+                <div className="space-y-0.5">
+                  <span className="text-[8px] font-black text-brand-muted uppercase tracking-widest block leading-none">Core Results</span>
+                  <p className="text-[11px] font-black text-brand-text leading-none">{masteredCount} of {activeDeck.length} Mastered</p>
                 </div>
-                <div className="text-right space-y-0.5">
-                  <span className="text-[8px] font-black text-brand-muted uppercase tracking-widest block">Rewards Granted</span>
-                  <p className="text-xs font-black text-brand-accent leading-none">+30 XP Gained</p>
+                <div className="space-y-0.5 text-right">
+                  <span className="text-[8px] font-black text-brand-muted uppercase tracking-widest block leading-none">Rewards Granted</span>
+                  <p className="text-[11px] font-black text-brand-accent leading-none">+30 XP Gained</p>
                 </div>
               </div>
 
@@ -1206,15 +1206,15 @@ USING (true);
               <div className="flex gap-2">
                 <button
                   onClick={handleRestartDeck}
-                  className="px-6 py-3 bg-brand-bg text-brand-text border border-brand-border rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-border/40 transition-colors w-1/2 flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2.5 bg-brand-bg text-brand-text border border-brand-border border-b-[3px] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-border/40 transition-colors w-1/2 flex items-center justify-center gap-1.5 cursor-pointer real-press active:translate-y-[1px]"
                 >
-                  <RotateCw size={12} /> Study Again
+                  <RotateCw size={11} /> Study Again
                 </button>
                 <button
                   onClick={handleExitDeck}
-                  className="px-6 py-3 bg-brand-text text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-colors w-1/2 flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2.5 bg-brand-text hover:bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-colors w-1/2 flex items-center justify-center gap-1.5 cursor-pointer real-press border border-brand-text border-b-[3px]"
                 >
-                  <CheckCircle2 size={12} /> Choose Topic
+                  <CheckCircle2 size={11} /> Choose Topic
                 </button>
               </div>
             </motion.div>

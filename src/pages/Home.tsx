@@ -532,14 +532,14 @@ export default function Home({
 
         {/* ── STICKY SEARCH BAR ── */}
         {activeTab === 'home' && selectedClass && (
-          <div className="sticky top-0 z-[100] px-3 pt-3 pb-2 bg-brand-bg/90 backdrop-blur-sm pointer-events-none">
-            <div className={`flex items-center bg-brand-surface rounded-full shadow-md px-3 h-11 gap-2 pointer-events-auto border transition-all duration-200 ${isSearchFocused ? 'border-brand-accent ring-2 ring-brand-accent/10' : 'border-brand-border/50'}`}>
-              <Search className={`${isSearchFocused ? 'text-brand-accent' : 'text-brand-muted'} transition-colors shrink-0`} size={16} />
+          <div className="sticky top-0 z-[100] px-3 pt-3 pb-2 bg-brand-bg/90 backdrop-blur-md pointer-events-none">
+            <div className={`flex items-center bg-brand-surface rounded-2xl shadow-[inset_0_2px_4px_rgba(0,0,0,0.04)] px-3.5 h-12 gap-2 pointer-events-auto border transition-all duration-200 ${isSearchFocused ? 'border-brand-accent ring-4 ring-brand-accent/10 bg-brand-surface' : 'border-brand-border/65'}`}>
+              <Search className={`${isSearchFocused ? 'text-brand-accent' : 'text-brand-muted'} transition-colors shrink-0`} size={17} />
               <input
                 ref={searchInputRef}
                 type="text"
                 inputMode="search"
-                className="flex-1 bg-transparent border-none outline-none font-sans text-sm text-brand-text placeholder:text-brand-muted/60 min-w-0"
+                className="flex-1 bg-transparent border-none outline-none font-sans text-sm font-semibold text-brand-text placeholder:text-brand-muted/50 min-w-0"
                 placeholder="Search materials..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -547,8 +547,11 @@ export default function Home({
                 onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(searchQuery, category, selectedClass, true); }}
               />
-              <button className="w-7 h-7 rounded-full bg-brand-accent flex items-center justify-center text-white shadow-sm active:scale-90 transition-transform shrink-0">
-                <span className="font-sans font-black text-xs">A</span>
+              <button 
+                onClick={() => handleSearch(searchQuery, category, selectedClass, true)}
+                className="w-8 h-8 rounded-xl bg-brand-accent flex items-center justify-center text-white shadow-sm border-b-2 border-b-[#C1410D] active:translate-y-[1px] active:border-b-0 transition-all shrink-0 real-press"
+              >
+                <Search size={14} />
               </button>
             </div>
           </div>
@@ -630,11 +633,10 @@ export default function Home({
                           <div
                             key={gradeStr}
                             onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                            className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-emerald-500/30 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-300 shadow-sm cursor-pointer select-none active:scale-[0.97]"
+                            className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-emerald-500/60 hover:border-emerald-500 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
                           >
-                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-emerald-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
+                            <span className="font-display text-xl font-black text-brand-text group-hover:text-emerald-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
                             <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
-                            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-emerald-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
                           </div>
                         );
                       })}
@@ -659,11 +661,10 @@ export default function Home({
                           <div
                             key={gradeStr}
                             onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                            className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-brand-accent/30 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-300 shadow-sm cursor-pointer select-none active:scale-[0.97]"
+                            className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-[#FF6B2C]/60 hover:border-[#FF6B2C] rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
                           >
-                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-brand-accent transition-colors leading-none mb-0.5">{gradeVal}</span>
+                            <span className="font-display text-xl font-black text-brand-text group-hover:text-[#FF6B2C] transition-colors leading-none mb-0.5">{gradeVal}</span>
                             <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
-                            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand-accent scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
                           </div>
                         );
                       })}
@@ -688,11 +689,10 @@ export default function Home({
                           <div
                             key={gradeStr}
                             onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                            className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-purple-500/30 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-300 shadow-sm cursor-pointer select-none active:scale-[0.97]"
+                            className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-purple-500/60 hover:border-purple-500 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
                           >
-                            <span className="font-display text-xl font-bold text-brand-text group-hover:text-purple-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
+                            <span className="font-display text-xl font-black text-brand-text group-hover:text-purple-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
                             <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
-                            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-purple-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
                           </div>
                         );
                       })}
@@ -709,7 +709,7 @@ export default function Home({
                     {/* KCSE Revision Card */}
                     <button
                       onClick={(e) => { rippleEffect(e); handleClassSelect('KCSE'); }}
-                      className="relative overflow-hidden w-full bg-brand-surface border border-brand-border/40 hover:border-yellow-500/20 rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm group text-left"
+                      className="relative overflow-hidden w-full bg-brand-surface border border-brand-border border-b-[4px] border-b-yellow-500/50 hover:border-yellow-500 rounded-2xl p-4 flex items-center justify-between transition-all shadow-sm group text-left real-press active:translate-y-[2px]"
                     >
                       {/* Left vertical yellow accent bar */}
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500" />
@@ -718,8 +718,8 @@ export default function Home({
                           📋
                         </div>
                         <div>
-                          <h3 className="font-display text-xs font-bold text-brand-text group-hover:text-yellow-500 transition-colors leading-tight">KCSE Revision</h3>
-                          <p className="text-[10px] font-medium text-brand-muted mt-0.5 leading-snug">National Assessment · Secondary</p>
+                          <h3 className="font-display text-xs font-black text-brand-text group-hover:text-yellow-500 transition-colors leading-tight">KCSE Revision</h3>
+                          <p className="text-[10px] font-semibold text-brand-muted mt-0.5 leading-snug">National Assessment · Secondary</p>
                         </div>
                       </div>
                       <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0">›</span>
@@ -728,7 +728,7 @@ export default function Home({
                     {/* School Forum Card */}
                     <button
                       onClick={onCommunityClick}
-                      className="relative overflow-hidden w-full bg-brand-surface border border-brand-border/40 hover:border-blue-500/20 rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all shadow-sm group text-left"
+                      className="relative overflow-hidden w-full bg-brand-surface border border-brand-border border-b-[4px] border-b-blue-500/50 hover:border-blue-500 rounded-2xl p-4 flex items-center justify-between transition-all shadow-sm group text-left real-press active:translate-y-[2px]"
                     >
                       {/* Left vertical blue accent bar */}
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />
@@ -737,8 +737,8 @@ export default function Home({
                           💬
                         </div>
                         <div>
-                          <h3 className="font-display text-xs font-bold text-brand-text group-hover:text-blue-500 transition-colors leading-tight">School Forum</h3>
-                          <p className="text-[10px] font-medium text-brand-muted mt-0.5 leading-snug">Connect & discuss with classmates</p>
+                          <h3 className="font-display text-xs font-black text-brand-text group-hover:text-blue-500 transition-colors leading-tight">School Forum</h3>
+                          <p className="text-[10px] font-semibold text-brand-muted mt-0.5 leading-snug">Connect & discuss with classmates</p>
                         </div>
                       </div>
                       <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0">›</span>
@@ -761,7 +761,7 @@ export default function Home({
                   <div className="flex items-center gap-3 mb-2">
                     <button
                       onClick={() => { setSelectedClass(null); setHasSearched(false); setResults([]); setSearchQuery(''); }}
-                      className="w-8 h-8 rounded-full bg-brand-bg border border-brand-border flex items-center justify-center text-brand-text active:scale-90 transition-transform"
+                      className="w-8 h-8 rounded-xl bg-brand-bg border border-brand-border border-b-2 border-b-brand-border flex items-center justify-center text-brand-text transition-all real-press active:translate-y-[1px]"
                     >
                       <ChevronLeft size={14} />
                     </button>
@@ -783,10 +783,10 @@ export default function Home({
                       <button
                         key={cat.id}
                         onClick={() => setCategory(cat.id as any)}
-                        className={`flex flex-col items-center justify-center gap-0.5 py-2.5 px-0.5 rounded-xl text-[8px] font-black uppercase tracking-tighter transition-all border ${
+                        className={`flex flex-col items-center justify-center gap-0.5 py-2 px-0.5 rounded-xl text-[8px] font-black uppercase tracking-tighter transition-all border real-press ${
                           category === cat.id
-                            ? 'bg-brand-accent border-brand-accent text-white shadow-sm'
-                            : 'bg-brand-surface border-brand-border text-brand-text hover:border-brand-accent/40'
+                            ? 'bg-brand-accent border-brand-accent border-b-[4px] border-b-[#C1410D] text-white shadow-md translate-y-[2px]'
+                            : 'bg-brand-surface border-brand-border border-b-[4px] border-b-brand-border text-brand-text hover:border-brand-accent/40 active:translate-y-[2px]'
                         }`}
                       >
                         <cat.icon size={10} className="shrink-0 mb-0.5" />
@@ -811,14 +811,6 @@ export default function Home({
 
                     <div className="grid grid-cols-1 gap-2.5">
                       {[
-                        {
-                          id: 'homework',
-                          label: 'Homework.....',
-                          sub: 'Access homework tasks and deadlines',
-                          icon: FileText,
-                          color: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/15',
-                          action: onAssignmentsClick
-                        },
                         {
                           id: 'assignment',
                           label: 'Assignment....',
@@ -855,7 +847,7 @@ export default function Home({
                         <button
                           key={item.id}
                           onClick={(e) => { rippleEffect(e); item.action(); }}
-                          className="group relative overflow-hidden bg-brand-surface border border-brand-border/40 hover:border-brand-accent/25 rounded-2xl p-3.5 flex items-center gap-3 text-left active:scale-[0.98] transition-all shadow-sm w-full"
+                          className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-brand-border/60 hover:border-brand-accent/30 rounded-2xl p-3.5 flex items-center gap-3 text-left transition-all shadow-sm w-full real-press active:translate-y-[2px]"
                         >
                           <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${item.color}`}>
                             <item.icon size={16} />
@@ -1188,10 +1180,10 @@ export default function Home({
                     rippleEffect(e);
                     tab.action();
                   }}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-[22px] transition-all duration-200 border ${
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-[22px] transition-all duration-200 border real-press ${
                     activeTab === tab.id 
-                      ? 'bg-[#FF6B2C]/10 border-[#FF6B2C]/20 text-[#FF6B2C] shadow-sm font-bold scale-[1.02]' 
-                      : 'text-brand-muted hover:text-brand-text border-transparent'
+                      ? 'bg-[#FF6B2C] border-[#FF6B2C] border-b-[3px] border-b-[#C1410D] text-white shadow-md font-bold scale-[1.02]' 
+                      : 'text-brand-muted hover:text-brand-text border-transparent hover:bg-brand-muted/5'
                   }`}
                 >
                   <tab.icon size={15} />

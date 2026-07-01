@@ -642,9 +642,13 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
     const teacherData = localStorage.getItem('azilearn_teacher');
     let teacherId = '';
+    let parsedTeacher: any = null;
     
     if (teacherData) {
-      teacherId = JSON.parse(teacherData).id;
+      try {
+        parsedTeacher = JSON.parse(teacherData);
+        teacherId = parsedTeacher.id;
+      } catch (err) {}
     }
 
     if (!teacherId) {
@@ -654,7 +658,51 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
     setLoading(true);
     try {
-      const isDynamic = !form.class_id || form.class_id === 'new';
+      // 1. Self-healing check: verify teacher exists in DB
+      const { data: teacherCheck, error: checkErr } = await supabase
+        .from('teachers')
+        .select('id')
+        .eq('id', teacherId)
+        .maybeSingle();
+
+      if (!teacherCheck || checkErr) {
+        console.warn("Teacher not found in DB during publish, performing self-healing insert.");
+        const tName = parsedTeacher?.name || 'AziLearn Teacher';
+        const tSchoolName = parsedTeacher?.school_name || 'AziLearn School';
+        const tSchoolId = parsedTeacher?.school_id || null;
+        const tPin = parsedTeacher?.pin || '1234';
+
+        const { error: insertTeacherErr } = await supabase
+          .from('teachers')
+          .insert({
+            id: teacherId,
+            name: tName,
+            school_name: tSchoolName,
+            school_id: tSchoolId,
+            pin: tPin
+          });
+
+        if (insertTeacherErr) {
+          console.error("Self-healing teacher insert failed:", insertTeacherErr);
+        }
+      }
+
+      // 2. Self-healing check: verify class exists if one is specified
+      let resolvedClassId = form.class_id && form.class_id !== 'new' ? form.class_id : null;
+      if (resolvedClassId) {
+        const { data: classCheck } = await supabase
+          .from('classes')
+          .select('id')
+          .eq('id', resolvedClassId)
+          .maybeSingle();
+
+        if (!classCheck) {
+          console.warn(`Class ${resolvedClassId} not found in DB during publish, falling back to class_id = null.`);
+          resolvedClassId = null;
+        }
+      }
+
+      const isDynamic = !resolvedClassId;
       const studentList = isDynamic 
         ? form.expected_students.split(',').map(s => s.trim()).filter(s => s !== '')
         : students.map(s => s.name);
@@ -662,27 +710,57 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       // Generate a share code for teachers too
       const shareCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-      const { data, error } = await supabase
+      let insertResult;
+      const primaryPayload = {
+        teacher_id: teacherId,
+        class_id: resolvedClassId,
+        title: form.title,
+        subject: form.subject,
+        grade: form.grade,
+        class_name: form.class_name,
+        due_date: new Date(form.due_date).toISOString(),
+        questions: questions,
+        expected_students: studentList,
+        share_code: shareCode,
+        is_broadcast: false,
+        school_name: parsedTeacher?.school_name || null
+      };
+
+      const fallbackPayload = {
+        teacher_id: teacherId,
+        class_id: resolvedClassId,
+        title: form.title,
+        subject: form.subject,
+        grade: form.grade,
+        class_name: form.class_name,
+        due_date: new Date(form.due_date).toISOString(),
+        questions: questions,
+        expected_students: studentList,
+        share_code: shareCode
+      };
+
+      const { data: mainData, error: mainError } = await supabase
         .from('assignments')
-        .insert([{
-          teacher_id: teacherId,
-          class_id: form.class_id && form.class_id !== 'new' ? form.class_id : null,
-          title: form.title,
-          subject: form.subject,
-          grade: form.grade,
-          class_name: form.class_name,
-          due_date: new Date(form.due_date).toISOString(),
-          questions: questions,
-          expected_students: studentList,
-          share_code: shareCode
-        }])
+        .insert([primaryPayload])
         .select()
         .single();
 
-      if (error) throw error;
+      if (mainError) {
+        console.warn("Primary insert failed, trying fallback without custom columns:", mainError.message);
+        const { data: altData, error: altError } = await supabase
+          .from('assignments')
+          .insert([fallbackPayload])
+          .select()
+          .single();
 
-      if (data) {
-        setSuccess('PUBLISHED');
+        if (altError) throw altError;
+        insertResult = altData;
+      } else {
+        insertResult = mainData;
+      }
+
+      if (insertResult) {
+        setSuccess(insertResult.share_code || shareCode);
         showToast("Assignment published successfully!", "success");
       }
     } catch (err: any) {
@@ -711,8 +789,22 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           <CheckCircle2 className="text-emerald-500" size={40} />
         </div>
         <h2 className="text-3xl font-black tracking-tight mb-2">Published!</h2>
-        <p className="text-brand-muted font-bold mb-8 uppercase tracking-widest text-[10px]">Students can now find this assignment by searching your name</p>
+        <p className="text-brand-muted font-bold mb-6 uppercase tracking-widest text-[10px]">Students can now find this assignment by searching your name</p>
         
+        <div className="bg-brand-bg border border-brand-border rounded-2xl p-4 mb-8">
+          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Assignment Share Code</p>
+          <div className="flex items-center justify-between bg-brand-surface border border-brand-border px-4 py-3 rounded-xl font-mono text-lg font-bold">
+            <span>{success}</span>
+            <button 
+              onClick={copyToClipboard}
+              className="p-1.5 hover:text-brand-accent transition-all text-brand-muted"
+              title="Copy Share Code"
+            >
+              <Copy size={16} />
+            </button>
+          </div>
+        </div>
+
         <button 
           onClick={onBack}
           className="w-full bg-brand-bg border border-brand-border text-brand-text py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-brand-surface transition-all"

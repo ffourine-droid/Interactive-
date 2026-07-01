@@ -1,9 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { BookOpen, BarChart3, GraduationCap } from 'lucide-react';
+import { BookOpen, BarChart3, GraduationCap, School } from 'lucide-react';
 
 interface LandingPageProps {
-  onNavigate: (portal: 'student' | 'teacher' | 'parent') => void;
+  onNavigate: (portal: 'student' | 'teacher' | 'parent' | 'school') => void;
 }
 
 export default function LandingPage({ onNavigate }: LandingPageProps) {
@@ -71,6 +71,16 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
             sub="Monitor grades, view remarks, acknowledge tasks."
             badge="Check Progress"
             badgeColor="text-[#FF6B2C] bg-[#FF6B2C]/8"
+          />
+          <PortalCard
+            onClick={() => onNavigate('school')}
+            icon={<School size={22} />}
+            iconBg="bg-indigo-500/10 text-indigo-600"
+            iconHoverBg="group-active:bg-indigo-500 group-active:text-white"
+            label="School"
+            sub="Publish school-wide holiday assignments and track teachers."
+            badge="Admin Portal"
+            badgeColor="text-indigo-600 bg-indigo-500/8"
           />
         </div>
 

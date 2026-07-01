@@ -72,7 +72,10 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
     return (
       <div className="max-w-[360px] mx-auto bg-brand-bg min-h-screen flex flex-col">
         <div className="flex items-center justify-between px-5 pt-6 pb-4">
-          <button onClick={onBack} className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-accent transition-colors">
+          <button 
+            onClick={onBack} 
+            className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border border-b-[3px] border-b-brand-border/85 flex items-center justify-center text-brand-muted hover:text-brand-accent transition-all real-press cursor-pointer"
+          >
             <ChevronLeft size={20} />
           </button>
           <div className="flex items-center gap-2">
@@ -93,12 +96,11 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
           )}
 
           {/* TEACHERS GROUP WORK Card */}
-          <motion.button
-            whileTap={{ scale: 0.98 }}
+          <button
             onClick={() => {
               setView('teacher_lobby');
             }}
-            className="w-full bg-brand-surface border border-indigo-500/25 hover:border-indigo-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
+            className="w-full bg-brand-surface border border-indigo-500/25 border-b-[4px] border-b-indigo-500/60 hover:border-indigo-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm real-press cursor-pointer"
           >
             <div className="w-9 h-9 bg-indigo-500/10 border border-indigo-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-indigo-500/15 transition-colors">
               <BookOpen size={16} className="text-indigo-500" />
@@ -115,16 +117,15 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               </p>
             </div>
             <span className="text-xs font-bold text-brand-muted/50 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0">›</span>
-          </motion.button>
+          </button>
 
           {/* 1V1 MATH DUEL Card */}
-          <motion.button
-            whileTap={{ scale: 0.98 }}
+          <button
             onClick={() => {
               setCompDefaultTab('math_duel');
               setView('competitions');
             }}
-            className="w-full bg-brand-surface border border-[#FF6B00]/25 hover:border-[#FF6B00] rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
+            className="w-full bg-brand-surface border border-[#FF6B00]/25 border-b-[4px] border-b-[#FF6B00]/60 hover:border-[#FF6B00] rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm real-press cursor-pointer"
           >
             <div className="w-9 h-9 bg-[#FF6B00]/10 border border-[#FF6B00]/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-[#FF6B00]/15 transition-colors">
               <Swords size={16} className="text-[#FF6B00]" />
@@ -141,13 +142,12 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               </p>
             </div>
             <span className="text-xs font-bold text-brand-muted/50 group-hover:text-[#FF6B00] group-hover:translate-x-0.5 transition-all shrink-0">›</span>
-          </motion.button>
+          </button>
 
           {/* Speed Round */}
-          <motion.button
-            whileTap={{ scale: 0.98 }}
+          <button
             onClick={() => setView('speed')}
-            className="w-full bg-brand-surface border border-brand-accent/25 hover:border-brand-accent rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
+            className="w-full bg-brand-surface border border-brand-accent/25 border-b-[4px] border-b-brand-accent/60 hover:border-brand-accent rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm real-press cursor-pointer"
           >
             <div className="w-9 h-9 bg-brand-accent/10 border border-brand-accent/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-brand-accent/15 transition-colors">
               <Zap size={16} className="text-brand-accent" />
@@ -164,16 +164,15 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               </p>
             </div>
             <span className="text-xs font-bold text-brand-muted/50 group-hover:text-brand-accent group-hover:translate-x-0.5 transition-all shrink-0">›</span>
-          </motion.button>
+          </button>
 
           {/* Live Battle (Host/Join Room) */}
-          <motion.button
-            whileTap={{ scale: 0.98 }}
+          <button
             onClick={() => {
               setCompDefaultTab('group_battle');
               setView('competitions');
             }}
-            className="w-full bg-brand-surface border border-emerald-400/25 hover:border-emerald-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
+            className="w-full bg-brand-surface border border-emerald-400/25 border-b-[4px] border-b-emerald-500/60 hover:border-emerald-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm real-press cursor-pointer"
           >
             <div className="w-9 h-9 bg-emerald-400/10 border border-emerald-400/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-emerald-400/15 transition-colors">
               <Users size={16} className="text-emerald-500" />
@@ -190,16 +189,15 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               </p>
             </div>
             <span className="text-xs font-bold text-brand-muted/50 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0">›</span>
-          </motion.button>
+          </button>
 
           {/* Alternative 1v1 Option */}
-          <motion.button
-            whileTap={{ scale: 0.98 }}
+          <button
             onClick={() => {
               setCompDefaultTab('speed_round');
               setView('competitions');
             }}
-            className="w-full bg-brand-surface border border-blue-400/25 hover:border-blue-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
+            className="w-full bg-brand-surface border border-blue-400/25 border-b-[4px] border-b-blue-500/60 hover:border-blue-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm real-press cursor-pointer"
           >
             <div className="w-9 h-9 bg-blue-500/10 border border-blue-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-blue-500/25 transition-colors">
               <Zap size={16} className="text-blue-500" />
@@ -216,13 +214,12 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               </p>
             </div>
             <span className="text-xs font-bold text-brand-muted/50 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all shrink-0">›</span>
-          </motion.button>
+          </button>
 
           {/* Study Flashcards Option */}
-          <motion.button
-            whileTap={{ scale: 0.98 }}
+          <button
             onClick={() => setView('flashcards')}
-            className="w-full bg-brand-surface border border-teal-400/25 hover:border-teal-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm active:scale-[0.98]"
+            className="w-full bg-brand-surface border border-teal-400/25 border-b-[4px] border-b-teal-500/60 hover:border-teal-500 rounded-2xl p-3 flex items-center gap-3 text-left transition-all group shadow-sm real-press cursor-pointer"
           >
             <div className="w-9 h-9 bg-teal-500/10 border border-teal-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-teal-500/15 transition-colors">
               <BookOpen size={16} className="text-teal-500" />
@@ -239,7 +236,7 @@ export default function GroupWorkPage({ onBack }: GroupWorkPageProps) {
               </p>
             </div>
             <span className="text-xs font-bold text-brand-muted/50 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0">›</span>
-          </motion.button>
+          </button>
 
           {/* Points guide */}
           <div className="bg-brand-surface border border-brand-border/45 rounded-2xl p-4 space-y-1.5 shadow-sm">

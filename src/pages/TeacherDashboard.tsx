@@ -29,6 +29,7 @@ import { MaterialCard } from '../components/MaterialCard';
 import { SlidesViewer } from '../components/SlidesViewer';
 import { Experiment } from '../types';
 import ModerationPage from './ModerationPage';
+import { SchoolSetupModal } from '../components/SchoolSetupModal';
 
 interface Assignment {
   id: string;
@@ -50,6 +51,7 @@ interface Teacher {
   id: string;
   name: string;
   school_name: string;
+  school_id?: string | null;
 }
 
 interface TeacherDashboardProps {
@@ -84,6 +86,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [importing, setImporting] = useState(false);
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [editingClassName, setEditingClassName] = useState<string>('');
+  const [isSchoolSetupOpen, setIsSchoolSetupOpen] = useState(false);
 
   const handleImportByCode = async (passedCode?: string) => {
     const finalCode = (passedCode || importCode).trim().toUpperCase();
@@ -275,7 +278,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       // Verify teacher exists in DB
       let { data: teacherCheck, error: teacherError } = await supabase
         .from('teachers')
-        .select('id, name, school_name')
+        .select('id, name, school_name, school_id')
         .eq('id', teacherId)
         .maybeSingle();
 
@@ -283,7 +286,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       if (!teacherCheck && !teacherError && t) {
         const { data: fallbackTeachers, error: fallbackError } = await supabase
           .from('teachers')
-          .select('id, name, school_name')
+          .select('id, name, school_name, school_id')
           .ilike('name', t.name.trim())
           .ilike('school_name', t.school_name.trim());
         
@@ -295,7 +298,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           localStorage.setItem('azilearn_teacher', JSON.stringify({
             id: fallbackTeacher.id,
             name: fallbackTeacher.name,
-            school_name: fallbackTeacher.school_name
+            school_name: fallbackTeacher.school_name,
+            school_id: fallbackTeacher.school_id
           }));
           teacherId = fallbackTeacher.id;
           setTeacher(fallbackTeacher);
@@ -308,6 +312,22 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         handleLogout();
         return;
       }
+
+      // Automatically trigger setup if school is not linked yet and they haven't dismissed it this session
+      if (teacherCheck && !teacherCheck.school_id) {
+        const hasSkipped = sessionStorage.getItem('azilearn_skipped_school_setup');
+        if (!hasSkipped) {
+          setIsSchoolSetupOpen(true);
+        }
+      }
+
+      setTeacher(teacherCheck);
+      localStorage.setItem('azilearn_teacher', JSON.stringify({
+        id: teacherCheck.id,
+        name: teacherCheck.name,
+        school_name: teacherCheck.school_name,
+        school_id: teacherCheck.school_id
+      }));
 
       // Fetch Classes and Assignments in parallel
       const [assignmentsResponse, examsResponse] = await Promise.all([
@@ -526,6 +546,24 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   };
 
+  const handleCloseSchoolSetup = () => {
+    sessionStorage.setItem('azilearn_skipped_school_setup', 'true');
+    setIsSchoolSetupOpen(false);
+  };
+
+  const handleSchoolLinked = (schoolId: string, schoolName: string) => {
+    if (teacher) {
+      const updated = {
+        ...teacher,
+        school_id: schoolId,
+        school_name: schoolName
+      };
+      setTeacher(updated);
+      localStorage.setItem('azilearn_teacher', JSON.stringify(updated));
+      fetchDashboardData(teacher.id);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('azilearn_teacher');
     onLogout();
@@ -560,10 +598,17 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <h1 className="text-sm font-black tracking-tight leading-none uppercase truncate">
                   {teacher?.name?.split(' ')[0]}
                 </h1>
-                <div className="flex items-center gap-1 text-brand-muted text-[8px] font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap">
-                  <School size={8} />
-                  <span className="truncate max-w-[120px]">{teacher?.school_name}</span>
-                </div>
+                <button
+                  onClick={() => setIsSchoolSetupOpen(true)}
+                  className="flex items-center gap-1 text-brand-muted hover:text-brand-accent text-[8px] font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap group transition-colors text-left outline-none"
+                  title="Link or Register School"
+                  id="header-school-btn"
+                >
+                  <School size={8} className="group-hover:scale-110 transition-transform" />
+                  <span className="truncate max-w-[120px] underline decoration-dotted decoration-brand-muted/50 group-hover:decoration-brand-accent/50">
+                    {teacher?.school_name || 'No School Linked'}
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -578,6 +623,26 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       </header>
 
       <main className="px-4 py-4 space-y-4">
+        {!teacher?.school_id && (
+          <div className="bg-brand-accent/5 border border-brand-accent/20 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0" id="unlinked-school-banner">
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-accent flex items-center gap-1.5">
+                <School size={12} />
+                Unlinked School Profile
+              </h4>
+              <p className="text-[9px] font-bold text-brand-muted leading-relaxed">
+                Your teacher profile is not linked to a registered school account yet. Link or register your school to enable full administrative dashboard capabilities.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsSchoolSetupOpen(true)}
+              className="self-start sm:self-center px-4 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors shrink-0"
+              id="banner-link-school-btn"
+            >
+              Link School Now
+            </button>
+          </div>
+        )}
         <div className="space-y-3">
           {/* View toggle */}
           <div className="flex items-center gap-4 overflow-x-auto no-scrollbar whitespace-nowrap border-b border-brand-border">
@@ -1000,6 +1065,17 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </motion.div>
         </div>
+      )}
+
+      {teacher && (
+        <SchoolSetupModal
+          isOpen={isSchoolSetupOpen}
+          onClose={handleCloseSchoolSetup}
+          teacherId={teacher.id}
+          teacherName={teacher.name}
+          onSchoolLinked={handleSchoolLinked}
+          canSkip={true}
+        />
       )}
     </div>
   );

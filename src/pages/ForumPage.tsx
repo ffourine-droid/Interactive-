@@ -114,7 +114,7 @@ export default function ForumPage({ onBack }: ForumPageProps) {
       setOffset(0);
       fetchFeed(selectedBoardId, student.id, 0, true);
     }
-  }, [selectedBoardId, student]);
+  }, [selectedBoardId, student?.id]);
 
   // Fetch Boards List via supabase rpc
   const fetchBoards = async () => {
@@ -689,7 +689,7 @@ export default function ForumPage({ onBack }: ForumPageProps) {
           <button
             id="forum-back-btn"
             onClick={onBack}
-            className="w-10 h-10 rounded-2xl bg-[#F8FAFC] hover:bg-[#E2E8F0]/50 border border-[#E2E8F0]/70 flex items-center justify-center text-[#64748B] hover:text-[#0F172A] transition-all active:scale-95"
+            className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border border-b-[3px] border-b-brand-border/85 flex items-center justify-center text-brand-muted hover:text-brand-accent transition-all real-press cursor-pointer"
             title="Go home"
           >
             <ArrowLeft size={18} />
@@ -738,10 +738,10 @@ export default function ForumPage({ onBack }: ForumPageProps) {
                 <button
                   key={board.id}
                   onClick={() => setSelectedBoardId(board.id)}
-                  className={`px-4 py-2 rounded-full text-xs font-black tracking-wide shrink-0 border transition-all flex items-center gap-1.5 active:scale-95 ${
+                  className={`px-4 py-2 rounded-xl text-xs font-black tracking-wide shrink-0 border transition-all flex items-center gap-1.5 real-press cursor-pointer ${
                     active 
-                      ? 'bg-[#1E3A5F] text-white border-transparent shadow-md shadow-[#1E3A5F]/10'
-                      : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:text-[#0F172A] hover:bg-[#E2E8F0]/30'
+                      ? 'bg-brand-accent text-white border-brand-accent border-b-[3px] border-b-[#C1410D] shadow-sm'
+                      : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] border-b-[3px] border-b-[#E2E8F0] hover:text-[#0F172A] hover:bg-[#E2E8F0]/30'
                   }`}
                 >
                   <span className="text-sm shrink-0">{emoji}</span>
@@ -798,10 +798,10 @@ export default function ForumPage({ onBack }: ForumPageProps) {
                     onMouseLeave={triggerLongPressEnd}
                     onTouchStart={() => mine && triggerLongPressStart('post', post.id)}
                     onTouchEnd={triggerLongPressEnd}
-                    className={`p-4 rounded-3xl border transition-all cursor-pointer relative ${
+                    className={`p-4 rounded-2xl border border-b-[4px] transition-all cursor-pointer relative real-press ${
                       post.is_pinned 
-                        ? 'bg-[#1E3A5F]/5 border-[#1E3A5F]/20 shadow-sm' 
-                        : 'bg-white hover:bg-slate-50 border-[#E2E8F0] hover:border-slate-300'
+                        ? 'bg-[#1E3A5F]/5 border-[#1E3A5F]/20 border-b-brand-accent/50 shadow-sm' 
+                        : 'bg-white hover:bg-slate-50 border-brand-border border-b-brand-border/60 hover:border-brand-accent/30'
                     } select-text`}
                   >
                     {/* Header bar / Author Details */}
@@ -1013,14 +1013,14 @@ export default function ForumPage({ onBack }: ForumPageProps) {
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="flex-1 py-3 text-xs font-extrabold uppercase bg-slate-100 hover:bg-slate-200 rounded-2xl text-[#64748B] transition-all active:scale-95 text-center"
+                    className="flex-1 py-3 text-xs font-extrabold uppercase bg-slate-100 hover:bg-slate-200 border border-slate-200 border-b-[3px] rounded-xl text-[#64748B] transition-all real-press cursor-pointer text-center"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isCreatingPost || !newTitle.trim() || !newContent.trim()}
-                    className="flex-1 py-3 text-xs font-black uppercase bg-[#F47B20] hover:brightness-110 disabled:opacity-50 text-white rounded-2xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                    className="flex-1 py-3 text-xs font-black uppercase bg-[#F47B20] hover:bg-brand-accent/90 border border-amber-600 border-b-[4px] border-b-amber-700 disabled:opacity-50 text-white rounded-xl shadow-sm transition-all real-press cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     {isCreatingPost ? (
                       <Loader2 size={13} className="animate-spin" />
@@ -1245,14 +1245,14 @@ export default function ForumPage({ onBack }: ForumPageProps) {
                     setDeletingId(null);
                     setDeletingType(null);
                   }}
-                  className="flex-1 py-3 text-xs font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-[#64748B] rounded-2xl active:scale-95 transition-all text-center"
+                  className="flex-1 py-3 text-xs font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 border border-slate-200 border-b-[3px] text-[#64748B] rounded-xl real-press cursor-pointer transition-all text-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleDeleteItem}
-                  className="flex-1 py-3 text-xs font-black uppercase tracking-wider bg-red-600 text-white hover:bg-red-700 rounded-2xl shadow shadow-red-600/10 active:scale-95 transition-all text-center"
+                  className="flex-1 py-3 text-xs font-black uppercase tracking-wider bg-red-600 border border-red-700 border-b-[4px] border-b-red-800 text-white hover:bg-red-700 rounded-xl shadow shadow-red-600/10 real-press cursor-pointer transition-all text-center"
                 >
                   Confirm Delete
                 </button>

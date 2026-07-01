@@ -583,7 +583,7 @@ function DefinitionCard({ block, onComplete }: { block: any; onComplete?: () => 
           ) : (
             <button
               onClick={handleReveal}
-              className="w-full text-white font-black text-xs uppercase px-5 py-3 rounded-xl border-b-2 shadow-md transition-all bg-[#F97316] hover:brightness-105 active:scale-95 border-[#C2410C]"
+              className="w-full text-white font-black text-xs uppercase px-5 py-3 rounded-xl border border-b-[4px] border-b-[#C2410C] border-orange-600 shadow-md transition-all bg-[#F97316] hover:brightness-105 real-press cursor-pointer"
             >
               🔍 Reveal Scientific Meaning
             </button>
@@ -647,7 +647,7 @@ function ExampleCard({ block, onComplete }: { block: any; onComplete?: () => voi
           {!showAnswer ? (
             <button
               onClick={handleRevealAnswer}
-              className="w-full text-white font-black text-xs uppercase px-5 py-3 rounded-xl border-b-2 shadow-md transition-all bg-[#1E3A5F] border-[#0F2240] hover:brightness-105 active:scale-95"
+              className="w-full text-white font-black text-xs uppercase px-5 py-3 rounded-xl border border-b-[4px] border-b-[#0F2240] border-[#203D63] shadow-md transition-all bg-[#1E3A5F] hover:brightness-105 real-press cursor-pointer"
             >
               Calculate & Unfold Solution Steps
             </button>
@@ -785,7 +785,7 @@ function QuizBlock({ block, onComplete, onMistake }: { block: any; onComplete?: 
                 type="button"
                 onClick={() => handleSelect(i)}
                 disabled={locked}
-                className={`group flex items-center gap-4 w-full text-left p-3.5 rounded-xl border transition-all font-bold ${bgStyle}`}
+                className={`group flex items-center gap-4 w-full text-left p-3.5 rounded-xl border border-b-[4px] transition-all font-bold real-press cursor-pointer ${bgStyle}`}
               >
                 <span className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-black transition-all ${
                   locked && i === block.correct 
@@ -935,7 +935,7 @@ function FillBlankBlock({ block, onComplete, onMistake }: { block: any; onComple
           <button
             onClick={check}
             disabled={inputs.some(v => !v.trim())}
-            className="w-full font-black text-xs uppercase px-5 py-3 rounded-xl border-b-2 shadow-md transition-all text-white bg-[#F97316] hover:brightness-105 active:scale-95 border-[#EA580C] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full font-black text-xs uppercase px-5 py-3 rounded-xl border border-b-[4px] border-b-[#EA580C] border-orange-600 shadow-md transition-all text-white bg-[#F97316] hover:brightness-105 real-press cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Submit for Academic Verification
           </button>
@@ -1465,24 +1465,24 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
             <div className="bg-black/20 border border-white/10 rounded-xl p-1 flex items-center select-none text-[10px] font-black tracking-wider uppercase">
               <button 
                 onClick={() => { setCategoryFilter("all"); synth.playTap(); }}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  categoryFilter === "all" ? "bg-[#FF6B2C] text-white" : "text-white/60 hover:text-white"
+                className={`px-3 py-1.5 rounded-lg transition-all real-press cursor-pointer ${
+                  categoryFilter === "all" ? "bg-[#FF6B2C] text-white border-b-2 border-b-[#C1410D]" : "text-white/60 hover:text-white"
                 }`}
               >
                 All ({blocks.length})
               </button>
               <button 
                 onClick={() => { setCategoryFilter("notes"); synth.playTap(); }}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  categoryFilter === "notes" ? "bg-[#FF6B2C] text-white" : "text-white/60 hover:text-white"
+                className={`px-3 py-1.5 rounded-lg transition-all real-press cursor-pointer ${
+                  categoryFilter === "notes" ? "bg-[#FF6B2C] text-white border-b-2 border-b-[#C1410D]" : "text-white/60 hover:text-white"
                 }`}
               >
                 Notes
               </button>
               <button 
                 onClick={() => { setCategoryFilter("challenges"); synth.playTap(); }}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  categoryFilter === "challenges" ? "bg-[#FF6B2C] text-white" : "text-white/60 hover:text-white"
+                className={`px-3 py-1.5 rounded-lg transition-all real-press cursor-pointer ${
+                  categoryFilter === "challenges" ? "bg-[#FF6B2C] text-white border-b-2 border-b-[#C1410D]" : "text-white/60 hover:text-white"
                 }`}
               >
                 Practices
@@ -1492,7 +1492,7 @@ export default function AziLearnNotesRenderer({ notes, username, onAwardXp }: Az
             {/* Config Toggle Trigger Button */}
             <button
               onClick={() => { setShowConfigDrawer(!showConfigDrawer); synth.playTap(); }}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 flex items-center justify-center text-white transition-all shadow-md active:scale-95"
+              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 border-b-[3px] border-b-white/5 flex items-center justify-center text-white transition-all shadow-md real-press cursor-pointer"
               title="Study Settings"
             >
               <SlidersHorizontal size={16} />

@@ -15,7 +15,8 @@ import {
   HelpCircle,
   Trophy,
   Calendar,
-  Filter
+  Filter,
+  School
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -39,6 +40,7 @@ interface Assignment {
   class_name: string;
   due_date: string;
   questions: Question[];
+  is_broadcast?: boolean;
 }
 
 export const StudentAssignmentView: React.FC<{ 
@@ -51,20 +53,68 @@ export const StudentAssignmentView: React.FC<{
   const [searchCode, setSearchCode] = useState('');
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchSchool, setSearchSchool] = useState('');
-  const [searchGrade, setSearchGrade] = useState(currentStudent?.grade || 'Grade 7');
+  const [searchTitle, setSearchTitle] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [assignments, setAssignments] = useState<any[]>([]);
   
-  const [studentName, setStudentName] = useState('');
-  const [studentId, setStudentId] = useState<string | null>(null);
+  const [studentName, setStudentName] = useState(() => {
+    if (currentStudent?.name) return currentStudent.name;
+    try {
+      const studentStr = localStorage.getItem('azilearn_student');
+      if (studentStr) {
+        const parsed = JSON.parse(studentStr);
+        return parsed.name || '';
+      }
+    } catch {}
+    return '';
+  });
 
+  const [searchGrade, setSearchGrade] = useState(() => {
+    if (currentStudent?.grade) return currentStudent.grade;
+    try {
+      const studentStr = localStorage.getItem('azilearn_student');
+      if (studentStr) {
+        const parsed = JSON.parse(studentStr);
+        return parsed.grade || 'Grade 7';
+      }
+    } catch {}
+    return 'Grade 7';
+  });
+
+  const [studentId, setStudentId] = useState<string | null>(() => {
+    if (currentStudent?.student_id) return currentStudent.student_id;
+    try {
+      const studentStr = localStorage.getItem('azilearn_student');
+      if (studentStr) {
+        const parsed = JSON.parse(studentStr);
+        return parsed.id || null;
+      }
+    } catch {}
+    return null;
+  });
+
+  const [isInitialized, setIsInitialized] = useState(false);
   useEffect(() => {
-    if (currentStudent) {
-      setStudentName(currentStudent.name || '');
-      setStudentId(currentStudent.student_id || null);
-      setSearchGrade(currentStudent.grade || 'Grade 7');
+    if (!isInitialized) {
+      if (currentStudent) {
+        setStudentName(currentStudent.name || '');
+        setStudentId(currentStudent.student_id || null);
+        setSearchGrade(currentStudent.grade || 'Grade 7');
+        setIsInitialized(true);
+      } else {
+        const studentStr = localStorage.getItem('azilearn_student');
+        if (studentStr) {
+          try {
+            const parsed = JSON.parse(studentStr);
+            setStudentName(parsed.name || '');
+            setStudentId(parsed.id || null);
+            setSearchGrade(parsed.grade || 'Grade 7');
+          } catch {}
+        }
+        setIsInitialized(true);
+      }
     }
-  }, [currentStudent]);
+  }, [currentStudent, isInitialized]);
 
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -75,30 +125,10 @@ export const StudentAssignmentView: React.FC<{
   const { showToast } = useToast();
 
   useEffect(() => {
-    if (step === 'entry') {
-      if (currentStudent) {
-        setSearchGrade(currentStudent.grade || 'Grade 7');
-        if (!preSelectedAssignmentId) {
-          fetchAssignments();
-        }
-      } else {
-        const studentStr = localStorage.getItem('azilearn_student');
-        if (studentStr) {
-          try {
-            const parsed = JSON.parse(studentStr);
-            setStudentName(parsed.name || '');
-            setStudentId(parsed.id || null);
-            setSearchGrade(parsed.grade || 'Grade 7');
-            if (!preSelectedAssignmentId) {
-              fetchAssignments();
-            }
-          } catch {}
-        } else {
-          setLoading(false);
-        }
-      }
+    if (step === 'entry' && isInitialized && !preSelectedAssignmentId) {
+      fetchAssignments();
     }
-  }, [step, currentStudent]);
+  }, [step, isInitialized, preSelectedAssignmentId]);
 
   useEffect(() => {
     if (preSelectedAssignmentId && step === 'entry') {
@@ -110,7 +140,26 @@ export const StudentAssignmentView: React.FC<{
     setLoading(true);
     setHasSearched(true);
     try {
-      const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool, searchCode);
+      const sId = currentStudent?.student_id || studentId;
+      const hasSearchFilters = searchCode.trim() || searchTeacher.trim() || searchSchool.trim() || searchTitle.trim();
+      
+      // If we have a logged-in student and NO search criteria are entered, use RPC to fetch their exact assignments
+      if (sId && sId.length === 36 && !hasSearchFilters) { 
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_get_assignments', {
+          p_student_id: sId
+        });
+
+        if (!rpcErr && rpcRes && rpcRes.success) {
+          setAssignments(rpcRes.assignments || []);
+          setLoading(false);
+          return;
+        } else if (rpcErr) {
+          console.warn("student_get_assignments RPC failed, falling back to searchAssignments:", rpcErr.message);
+        }
+      }
+
+      // Explicit search or fallback with filters (including title)
+      const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool, searchCode, searchTitle);
       setAssignments(data);
     } catch (err: any) {
       showToast(err.message, "error");
@@ -215,22 +264,45 @@ export const StudentAssignmentView: React.FC<{
 
       const score = mcqCount > 0 ? Math.round((correctCount / mcqCount) * 100) : null;
 
-      // 3. Insert submission
-      const { error: submitError } = await supabase
-        .from('assignment_submissions')
-        .insert([{
-          assignment_id: assignment.id,
-          student_id: studentId || studentName,
-          student_name: studentName,
-          answers: finalAnswers,
-          score: score,
-          status: 'pending'
-        }]);
+      // 3. Insert submission or submit via RPC
+      if (assignment.is_broadcast) {
+        const activeStudentId = currentStudent?.student_id || studentId;
+        if (!activeStudentId) {
+          throw new Error("Student identification is required to submit a school-wide assignment.");
+        }
+        
+        const { data, error: submitError } = await supabase.rpc('submit_broadcast_assignment', {
+          p_student_id: activeStudentId,
+          p_assignment_id: assignment.id,
+          p_answers: finalAnswers
+        });
 
-      if (submitError) throw submitError;
+        if (submitError) throw submitError;
 
-      setStep('success');
-      showToast("Assignment submitted! Excellent work! 🎉", "success");
+        const response = data as any;
+        if (response && response.success === false) {
+          throw new Error(response.message || "Failed to submit broadcast assignment.");
+        }
+
+        setStep('success');
+        showToast("School-wide assignment submitted! Excellent work! 🎉", "success");
+      } else {
+        const { error: submitError } = await supabase
+          .from('assignment_submissions')
+          .insert([{
+            assignment_id: assignment.id,
+            student_id: studentId || studentName,
+            student_name: studentName,
+            answers: finalAnswers,
+            score: score,
+            status: 'pending'
+          }]);
+
+        if (submitError) throw submitError;
+
+        setStep('success');
+        showToast("Assignment submitted! Excellent work! 🎉", "success");
+      }
     } catch (err: any) {
       console.error('Submission error:', err);
       showToast(err.message || "Failed to submit assignment.", "error");
@@ -488,10 +560,9 @@ export const StudentAssignmentView: React.FC<{
               <input 
                 type="text"
                 placeholder="e.g. John Kamau"
-                className={`w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm ${currentStudent ? 'opacity-70 bg-brand-bg/50 cursor-not-allowed' : ''}`}
+                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
                 value={studentName}
-                onChange={e => !currentStudent && setStudentName(e.target.value)}
-                readOnly={!!currentStudent}
+                onChange={e => setStudentName(e.target.value)}
               />
             </div>
           </div>
@@ -507,6 +578,18 @@ export const StudentAssignmentView: React.FC<{
                 className="w-full bg-white dark:bg-brand-card border border-brand-accent/20 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm placeholder:text-brand-muted/70"
               />
               <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-accent tracking-widest transition-all rounded-md border border-brand-accent/30">Assignment Code</span>
+            </div>
+
+            <div className="relative group">
+              <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
+              <input 
+                type="text"
+                placeholder="Search by Assignment Name..."
+                value={searchTitle}
+                onChange={e => setSearchTitle(e.target.value)}
+                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm placeholder:text-brand-muted/70"
+              />
+              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">Assignment Name</span>
             </div>
 
             <div className="relative group">
@@ -587,7 +670,15 @@ export const StudentAssignmentView: React.FC<{
                 <div className="flex flex-col gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{asgn.subject}</span>
+                      <div className="flex items-center gap-1.5">
+                        {asgn.is_broadcast && (
+                          <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-1.5 py-0.5 rounded-full border border-indigo-500/15">
+                            <School size={8} />
+                            School-wide
+                          </span>
+                        )}
+                        <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{asgn.subject}</span>
+                      </div>
                       <span className="text-[10px] font-bold text-amber-600 bg-amber-500/5 px-2 py-0.5 rounded-lg">{getDueStatus(asgn.due_date)}</span>
                     </div>
                     <h3 className="font-sans font-bold text-lg text-brand-text truncate">{asgn.title}</h3>

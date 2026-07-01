@@ -17,7 +17,8 @@ import {
   ListTodo,
   Save,
   Swords,
-  FolderOpen
+  FolderOpen,
+  School
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -47,6 +48,7 @@ interface Submission {
   answers: Record<string, any>;
   teacher_comment?: string;
   parent_feedback?: string;
+  is_broadcast?: boolean;
 }
 
 interface TeacherClassViewProps {
@@ -249,18 +251,13 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       // 2. Fetch submissions, acknowledgements, and exam attempts only for these students/assignments/exams
       const examIds = examsData.map(e => e.id);
       
-      const fetchSubmissionsAndAcks = assignmentsData.length > 0 ? [
-        supabase
-          .from('assignment_submissions')
-          .select('id, assignment_id, student_id, student_name, answers, score, teacher_comment, parent_feedback, status, submitted_at')
-          .in('assignment_id', assignmentsData.map(a => a.id)),
-        supabase
+      const fetchSubmissionsAndAcks = [
+        supabase.rpc('teacher_get_submissions', { p_teacher_id: teacherId }),
+        assignmentsData.length > 0 ? supabase
           .from('parent_acknowledgements')
           .select('assignment_id, student_id, acknowledged_at')
           .in('assignment_id', assignmentsData.map(a => a.id))
-      ] : [
-        Promise.resolve({ data: [], error: null }),
-        Promise.resolve({ data: [], error: null })
+          : Promise.resolve({ data: [], error: null })
       ];
 
       const fetchExamAttempts = examIds.length > 0 ? supabase
@@ -277,7 +274,16 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       if (acksRes.error) throw acksRes.error;
       if (examAttemptsRes.error) throw examAttemptsRes.error;
 
-      setSubmissions(submissionsRes.data || []);
+      let fetchedSubmissions: Submission[] = [];
+      if (submissionsRes.data) {
+        if (submissionsRes.data.success) {
+          fetchedSubmissions = submissionsRes.data.submissions || [];
+        } else if (Array.isArray(submissionsRes.data)) {
+          fetchedSubmissions = submissionsRes.data;
+        }
+      }
+
+      setSubmissions(fetchedSubmissions);
       setAcknowledgements(acksRes.data || []);
       setExamAttempts(examAttemptsRes.data || []);
     } catch (err: any) {
@@ -937,6 +943,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                         </span>
                       )}
                       <h2 className="text-2xl font-black tracking-tight">{selectedSubmission.student_name}</h2>
+                      {selectedSubmission.is_broadcast && (
+                        <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-1.5 py-0.5 rounded-full border border-indigo-500/15">
+                          <School size={8} />
+                          School-wide
+                        </span>
+                      )}
                     </div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Grading Submission</p>
                   </div>

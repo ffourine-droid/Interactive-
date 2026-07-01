@@ -13,7 +13,8 @@ import {
   Star,
   MessageCircle,
   User,
-  Save
+  Save,
+  School
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -144,13 +145,43 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       const studentIds = student.all_student_ids || (student.id ? [student.id] : []);
       const classIds = student.all_class_ids || (student.class_id ? [student.class_id] : []);
 
-      // Fetch assignments, exam attempts, and student progress securely via RPC
-      const [assignmentsRes, progressRes, examsRes] = await Promise.all([
-        supabase
-          .from('assignments')
-          .select('id, title, subject, grade, due_date, class_id, questions, created_at')
-          .in('class_id', classIds)
-          .order('created_at', { ascending: false }),
+      // Try RPC first for assignments
+      let fetchedAssignments: any[] = [];
+      let rpcSuccess = false;
+
+      if (student.id) {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_get_assignments', {
+          p_student_id: student.id
+        });
+        if (!rpcErr && rpcRes && rpcRes.success) {
+          fetchedAssignments = rpcRes.assignments || [];
+          rpcSuccess = true;
+        } else if (rpcErr) {
+          console.warn("student_get_assignments RPC failed inside parent dashboard:", rpcErr.message);
+        }
+      }
+
+      // Fetch normal class assignments and school broadcasts in parallel if RPC failed
+      const normalQuery = !rpcSuccess && classIds.length > 0
+        ? supabase
+            .from('assignments')
+            .select('id, title, subject, grade, due_date, class_id, class_name, questions, created_at, is_broadcast, school_name')
+            .in('class_id', classIds)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null });
+
+      const broadcastQuery = !rpcSuccess
+        ? supabase
+            .from('assignments')
+            .select('id, title, subject, grade, due_date, class_id, class_name, questions, created_at, is_broadcast, school_name')
+            .eq('is_broadcast', true)
+            .eq('grade', student.grade)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null });
+
+      const [assignmentsRes, broadcastsRes, progressRes, examsRes] = await Promise.all([
+        normalQuery,
+        broadcastQuery,
         supabase.rpc('get_student_progress_for_parent', {
           p_student_id: student.id || '',
           p_pin: parentPin
@@ -166,7 +197,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
           .order('submitted_at', { ascending: false })
       ]);
 
-      if (assignmentsRes.error) throw assignmentsRes.error;
+      if (!rpcSuccess && assignmentsRes.error) throw assignmentsRes.error;
       if (progressRes.error) throw progressRes.error;
       if (examsRes.error) throw examsRes.error;
 
@@ -175,7 +206,30 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         throw new Error(progressData.error || "Wrong parent PIN / access denied.");
       }
 
-      setAssignments(assignmentsRes.data || []);
+      if (rpcSuccess) {
+        setAssignments(fetchedAssignments);
+      } else {
+        const normalAssignments = assignmentsRes.data || [];
+        const broadcastAssignments = broadcastsRes.data || [];
+
+        // Filter broadcasts belonging to the student's school
+        const schoolBroadcasts = broadcastAssignments.filter(b => {
+          if (student.school_name && b.school_name) {
+            return b.school_name.trim().toLowerCase() === student.school_name.trim().toLowerCase();
+          }
+          return true;
+        });
+
+        // Merge and remove duplicates
+        const mergedMap = new Map<string, any>();
+        normalAssignments.forEach(a => mergedMap.set(a.id, a));
+        schoolBroadcasts.forEach(b => mergedMap.set(b.id, b));
+        const sortedAssignments = Array.from(mergedMap.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+
+        setAssignments(sortedAssignments);
+      }
       setExamAttempts(examsRes.data || []);
       setAcknowledgements(progressData.acknowledgements || []);
 
@@ -492,7 +546,13 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        {assignment.is_broadcast && (
+                          <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/15">
+                            <School size={10} />
+                            School-wide
+                          </span>
+                        )}
                         <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{assignment.subject}</span>
                         <div className="w-1 h-1 bg-brand-border rounded-full" />
                         <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${isOverdue ? 'text-red-500' : 'text-brand-muted'}`}>

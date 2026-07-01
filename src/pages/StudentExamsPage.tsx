@@ -31,13 +31,12 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
   const [pendingExamId, setPendingExamId] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
+  // Initialize searchGrade from student grade once when loaded
   useEffect(() => {
     if (currentStudent?.grade) {
       setSearchGrade(currentStudent.grade);
-    } else {
-      setSearchGrade(grade);
     }
-  }, [grade, currentStudent]);
+  }, [currentStudent?.grade]);
 
   useEffect(() => {
     fetchExams();

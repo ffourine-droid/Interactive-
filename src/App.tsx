@@ -23,6 +23,8 @@ import TeacherLogin from './pages/TeacherLogin';
 import TeacherClassView from './pages/TeacherClassView';
 import ParentPage from './pages/ParentPage';
 import LandingPage from './components/LandingPage';
+import { SchoolLogin } from './pages/SchoolLogin';
+import { SchoolDashboard } from './pages/SchoolDashboard';
 import StudentExamsPage from './pages/StudentExamsPage';
 import TakeExamPage from './pages/TakeExamPage';
 import CreateExamPage from './pages/CreateExamPage';
@@ -35,6 +37,8 @@ import ForumPage from './pages/ForumPage';
 import ModerationPage from './pages/ModerationPage';
 import NotesPage from './components/NotesPage';
 import LegalPage from './pages/LegalPage';
+import AdminSchoolCreate from './pages/AdminSchoolCreate';
+import StudentFindAssignment from './pages/StudentFindAssignment';
 
 import { examService } from './services/examService';
 import { StudentProvider, useStudent } from './contexts/StudentContext';
@@ -56,6 +60,14 @@ function AppContent() {
   const { currentStudent, loading: studentLoading, isIdentityModalOpen, setIsIdentityModalOpen } = useStudent();
   const [currentPage, setCurrentPage] = useState<Page>(() => {
     if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      if (path === '/admin/schools' || hash === '#/admin/schools' || hash === '#admin-schools') {
+        return 'admin-school-create';
+      }
+      if (path === '/school-assignment' || path === '/school-assignments' || hash === '#/school-assignment' || hash === '#/school-assignments' || hash === '#school-assignment') {
+        return 'school-assignment';
+      }
       const hasSeen = localStorage.getItem('azilearn_seen_landing');
       return hasSeen ? 'home' : 'landing';
     }
@@ -84,6 +96,20 @@ function AppContent() {
   useEffect(() => {
     // Seed prebuilt exams on startup
     examService.seedPrebuiltExams();
+  }, []);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      if (path === '/admin/schools' || hash === '#/admin/schools' || hash === '#admin-schools') {
+        setCurrentPage('admin-school-create');
+      } else if (path === '/school-assignment' || path === '/school-assignments' || hash === '#/school-assignment' || hash === '#/school-assignments' || hash === '#school-assignment') {
+        setCurrentPage('school-assignment');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
   useEffect(() => {
@@ -347,6 +373,46 @@ function AppContent() {
             </motion.div>
           </Suspense>
         );
+      case 'school-login':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading School Login..." />}>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              key="school-login"
+            >
+              <SchoolLogin 
+                onBack={() => setCurrentPage('landing')}
+                onSuccess={(schoolName) => {
+                  setCurrentPageProps({ schoolName });
+                  setCurrentPage('school-dashboard');
+                }}
+                onNavigateToTeacher={() => setCurrentPage('teacher-login')}
+                onNavigateToStudent={() => setCurrentPage('home')}
+              />
+            </motion.div>
+          </Suspense>
+        );
+      case 'school-dashboard':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading School Dashboard..." />}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              key="school-dashboard"
+            >
+              <SchoolDashboard 
+                schoolName={currentPageProps?.schoolName || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('azilearn_school') || '{}').school_name : '') || ''}
+                onLogout={() => {
+                  localStorage.removeItem('azilearn_school');
+                  setCurrentPage('landing');
+                }}
+              />
+            </motion.div>
+          </Suspense>
+        );
 /* Admin consolidated into admin-dashboard */
       case 'parent':
         return (
@@ -377,6 +443,19 @@ function AppContent() {
                   setCurrentPage(teacherData ? 'teacher-dashboard' : 'teacher-login');
                 } else if (portal === 'parent') {
                   setCurrentPage('parent');
+                } else if (portal === 'school') {
+                  const schoolData = localStorage.getItem('azilearn_school');
+                  if (schoolData) {
+                    try {
+                      const parsed = JSON.parse(schoolData);
+                      setCurrentPageProps({ schoolName: parsed.school_name });
+                      setCurrentPage('school-dashboard');
+                    } catch {
+                      setCurrentPage('school-login');
+                    }
+                  } else {
+                    setCurrentPage('school-login');
+                  }
                 } else {
                   setCurrentPage('home');
                 }
@@ -388,6 +467,18 @@ function AppContent() {
         return (
           <Suspense fallback={<LoadingFallback text="Entering Admin Terminal..." />}>
             <AdminDashboard onBack={() => setCurrentPage('home')} />
+          </Suspense>
+        );
+      case 'admin-school-create':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading Admin School Creator..." />}>
+            <AdminSchoolCreate onBack={() => setCurrentPage('home')} />
+          </Suspense>
+        );
+      case 'school-assignment':
+        return (
+          <Suspense fallback={<LoadingFallback text="Loading Assignment Finder..." />}>
+            <StudentFindAssignment onBack={() => setCurrentPage('home')} />
           </Suspense>
         );
       case 'story-quest':

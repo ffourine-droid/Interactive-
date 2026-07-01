@@ -3,7 +3,7 @@ import {
   ArrowLeft, Clock, CheckCircle2, XCircle, AlertCircle, 
   Loader2, Filter, Download, User, BarChart3, Star,
   Search, ExternalLink, Calendar, Save, MessageCircle,
-  FileText, Camera, Check
+  FileText, Camera, Check, School
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -186,11 +186,22 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
     <div className="min-h-screen bg-brand-bg flex flex-col p-4 sm:p-6">
       <div className="max-w-6xl mx-auto w-full space-y-6">
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-brand-card rounded-xl border border-brand-accent/10 hover:bg-brand-accent/10 transition-colors">
+          <button 
+            onClick={onBack} 
+            className="w-10 h-10 rounded-xl bg-brand-surface border border-brand-border border-b-[3px] border-b-brand-border/85 flex items-center justify-center text-brand-muted hover:text-brand-accent transition-all real-press cursor-pointer shrink-0"
+          >
             <ArrowLeft size={20} className="text-brand-accent" />
           </button>
-          <div>
-            <h1 className="font-sans font-bold text-xl text-brand-text truncate">{assignment.title}</h1>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-sans font-bold text-xl text-brand-text truncate">{assignment.title}</h1>
+              {assignment.is_broadcast && (
+                <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-1.5 py-0.5 rounded-full border border-indigo-500/15">
+                  <School size={8} />
+                  School-wide
+                </span>
+              )}
+            </div>
             <p className="text-[10px] font-black text-brand-muted uppercase tracking-widest">Assignment Results • {assignment.subject}</p>
           </div>
         </div>

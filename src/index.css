@@ -430,3 +430,150 @@ main, section, article, aside, nav, header, footer {
   max-width: 100%;
   overflow-x: hidden;
 }
+
+/* ─── REAL-LIFE TACTILE 3D BUTTONS (Duolingo & Zelda Modern Game-Feel style) ─── */
+.btn-tactile-primary {
+  position: relative;
+  background-color: #FF6B2C;
+  color: white !important;
+  font-weight: 800;
+  border-radius: 16px;
+  border: 1px solid #E05316;
+  border-bottom-width: 4px;
+  border-bottom-color: #C1410D;
+  box-shadow: 0 4px 12px rgba(255, 107, 44, 0.25);
+  transition: all 0.1s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transform: translateY(0);
+}
+
+.btn-tactile-primary:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+  box-shadow: 0 2px 6px rgba(255, 107, 44, 0.15);
+}
+
+.btn-tactile-emerald {
+  position: relative;
+  background-color: #10B981;
+  color: white !important;
+  font-weight: 800;
+  border-radius: 16px;
+  border: 1px solid #059669;
+  border-bottom-width: 4px;
+  border-bottom-color: #047857;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+  transition: all 0.1s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transform: translateY(0);
+}
+
+.btn-tactile-emerald:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.15);
+}
+
+.btn-tactile-blue {
+  position: relative;
+  background-color: #3B82F6;
+  color: white !important;
+  font-weight: 800;
+  border-radius: 16px;
+  border: 1px solid #2563EB;
+  border-bottom-width: 4px;
+  border-bottom-color: #1D4ED8;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  transition: all 0.1s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transform: translateY(0);
+}
+
+.btn-tactile-blue:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.15);
+}
+
+.btn-tactile-secondary {
+  position: relative;
+  background-color: var(--surface);
+  color: var(--text) !important;
+  font-weight: 700;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  border-bottom-width: 4px;
+  border-bottom-color: var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  transition: all 0.1s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transform: translateY(0);
+}
+
+.btn-tactile-secondary:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
+}
+
+/* Glassmorphic premium depth cards */
+.card-premium {
+  background: var(--surface);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-bottom: 3px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.04), 0 8px 16px -6px rgba(15, 23, 42, 0.03);
+  border-radius: 20px;
+  transition: all 0.2s ease;
+}
+
+.card-premium:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.06), 0 10px 20px -5px rgba(15, 23, 42, 0.04);
+}
+
+.dark .card-premium {
+  background: #1E293B;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 3px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 16px -6px rgba(0, 0, 0, 0.2);
+}
+
+/* Soft material light highlight */
+.gloss-overlay {
+  position: relative;
+  overflow: hidden;
+}
+
+.gloss-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 45%;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+/* Smooth micro-interactive scale press feedback */
+.real-press {
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease;
+}
+
+.real-press:active {
+  transform: scale(0.95) translateY(2px) !important;
+}
+
+/* Sleek Premium Input Fields with dynamic inner shadows */
+.input-premium {
+  background-color: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease-in-out;
+}
+
+.input-premium:focus {
+  border-color: #FF6B2C;
+  background-color: var(--surface);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02), 0 0 0 4px rgba(255, 107, 44, 0.15);
+  outline: none;
+}

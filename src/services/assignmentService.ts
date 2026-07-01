@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 
 export const assignmentService = {
-  async searchAssignments(grade: string, teacherName?: string, schoolName?: string, code?: string) {
+  async searchAssignments(grade: string, teacherName?: string, schoolName?: string, code?: string, title?: string) {
     // If a code is provided, try to find that specific assignment first (using share_code)
     if (code?.trim()) {
       const { data: codeAsgn, error: codeError } = await supabase
@@ -58,6 +58,15 @@ export const assignmentService = {
       if (term) {
         filtered = filtered.filter((asgn: any) => 
           asgn.teacher?.school_name?.toLowerCase().includes(term)
+        );
+      }
+    }
+
+    if (title) {
+      const term = title.toLowerCase().trim();
+      if (term) {
+        filtered = filtered.filter((asgn: any) => 
+          asgn.title?.toLowerCase().includes(term)
         );
       }
     }

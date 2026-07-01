@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { GraduationCap, ArrowLeft, Loader2, User, School, Lock } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import LinkSchoolField from '../components/LinkSchoolField';
 
 interface TeacherSignupProps {
   onBack: () => void;
@@ -16,6 +17,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
   const [formData, setFormData] = useState({
     name: '',
     schoolName: '',
+    schoolId: '',
     pin: '',
     confirmPin: ''
   });
@@ -58,6 +60,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
         .insert([{
           name: formData.name.trim(),
           school_name: formData.schoolName.trim(),
+          school_id: formData.schoolId || null,
           pin: formData.pin
         }])
         .select()
@@ -69,7 +72,8 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
         localStorage.setItem('azilearn_teacher', JSON.stringify({
           id: data.id,
           name: data.name,
-          school_name: data.school_name
+          school_name: data.school_name,
+          school_id: data.school_id
         }));
         await setTeacherConfig(data.id);
         showToast("Welcome to AziLearn!", "success");
@@ -121,16 +125,11 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted ml-1">School Name</label>
-            <div className="relative">
-              <School className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
-              <input 
-                type="text"
-                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-brand-text"
-                value={formData.schoolName}
-                onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
-              />
-            </div>
+            <LinkSchoolField
+              currentSchoolName={formData.schoolName}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, schoolName: text }))}
+              onLinked={(school) => setFormData(prev => ({ ...prev, schoolId: school.id, schoolName: school.name }))}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

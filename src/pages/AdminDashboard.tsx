@@ -34,7 +34,7 @@ import { FlashcardManager } from '../components/FlashcardManager';
 import { CurriculumNotesManager } from '../components/CurriculumNotesManager';
 import { forumService } from '../services/forumService';
 import { attachmentService } from '../services/attachmentService';
-import { ShieldAlert, Pin, Heart, MessageSquare, Repeat } from 'lucide-react';
+import { ShieldAlert, Pin, Heart, MessageSquare, Repeat, School } from 'lucide-react';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -43,7 +43,7 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards' | 'curriculum'>('overview');
+  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards' | 'curriculum' | 'schools'>('overview');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
 
@@ -94,6 +94,88 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
 
   const [isValidJson, setIsValidJson] = useState<boolean | null>(null);
 
+  // Schools state
+  const [schoolsList, setSchoolsList] = useState<any[]>([]);
+  const [schoolForm, setSchoolForm] = useState({
+    passphrase: "",
+    name: "",
+    pin: "",
+    contactName: "",
+    contactPhone: "",
+    county: "",
+  });
+  const [schoolCreationResult, setSchoolCreationResult] = useState<any>(null);
+  const [creatingSchool, setCreatingSchool] = useState(false);
+
+  const fetchSchoolsList = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('schools').select('*');
+      if (error) {
+        console.warn("Could not query 'schools' directly:", error.message);
+        const distinctSchools = Array.from(new Set(teachersList.map(t => t.school_name).filter(Boolean)));
+        setSchoolsList(distinctSchools.map((name, index) => ({
+          id: `fallback-${index}`,
+          name,
+          contact_name: 'Teacher registered',
+          county: 'AziLearn District'
+        })));
+      } else {
+        setSchoolsList(data || []);
+      }
+    } catch (err: any) {
+      console.error("Error loading schools list:", err);
+      const distinctSchools = Array.from(new Set(teachersList.map(t => t.school_name).filter(Boolean)));
+      setSchoolsList(distinctSchools.map((name, index) => ({
+        id: `fallback-${index}`,
+        name,
+        contact_name: 'Teacher registered',
+        county: 'AziLearn District'
+      })));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateSchool = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSchoolCreationResult(null);
+    setCreatingSchool(true);
+
+    try {
+      const { data, error } = await supabase.rpc("admin_create_school", {
+        p_admin_passphrase: schoolForm.passphrase.trim(),
+        p_name: schoolForm.name.trim(),
+        p_pin: schoolForm.pin.trim(),
+        p_contact_name: schoolForm.contactName.trim() || null,
+        p_contact_phone: schoolForm.contactPhone.trim() || null,
+        p_county: schoolForm.county.trim() || null,
+      });
+
+      if (error) {
+        setSchoolCreationResult({ success: false, message: error.message || "Failed to create school." });
+        showToast(error.message || "Failed to create school", "error");
+      } else {
+        const result = data as any;
+        if (result && result.success) {
+          setSchoolCreationResult({ success: true, message: `"${result.name}" created successfully!` });
+          showToast(`School "${result.name}" created successfully!`, "success");
+          setSchoolForm({ passphrase: "", name: "", pin: "", contactName: "", contactPhone: "", county: "" });
+          fetchSchoolsList();
+        } else {
+          setSchoolCreationResult({ success: false, message: result?.message || "Failed to create school." });
+          showToast(result?.message || "Failed to create school", "error");
+        }
+      }
+    } catch (err: any) {
+      console.error("Create school error:", err);
+      setSchoolCreationResult({ success: false, message: err.message || "An unexpected error occurred." });
+      showToast(err.message || "An unexpected error occurred", "error");
+    } finally {
+      setCreatingSchool(false);
+    }
+  };
+
   // Live ticking clock
   useEffect(() => {
     const clock = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -109,7 +191,8 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
           fetchSharedWorks(),
           fetchRequests(),
           fetchExperiments(),
-          fetchTeachersList()
+          fetchTeachersList(),
+          fetchSchoolsList()
         ]);
       } catch (err) {
         console.error("Hydration Error:", err);
@@ -126,6 +209,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
     else if (activeTab === 'teachers') fetchTeachersList();
     else if (activeTab === 'requests') fetchRequests();
     else if (activeTab === 'forum_moderation') fetchForumData();
+    else if (activeTab === 'schools') fetchSchoolsList();
   }, [activeTab]);
 
   const fetchForumData = async () => {
@@ -530,6 +614,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             { id: 'flashcards' as const, icon: BookOpen, label: 'Flashcards', badge: 0 },
             { id: 'requests' as const, icon: MessageCircle, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
             { id: 'teachers' as const, icon: Users, label: 'Teachers', badge: 0 },
+            { id: 'schools' as const, icon: School, label: 'Schools', badge: 0 },
             { id: 'forum_moderation' as const, icon: ShieldAlert, label: 'Forum Mod', badge: unresolvedFlags.length }
           ].map(tab => {
             const isSelected = activeTab === tab.id;
@@ -596,6 +681,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                 { id: 'flashcards' as const, label: 'Flashcards', badge: 0 },
                 { id: 'requests' as const, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
                 { id: 'teachers' as const, label: 'Teachers', badge: 0 },
+                { id: 'schools' as const, label: 'Schools', badge: 0 },
                 { id: 'forum_moderation' as const, label: 'Forum Mod', badge: unresolvedFlags.length }
               ].map(tab => {
                 const isSelected = activeTab === tab.id;
@@ -1159,6 +1245,194 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                      </tbody>
                   </table>
                </div>
+            </div>
+          )}
+
+          {/* ────── TABS: SCHOOLS MANAGEMENT ────── */}
+          {!loading && activeTab === 'schools' && (
+            <div className="space-y-6 animate-in fade-in duration-300 font-sans">
+              <div className="flex items-center justify-between px-2">
+                <div>
+                  <h3 className="text-xl font-black tracking-tight uppercase text-brand-text font-sans">School Accounts</h3>
+                  <p className="text-xs font-bold text-brand-muted uppercase tracking-widest mt-1">Create and manage institutional accounts on AziLearn</p>
+                </div>
+                <p className="text-[10px] font-black text-brand-muted bg-brand-surface border px-3 py-1.5 rounded-xl uppercase tracking-widest">
+                  {schoolsList.length} Schools
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* School Creation Form Column */}
+                <div className="lg:col-span-5">
+                  <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 space-y-4">
+                    <div>
+                      <h4 className="text-sm font-black uppercase tracking-wider text-brand-text flex items-center gap-2">
+                        <School size={16} className="text-brand-accent" />
+                        Create School Profile
+                      </h4>
+                      <p className="text-[9px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">Generate a secure account and PIN for school admin</p>
+                    </div>
+
+                    <form onSubmit={handleCreateSchool} className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Admin Passphrase</label>
+                        <input
+                          type="password"
+                          required
+                          value={schoolForm.passphrase}
+                          onChange={(e) => setSchoolForm({ ...schoolForm, passphrase: e.target.value })}
+                          placeholder="Enter secret passphrase"
+                          className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full"
+                          autoComplete="off"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">School Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={schoolForm.name}
+                          onChange={(e) => setSchoolForm({ ...schoolForm, name: e.target.value })}
+                          placeholder="e.g. Greenfield Academy"
+                          className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">4-Digit PIN</label>
+                        <input
+                          type="text"
+                          required
+                          inputMode="numeric"
+                          pattern="\d{4}"
+                          maxLength={4}
+                          value={schoolForm.pin}
+                          onChange={(e) => setSchoolForm({ ...schoolForm, pin: e.target.value })}
+                          placeholder="e.g. 1234"
+                          className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full font-mono tracking-[0.3em]"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Contact Name (Optional)</label>
+                        <input
+                          type="text"
+                          value={schoolForm.contactName}
+                          onChange={(e) => setSchoolForm({ ...schoolForm, contactName: e.target.value })}
+                          placeholder="e.g. Principal Jane Smith"
+                          className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Contact Phone (Optional)</label>
+                        <input
+                          type="text"
+                          value={schoolForm.contactPhone}
+                          onChange={(e) => setSchoolForm({ ...schoolForm, contactPhone: e.target.value })}
+                          placeholder="e.g. +1 555-0199"
+                          className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">County (Optional)</label>
+                        <input
+                          type="text"
+                          value={schoolForm.county}
+                          onChange={(e) => setSchoolForm({ ...schoolForm, county: e.target.value })}
+                          placeholder="e.g. Nairobi, Kilifi, etc."
+                          className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full"
+                        />
+                      </div>
+
+                      {schoolCreationResult && (
+                        <div className={`p-4 rounded-xl border text-xs font-semibold ${
+                          schoolCreationResult.success
+                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                            : 'bg-red-500/10 border-red-500/20 text-red-400'
+                        }`}>
+                          {schoolCreationResult.message}
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={creatingSchool}
+                        className="bg-brand-accent text-white px-5 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-brand-accent/15 hover:scale-[1.02] active:scale-[0.98] transition-all w-full flex items-center justify-center gap-2"
+                      >
+                        {creatingSchool ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            Creating School...
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={14} />
+                            Create School Account
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Directory list of registered schools */}
+                <div className="lg:col-span-7">
+                  <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 space-y-4">
+                    <div>
+                      <h4 className="text-sm font-black uppercase tracking-wider text-brand-text">Active Schools Directory</h4>
+                      <p className="text-[9px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">Database entries of registered academic centers</p>
+                    </div>
+
+                    <div className="overflow-x-auto border border-brand-border/40 rounded-2xl">
+                      <table className="w-full text-left">
+                        <thead className="bg-brand-bg/50 border-b border-brand-border text-[9px] font-black uppercase tracking-widest text-brand-muted">
+                          <tr>
+                            <th className="px-5 py-3 font-sans">School name</th>
+                            <th className="px-5 py-3 font-sans">County / Region</th>
+                            <th className="px-5 py-3 font-sans">Primary Contact</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-brand-border text-xs">
+                          {schoolsList.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="px-5 py-8 text-center text-brand-muted font-bold uppercase tracking-wider">
+                                No schools found in database
+                              </td>
+                            </tr>
+                          ) : (
+                            schoolsList.map((sch) => (
+                              <tr key={sch.id || sch.name} className="hover:bg-brand-bg/30">
+                                <td className="px-5 py-4 font-black text-brand-text">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-[10px]">
+                                      🏫
+                                    </span>
+                                    <span>{sch.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-5 py-4 font-bold text-brand-muted">{sch.county || 'Unspecified'}</td>
+                                <td className="px-5 py-4 text-brand-muted font-medium">
+                                  {sch.contact_name ? (
+                                    <div>
+                                      <p className="font-bold text-brand-text text-[11px]">{sch.contact_name}</p>
+                                      {sch.contact_phone && <p className="text-[10px] text-brand-muted font-mono">{sch.contact_phone}</p>}
+                                    </div>
+                                  ) : (
+                                    <span className="opacity-40">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

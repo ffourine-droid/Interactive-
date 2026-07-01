@@ -39,7 +39,11 @@ export type Page =
   | 'moderation'
   | 'notes'
   | 'terms'
-  | 'privacy';
+  | 'privacy'
+  | 'school-login'
+  | 'school-dashboard'
+  | 'admin-school-create'
+  | 'school-assignment';
 
 export interface Question {
   index: number;
