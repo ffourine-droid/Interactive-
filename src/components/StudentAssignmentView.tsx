@@ -300,20 +300,20 @@ export const StudentAssignmentView: React.FC<{
         setStep('success');
         showToast("School-wide assignment submitted! Excellent work! 🎉", "success");
       } else {
-        // Direct table insert for regular (non-broadcast) assignments
-        const activeStudentId = currentStudent?.student_id || studentId || studentName;
-        const { error: submitError } = await supabase
-          .from('assignment_submissions')
-          .insert({
-            assignment_id: assignment.id,
-            student_id: activeStudentId,
-            student_name: studentName,
-            answers: finalAnswers,
-            score: score,
-            status: 'pending'
-          });
+        // Submit regular (non-broadcast) assignments via RPC to ensure teacher_id resolution and status alignment
+        const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', {
+          p_assignment_id: assignment.id,
+          p_student_name: studentName.trim(),
+          p_answers: finalAnswers,
+          p_teacher_id: assignment.teacher_id ?? null,
+        });
 
         if (submitError) throw submitError;
+
+        const response = rpcRes as any;
+        if (response && response.success === false) {
+          throw new Error(response.message || "Failed to submit assignment.");
+        }
 
         setStep('success');
         showToast("Assignment submitted! Excellent work! 🎉", "success");
