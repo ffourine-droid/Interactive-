@@ -9,6 +9,7 @@ interface MaterialViewerProps {
   fileType: string;
   fileUrl: string;
   fileName: string;
+  showDownload?: boolean;
 }
 
 export const MaterialViewer: React.FC<MaterialViewerProps> = ({
@@ -18,6 +19,7 @@ export const MaterialViewer: React.FC<MaterialViewerProps> = ({
   fileType,
   fileUrl,
   fileName,
+  showDownload = false,
 }) => {
   const [iframeLoading, setIframeLoading] = useState(true);
   const [txtContent, setTxtContent] = useState<string | null>(null);
@@ -96,17 +98,19 @@ export const MaterialViewer: React.FC<MaterialViewerProps> = ({
 
           <div className="flex items-center gap-2.5 shrink-0">
             {/* Download Button */}
-            <a
-              href={fileUrl}
-              download={fileName}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-brand-bg hover:bg-brand-border/40 border border-brand-border/60 text-brand-text rounded-xl transition-all active:scale-95 shadow-sm"
-              title="Download original file"
-            >
-              <Download size={13} />
-              <span className="hidden sm:inline">Download</span>
-            </a>
+            {showDownload && (
+              <a
+                href={fileUrl}
+                download={fileName}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-brand-bg hover:bg-brand-border/40 border border-brand-border/60 text-brand-text rounded-xl transition-all active:scale-95 shadow-sm"
+                title="Download original file"
+              >
+                <Download size={13} />
+                <span className="hidden sm:inline">Download</span>
+              </a>
+            )}
 
             {/* Close Button */}
             <button
@@ -209,16 +213,18 @@ export const MaterialViewer: React.FC<MaterialViewerProps> = ({
                   <FileText className="text-brand-muted" size={40} />
                   <div>
                     <h5 className="text-xs font-bold text-brand-text">Unable to preview raw text</h5>
-                    <p className="text-[10px] text-brand-muted mt-1">Please download the text file to read it on your device.</p>
+                    {showDownload && <p className="text-[10px] text-brand-muted mt-1">Please download the text file to read it on your device.</p>}
                   </div>
-                  <a
-                    href={fileUrl}
-                    download={fileName}
-                    className="px-4 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    <Download size={13} />
-                    Download File
-                  </a>
+                  {showDownload && (
+                    <a
+                      href={fileUrl}
+                      download={fileName}
+                      className="px-4 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                    >
+                      <Download size={13} />
+                      Download File
+                    </a>
+                  )}
                 </div>
               )}
             </div>
@@ -236,14 +242,20 @@ export const MaterialViewer: React.FC<MaterialViewerProps> = ({
                   This file type ({fileType.toUpperCase()}) cannot be opened inline natively.
                 </p>
               </div>
-              <a
-                href={fileUrl}
-                download={fileName}
-                className="w-full py-3 bg-brand-accent hover:bg-brand-accent/90 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
-              >
-                <Download size={14} />
-                Download to device
-              </a>
+              {showDownload ? (
+                <a
+                  href={fileUrl}
+                  download={fileName}
+                  className="w-full py-3 bg-brand-accent hover:bg-brand-accent/90 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
+                >
+                  <Download size={14} />
+                  Download to device
+                </a>
+              ) : (
+                <span className="text-[11px] font-semibold text-brand-muted bg-brand-bg/65 border border-brand-border/40 px-5 py-3 rounded-2xl">
+                  Contact teacher for resource access
+                </span>
+              )}
             </div>
           )}
           

@@ -379,7 +379,7 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
               <button
                 onClick={() => handleOpen(mat)}
                 className="px-4 py-2 bg-brand-surface hover:bg-brand-bg border border-brand-border text-xs font-bold rounded-xl text-brand-text active:scale-95 transition-all shadow-sm flex items-center gap-1.5 leading-none shrink-0"
-                title="Open download link"
+                title="View document"
               >
                 <ExternalLink size={12} />
                 Open
@@ -423,6 +423,7 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
             fileType={activeViewer.fileType}
             fileUrl={activeViewer.fileUrl}
             fileName={activeViewer.fileName}
+            showDownload={isTeacher}
           />
         )}
       </AnimatePresence>

@@ -124,7 +124,7 @@ export default function LinkSchoolField({ teacherId, currentSchoolName, onLinked
       )}
 
       {results.length > 0 && (
-        <div className="mt-2 bg-[#101F38] border border-brand-border rounded-2xl overflow-hidden absolute w-full z-50 shadow-2xl divide-y divide-brand-border/30 max-h-60 overflow-y-auto no-scrollbar">
+        <div className="mt-2 bg-brand-surface border border-brand-border rounded-2xl overflow-hidden absolute w-full z-50 shadow-2xl divide-y divide-brand-border/30 max-h-60 overflow-y-auto no-scrollbar">
           {results.map((school) => (
             <button
               key={school.id}
