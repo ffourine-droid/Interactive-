@@ -47,6 +47,7 @@ export const TeacherMaterialsUpload: React.FC<TeacherMaterialsUploadProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [subject, setSubject] = useState(initialSubject || '');
+  const [materialCategory, setMaterialCategory] = useState<'assignment' | 'assessment' | 'group_work' | 'resource' | 'notes' | 'other'>('resource');
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState('');
@@ -150,7 +151,7 @@ export const TeacherMaterialsUpload: React.FC<TeacherMaterialsUploadProps> = ({
         p_file_type: fileType,
         p_storage_path: storagePath,
         p_file_size: file.size,
-        p_material_category: fileType,
+        p_material_category: materialCategory,
         p_is_visible: true
       });
 
@@ -260,7 +261,7 @@ export const TeacherMaterialsUpload: React.FC<TeacherMaterialsUploadProps> = ({
                 />
               </div>
 
-              {/* Subject Input */}
+              {/* Subject & Category Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase font-bold text-brand-muted tracking-wider pl-1">Subject / Field</label>
@@ -272,12 +273,28 @@ export const TeacherMaterialsUpload: React.FC<TeacherMaterialsUploadProps> = ({
                     className="w-full text-xs font-bold bg-brand-bg/50 border border-brand-border/50 focus:border-brand-accent/40 rounded-xl px-3.5 py-2.5 outline-none text-brand-text transition-colors"
                   />
                 </div>
-                {/* Visual indicator of designated filters */}
-                <div className="bg-[#FF6B2C]/5 border border-[#FF6B2C]/10 rounded-xl p-2.5 flex items-start gap-2 h-full">
-                  <Info size={12} className="text-[#FF6B2C] shrink-0 mt-0.5" />
-                  <div className="text-[9px] font-bold text-brand-muted leading-tight">
-                    <span className="text-brand-text">Class Filtering:</span> This will be shared with classes assigned to <span className="text-brand-accent">{grade || 'this grade'}</span> automatically.
-                  </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-brand-muted tracking-wider pl-1">Material Category *</label>
+                  <select
+                    value={materialCategory}
+                    onChange={(e) => setMaterialCategory(e.target.value as any)}
+                    className="w-full text-xs font-bold bg-brand-bg/50 border border-brand-border/50 focus:border-brand-accent/40 rounded-xl px-3.5 py-2.5 outline-none text-brand-text transition-colors"
+                  >
+                    <option value="resource" className="bg-brand-surface font-bold text-brand-text">Resource / General</option>
+                    <option value="notes" className="bg-brand-surface font-bold text-brand-text">Lecture Notes</option>
+                    <option value="assignment" className="bg-brand-surface font-bold text-brand-text">Assignment Sheet</option>
+                    <option value="assessment" className="bg-brand-surface font-bold text-brand-text">Assessment / Quiz</option>
+                    <option value="group_work" className="bg-brand-surface font-bold text-brand-text">Group Work Activity</option>
+                    <option value="other" className="bg-brand-surface font-bold text-brand-text">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Class Filtering Information */}
+              <div className="bg-[#FF6B2C]/5 border border-[#FF6B2C]/10 rounded-xl p-2.5 flex items-start gap-2">
+                <Info size={12} className="text-[#FF6B2C] shrink-0 mt-0.5" />
+                <div className="text-[9px] font-bold text-brand-muted leading-tight">
+                  <span className="text-brand-text">Class Filtering:</span> This will be shared with classes assigned to <span className="text-brand-accent">{grade || 'this grade'}</span> automatically.
                 </div>
               </div>
 

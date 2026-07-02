@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from './Toast';
+import { useStudent } from '../contexts/StudentContext';
+import { MaterialViewer } from './MaterialViewer';
 import { 
   FileText, 
   Image as ImageIcon, 
@@ -35,6 +37,7 @@ interface Material {
 
 interface MaterialsListProps {
   teacherId?: string;
+  studentId?: string | null;
   classId?: string | null;
   grade?: string | null;
   subject?: string | null;
@@ -51,6 +54,7 @@ const formatBytes = (bytes: number): string => {
 
 export const MaterialsList: React.FC<MaterialsListProps> = ({
   teacherId,
+  studentId,
   classId,
   grade,
   subject,
@@ -58,40 +62,75 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
   refreshKey = 0,
 }) => {
   const { showToast } = useToast();
+  const { currentStudent } = useStudent();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [activeViewer, setActiveViewer] = useState<{
+    isOpen: boolean;
+    title: string;
+    fileType: string;
+    fileUrl: string;
+    fileName: string;
+  } | null>(null);
 
   const fetchMaterials = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('teacher_materials')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (teacherId) query = query.eq('teacher_id', teacherId);
-      
-      // Filter logically:
-      // If we are showing class-specific material:
-      if (classId) {
-        query = query.eq('class_id', classId);
-      } else if (grade) {
-        // If loaded for general grade:
-        query = query.eq('grade', grade);
-      }
-      
-      if (subject && subject !== 'All' && subject !== 'all') {
-        query = query.eq('subject', subject);
-      }
-
       if (!isTeacher) {
-        query = query.eq('is_visible', true);
-      }
+        const activeStudentId = studentId || currentStudent?.student_id;
+        
+        if (!activeStudentId) {
+          setMaterials([]);
+          setLoading(false);
+          return;
+        }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      setMaterials(data || []);
+        const { data, error } = await supabase.rpc('student_get_materials', {
+          p_student_id: activeStudentId
+        });
+
+        if (error) throw error;
+        
+        let fetchedMaterials = data?.success ? (data.materials || []) : [];
+        
+        // Filter logically to match standard grade / class / subject filters requested on the frontend UI
+        if (classId) {
+          fetchedMaterials = fetchedMaterials.filter((m: any) => m.class_id === classId);
+        } else if (grade) {
+          fetchedMaterials = fetchedMaterials.filter((m: any) => m.grade === grade);
+        }
+        
+        if (subject && subject !== 'All' && subject !== 'all') {
+          fetchedMaterials = fetchedMaterials.filter((m: any) => m.subject?.toLowerCase() === subject.toLowerCase());
+        }
+
+        setMaterials(fetchedMaterials);
+      } else {
+        let query = supabase
+          .from('teacher_materials')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (teacherId) query = query.eq('teacher_id', teacherId);
+        
+        // Filter logically:
+        // If we are showing class-specific material:
+        if (classId) {
+          query = query.eq('class_id', classId);
+        } else if (grade) {
+          // If loaded for general grade:
+          query = query.eq('grade', grade);
+        }
+        
+        if (subject && subject !== 'All' && subject !== 'all') {
+          query = query.eq('subject', subject);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        setMaterials(data || []);
+      }
     } catch (err: any) {
       console.error('Error fetching teacher materials:', err);
     } finally {
@@ -101,38 +140,29 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
 
   useEffect(() => {
     fetchMaterials();
-  }, [teacherId, classId, grade, subject, refreshKey]);
+  }, [teacherId, studentId, currentStudent?.student_id, classId, grade, subject, refreshKey]);
 
   const getFileUrl = (storagePath: string) => {
     const { data } = supabase.storage.from('materials').getPublicUrl(storagePath);
     return data.publicUrl;
   };
 
-  const handleOpen = async (material: Material) => {
+  const handleOpen = (material: Material) => {
     try {
-      // Generate a signed URL for 60 seconds of secure downloading access time 
-      const { data, error } = await supabase.storage
-        .from('materials')
-        .createSignedUrl(material.storage_path, 60);
-      
-      if (error || !data?.signedUrl) {
-        // Fall back to public URL
-        const publicUrl = getFileUrl(material.storage_path);
-        if (publicUrl) {
-          window.open(publicUrl, '_blank', 'noreferrer,noopener');
-        } else {
-          showToast('Could not fetch public download link.', 'error');
-        }
+      const publicUrl = getFileUrl(material.storage_path);
+      if (!publicUrl) {
+        showToast('Could not fetch file preview URL.', 'error');
         return;
       }
-      window.open(data.signedUrl, '_blank', 'noreferrer,noopener');
+      setActiveViewer({
+        isOpen: true,
+        title: material.title,
+        fileType: material.file_type,
+        fileUrl: publicUrl,
+        fileName: material.file_name,
+      });
     } catch (err) {
-      const publicUrl = getFileUrl(material.storage_path);
-      if (publicUrl) {
-        window.open(publicUrl, '_blank', 'noreferrer,noopener');
-      } else {
-        showToast('Could not open file.', 'error');
-      }
+      showToast('Could not open file viewer.', 'error');
     }
   };
 
@@ -383,6 +413,19 @@ export const MaterialsList: React.FC<MaterialsListProps> = ({
           </motion.div>
         );
       })}
+
+      <AnimatePresence>
+        {activeViewer && activeViewer.isOpen && (
+          <MaterialViewer
+            isOpen={activeViewer.isOpen}
+            onClose={() => setActiveViewer(null)}
+            title={activeViewer.title}
+            fileType={activeViewer.fileType}
+            fileUrl={activeViewer.fileUrl}
+            fileName={activeViewer.fileName}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
