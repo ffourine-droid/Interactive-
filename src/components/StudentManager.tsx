@@ -83,14 +83,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
         console.warn("RPC fetch failed, using fallback:", rpcErr);
       }
 
-      if (!fetchedStudents || fetchedStudents.length === 0) {
-        const { data, error } = await supabase
-          .from('students')
-          .select('id, name, parent_code, grade')
-          .eq('class_id', classId);
-        if (error) throw error;
-        fetchedStudents = data || [];
-      }
+      // Fallback removed to prevent RLS query blocks
 
       const sorted = [...fetchedStudents].sort((a, b) => {
         return (a.parent_code || '').localeCompare(b.parent_code || '');
@@ -140,20 +133,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
       }
 
       if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: directData } = await supabase
-          .from('students')
-          .select(`
-            name,
-            parent_code,
-            classes!inner (
-              teachers!inner (
-                school_name
-              )
-            )
-          `)
-          .eq('classes.teachers.school_name', schoolName)
-          .eq('grade', grade);
-        schoolStudents = directData || [];
+        const { data: rpcRes } = await supabase.rpc('get_school_grade_students_for_indexing', {
+          p_school_name: schoolName,
+          p_grade: grade
+        });
+        schoolStudents = rpcRes?.success ? rpcRes.students : [];
       }
 
       // Check if student with this name already exists in this school/grade
@@ -176,14 +160,20 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
         parent_code = nextIndex.toString().padStart(4, '0');
       }
 
-      const { error } = await supabase
-        .from('students')
-        .insert([{
-          name: newStudentName.trim(),
-          class_id: classId,
-          grade: grade,
-          parent_code: parent_code
-        }]);
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      const teacher = teacherStr ? JSON.parse(teacherStr) : null;
+      const teacherId = teacher?.id;
+      const schoolId = teacher?.school_id;
+
+      const { error } = await supabase.rpc('teacher_add_student', {
+        p_teacher_id: teacherId,
+        p_class_id: classId,
+        p_name: newStudentName.trim(),
+        p_grade: grade,
+        p_school_name: schoolName || null,
+        p_index_number: parent_code,
+        p_school_id: schoolId || null
+      });
 
       if (error) throw error;
 
@@ -202,13 +192,17 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
   const handleUpdateStudent = async (studentId: string) => {
     if (!editName.trim() || !editCode.trim()) return;
     try {
-      const { error } = await supabase
-        .from('students')
-        .update({ 
-          name: editName.trim(),
-          parent_code: editCode.trim().padStart(4, '0')
-        })
-        .eq('id', studentId);
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      const teacher = teacherStr ? JSON.parse(teacherStr) : null;
+      const teacherId = teacher?.id;
+
+      const { error } = await supabase.rpc('teacher_update_student', {
+        p_teacher_id: teacherId,
+        p_student_id: studentId,
+        p_name: editName.trim(),
+        p_index_number: editCode.trim().padStart(4, '0'),
+        p_school_name: schoolName
+      });
 
       if (error) throw error;
       showToast("Student updated", "success");
@@ -224,10 +218,14 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
     if (!window.confirm(`Are you sure you want to remove ${name}? This will delete all their submissions.`)) return;
     
     try {
-      const { error } = await supabase
-        .from('students')
-        .delete()
-        .eq('id', studentId);
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      const teacher = teacherStr ? JSON.parse(teacherStr) : null;
+      const teacherId = teacher?.id;
+
+      const { error } = await supabase.rpc('teacher_delete_student', {
+        p_teacher_id: teacherId,
+        p_student_id: studentId
+      });
 
       if (error) throw error;
       showToast("Student removed", "success");
@@ -283,22 +281,13 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
       }
 
       if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: directData, error: fetchError } = await supabase
-          .from('students')
-          .select(`
-            name,
-            parent_code,
-            classes!inner (
-              teachers!inner (
-                school_name
-              )
-            )
-          `)
-          .eq('classes.teachers.school_name', schoolName)
-          .eq('grade', grade);
+        const { data: rpcRes, error: fetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
+          p_school_name: schoolName,
+          p_grade: grade
+        });
 
         if (fetchError) throw fetchError;
-        schoolStudents = directData || [];
+        schoolStudents = rpcRes?.success ? rpcRes.students : [];
       }
 
       const existingCodes = new Set(
@@ -339,15 +328,32 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
           name,
           class_id: classId,
           grade: grade,
-          parent_code: parent_code
+          parent_code: parent_code,
+          school_name: schoolName,
+          index_number: parent_code
         });
       }
 
-      const { error } = await supabase
-        .from('students')
-        .insert(newStudents);
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      const teacher = teacherStr ? JSON.parse(teacherStr) : null;
+      const teacherId = teacher?.id;
+      const schoolId = teacher?.school_id;
 
-      if (error) throw error;
+      const rpcPromises = newStudents.map(student => 
+        supabase.rpc('teacher_add_student', {
+          p_teacher_id: teacherId,
+          p_class_id: classId,
+          p_name: student.name.trim(),
+          p_grade: grade,
+          p_school_name: schoolName || null,
+          p_index_number: student.parent_code,
+          p_school_id: schoolId || null
+        })
+      );
+
+      const rpcResults = await Promise.all(rpcPromises);
+      const firstError = rpcResults.find(res => res.error);
+      if (firstError) throw firstError.error;
 
       showToast(`Successfully added ${newStudents.length} students`, "success");
       setBulkNames('');
@@ -398,21 +404,13 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
       }
 
       if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: directData, error: schoolFetchError } = await supabase
-          .from('students')
-          .select(`
-            parent_code,
-            classes!inner (
-              teachers!inner (
-                school_name
-              )
-            )
-          `)
-          .eq('classes.teachers.school_name', schoolName)
-          .eq('grade', grade);
+        const { data: rpcRes, error: schoolFetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
+          p_school_name: schoolName,
+          p_grade: grade
+        });
 
         if (schoolFetchError) throw schoolFetchError;
-        schoolStudents = directData || [];
+        schoolStudents = rpcRes?.success ? rpcRes.students : [];
       }
 
       const existingCodes = new Set(
@@ -431,11 +429,18 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
         const newCode = currentCode.toString().padStart(4, '0');
         existingCodes.add(currentCode);
         
+        const teacherStr = localStorage.getItem('azilearn_teacher');
+        const teacher = teacherStr ? JSON.parse(teacherStr) : null;
+        const teacherId = teacher?.id;
+
         updates.push(
-          supabase
-            .from('students')
-            .update({ parent_code: newCode })
-            .eq('id', student.id)
+          supabase.rpc('teacher_update_student', {
+            p_teacher_id: teacherId,
+            p_student_id: student.id,
+            p_name: student.name,
+            p_index_number: newCode,
+            p_school_name: schoolName
+          })
         );
       }
 

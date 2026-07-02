@@ -188,16 +188,17 @@ async function resolveAuthor(authorId: string): Promise<{ name: string; role: 's
       return authorCache[authorId];
     }
 
-    // 2. Check if they are a student
-    const { data: student } = await supabase
-      .from('students')
-      .select('name')
-      .eq('id', authorId)
-      .maybeSingle();
+    // 2. Check if they are a student using RPC
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('get_public_student_name', {
+      p_student_id: authorId
+    });
 
-    if (student) {
-      authorCache[authorId] = { name: student.name, role: 'student' };
-      return authorCache[authorId];
+    if (!rpcErr && rpcRes) {
+      const resolvedName = typeof rpcRes === 'string' ? rpcRes : (rpcRes.name || rpcRes.p_name || rpcRes.student_name);
+      if (resolvedName) {
+        authorCache[authorId] = { name: resolvedName, role: 'student' };
+        return authorCache[authorId];
+      }
     }
   } catch (e) {
     console.warn('Error resolving author database profile:', e);

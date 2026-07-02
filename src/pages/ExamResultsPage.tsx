@@ -254,13 +254,6 @@ export default function ExamResultsPage({
           console.warn("RPC fetch failed in ExamResultsPage:", e);
         }
 
-        if (studentsData.length === 0) {
-          const { data, error } = await supabase
-            .from("students")
-            .select("id, name")
-            .eq("class_id", examData.class_id);
-          if (!error) studentsData = data || [];
-        }
         setClassStudents(studentsData);
       }
     } catch (err: any) {

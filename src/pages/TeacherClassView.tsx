@@ -20,7 +20,7 @@ import {
   FolderOpen,
   School
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { ParentCodeTable } from '../components/ParentCodeTable';
 import { StudentManager } from '../components/StudentManager';
@@ -136,6 +136,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     };
   }, [classId]);
 
+  const [classGrade, setClassGrade] = useState<string>('');
+
   const handleGradeSubmission = async () => {
     if (!selectedSubmission) return;
     const score = parseInt(gradeInput);
@@ -184,8 +186,11 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     const teacherId = tData.id;
 
     try {
-      // 1. Fetch assignments, students, exams, and teacher info in parallel
-      const [assignmentsRes, studentsRes, teacherRes, examsRes] = await Promise.all([
+      // Set the teacher_id session config inside Postgres before running queries/RPCs
+      await setTeacherConfig(teacherId);
+
+      // 1. Fetch assignments, students, exams, teacher info, and class info in parallel
+      const [assignmentsRes, studentsRes, teacherRes, examsRes, classRes] = await Promise.all([
         supabase
           .from('assignments')
           .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at, share_code, is_broadcast')
@@ -209,17 +214,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                   fetchedStudents = [data];
                 }
               }
-              if (fetchedStudents.length > 0) {
-                return { data: fetchedStudents, error: null };
-              }
+              return { data: fetchedStudents, error: null };
             }
           } catch (e) {
-            console.warn("RPC student load failed in ClassView, trying direct:", e);
+            console.warn("RPC student load failed in ClassView:", e);
           }
-          return supabase
-            .from('students')
-            .select('id, name, parent_code, grade')
-            .eq('class_id', classId);
+          return { data: [], error: null };
         })(),
         supabase
           .from('teachers')
@@ -230,7 +230,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           .from('exams')
           .select('*')
           .eq('class_id', classId)
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('classes')
+          .select('id, name, grade')
+          .eq('id', classId)
+          .maybeSingle()
       ]);
 
       if (assignmentsRes.error) throw assignmentsRes.error;
@@ -246,6 +251,9 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       setStudents(studentsData);
       setTeacher(teacherRes.data);
       setExams(examsData);
+      if (classRes && !classRes.error && classRes.data) {
+        setClassGrade(classRes.data.grade || '');
+      }
 
       // 2. Fetch submissions, acknowledgements, and exam attempts only for these students/assignments/exams
       const examIds = examsData.map(e => e.id);
@@ -430,7 +438,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                 >
                   <StudentManager 
                     classId={classId} 
-                    grade={assignments[0]?.grade || students[0]?.grade} 
+                    grade={classGrade || assignments[0]?.grade || (students[0] as any)?.grade} 
                     schoolName={teacher?.school_name}
                     onUpdate={fetchInitialData}
                   />

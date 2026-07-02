@@ -84,17 +84,27 @@ export const assignmentService = {
     if (error) throw error;
     if (!data) throw new Error("Assignment not found.");
 
-    // Look for student in class
+    // Look for student in class using RPC
     let studentId = studentName;
     if (data.class_id) {
-      const { data: studentData } = await supabase
-        .from('students')
-        .select('id')
-        .eq('class_id', data.class_id)
-        .ilike('name', studentName.trim())
-        .maybeSingle();
-      
-      if (studentData) studentId = studentData.id;
+      if (typeof window !== 'undefined') {
+        let deviceId = localStorage.getItem('azilearn_device_id');
+        if (!deviceId) {
+          deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
+          localStorage.setItem('azilearn_device_id', deviceId);
+        }
+
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
+          p_name: studentName.trim(),
+          p_grade: data.grade || 'Grade 7',
+          p_device_id: deviceId,
+          p_class_id: data.class_id
+        });
+
+        if (!rpcErr && rpcRes) {
+          studentId = rpcRes.id || rpcRes.student_id || studentId;
+        }
+      }
     }
 
     return { assignment: data, studentId };

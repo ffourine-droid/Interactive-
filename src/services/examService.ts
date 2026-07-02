@@ -125,38 +125,52 @@ export const examService = {
   },
 
   async identifyStudent(name: string, _index?: string, grade?: string) {
-    // Find existing student by name + grade
-    const { data: students, error: fetchError } = await supabase
-      .from('students')
-      .select('*')
-      .ilike('name', name.trim())
-      .eq('grade', grade || 'Grade 7');
-
-    if (fetchError) throw fetchError;
-
-    if (students && students.length > 0) {
-      return students[0];
+    if (typeof window === 'undefined') {
+      throw new Error('identifyStudent can only be run client-side');
+    }
+    let deviceId = localStorage.getItem('azilearn_device_id');
+    if (!deviceId) {
+      deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('azilearn_device_id', deviceId);
     }
 
-    // Create new student — only store name and grade (no parent_code to avoid constraint issues)
-    const { data: created, error: createError } = await supabase
-      .from('students')
-      .insert({
-        name: name.trim(),
-        grade: grade || 'Grade 7',
-        parent_code: null // explicitly null — no constraint violation
-      })
-      .select();
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
+      p_name: name.trim(),
+      p_grade: grade || 'Grade 7',
+      p_device_id: deviceId,
+      p_class_id: null
+    });
 
-    if (createError) throw createError;
+    if (rpcErr) throw rpcErr;
 
-    if (!created || created.length === 0) {
-      throw new Error(
-        'Student created but could not be retrieved. Please check Supabase RLS policies on the students table.'
-      );
+    if (rpcRes) {
+      if (rpcRes.id || rpcRes.student_id) {
+        return {
+          id: rpcRes.id || rpcRes.student_id,
+          name: rpcRes.name,
+          grade: rpcRes.grade,
+          school_name: rpcRes.school_name,
+          class_id: rpcRes.class_id,
+          index_number: rpcRes.index_number,
+          total_xp: rpcRes.total_xp
+        };
+      } else if (rpcRes.success) {
+        const { data: devStudent } = await supabase.rpc('get_student_by_device', { p_device_id: deviceId });
+        if (devStudent && devStudent.success) {
+          return {
+            id: devStudent.student_id,
+            name: devStudent.name,
+            grade: devStudent.grade,
+            school_name: devStudent.school_name,
+            class_id: devStudent.class_id,
+            index_number: devStudent.index_number,
+            total_xp: devStudent.total_xp
+          };
+        }
+      }
     }
 
-    return created[0];
+    throw new Error('Student record could not be resolved.');
   },
 
   async startExamAttempt(examId: string, studentId: string) {

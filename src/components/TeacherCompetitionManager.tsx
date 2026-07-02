@@ -86,10 +86,7 @@ export const TeacherCompetitionManager: React.FC<{ teacherId: string, classId?: 
       console.warn("RPC fetchStudents failed in CompetitionManager:", e);
     }
 
-    if (!fetchedStudents || fetchedStudents.length === 0) {
-      const { data } = await supabase.from('students').select('*').eq('class_id', classId);
-      fetchedStudents = data || [];
-    }
+    // No direct students lookup fallback to avoid RLS restrictions
 
     setStudents(fetchedStudents);
   };
@@ -659,15 +656,9 @@ const CompetitionDashboard: React.FC<{ competition: Competition, onBack: () => v
       console.warn("RPC fetchAvailableStudents failed in CompetitionManager:", e);
     }
 
+    // No direct students lookup fallback to avoid RLS restrictions
     if (!fetchedStudents || fetchedStudents.length === 0) {
-      if (classId) {
-        const { data } = await supabase.from('students').select('*').eq('class_id', classId);
-        fetchedStudents = data || [];
-      } else {
-        const { data: compData } = await supabase.from('teacher_competitions').select('grade').eq('id', competition.id).single();
-        const { data } = await supabase.from('students').select('*').eq('grade', compData?.grade);
-        fetchedStudents = data || [];
-      }
+      fetchedStudents = [];
     } else {
       if (!classId) {
         try {

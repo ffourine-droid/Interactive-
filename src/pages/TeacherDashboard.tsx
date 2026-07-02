@@ -21,7 +21,7 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { TeacherCompetitionManager } from '../components/TeacherCompetitionManager';
 import { QuestionRequestForm } from '../components/QuestionRequestForm';
@@ -329,6 +329,9 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         school_id: teacherCheck.school_id
       }));
 
+      // Set the teacher_id session config inside Postgres before running queries/RPCs
+      await setTeacherConfig(teacherId);
+
       // Fetch Classes and Assignments in parallel
       const [assignmentsResponse, examsResponse] = await Promise.all([
         supabase
@@ -421,22 +424,14 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       if (studentNames.trim()) {
         const lines = studentNames.split('\n').map(n => n.trim()).filter(n => n);
         if (lines.length > 0) {
-          // Get current highest index for this school/grade to continue sequence
-          const { data: existingStudents, error: fetchError } = await supabase
-            .from('students')
-            .select(`
-              name,
-              parent_code,
-              classes!inner (
-                teachers!inner (
-                  school_name
-                )
-              )
-            `)
-            .eq('classes.teachers.school_name', teacher.school_name)
-            .eq('grade', selectedGrade);
+          // Get current highest index for this school/grade to continue sequence using secure RPC
+          const { data: rpcRes, error: fetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
+            p_school_name: teacher.school_name,
+            p_grade: selectedGrade
+          });
 
           if (fetchError) throw fetchError;
+          const existingStudents = rpcRes?.success ? rpcRes.students : [];
 
           const existingCodes = new Set(
             (existingStudents || [])
@@ -477,15 +472,27 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               class_id: classData.id,
               name,
               grade: selectedGrade,
-              parent_code: parent_code
+              parent_code: parent_code,
+              school_name: teacher.school_name,
+              index_number: parent_code
             });
           }
 
-          const { error: studentError } = await supabase
-            .from('students')
-            .insert(studentsToInsert);
-          
-          if (studentError) throw studentError;
+          const rpcPromises = studentsToInsert.map(student => 
+            supabase.rpc('teacher_add_student', {
+              p_teacher_id: teacher.id,
+              p_class_id: classData.id,
+              p_name: student.name.trim(),
+              p_grade: selectedGrade,
+              p_school_name: teacher.school_name || null,
+              p_index_number: student.parent_code,
+              p_school_id: teacher.school_id || null
+            })
+          );
+
+          const rpcResults = await Promise.all(rpcPromises);
+          const firstError = rpcResults.find(res => res.error);
+          if (firstError) throw firstError.error;
         }
       }
 

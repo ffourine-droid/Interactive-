@@ -98,21 +98,13 @@ export const ParentCodeTable: React.FC<ParentCodeTableProps> = ({ students: init
       }
 
       if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: directData, error: schoolFetchError } = await supabase
-          .from('students')
-          .select(`
-            parent_code,
-            classes!inner (
-              teachers!inner (
-                school_name
-              )
-            )
-          `)
-          .eq('classes.teachers.school_name', teacher.school_name)
-          .eq('grade', grade);
+        const { data: rpcRes, error: schoolFetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
+          p_school_name: teacher.school_name,
+          p_grade: grade
+        });
 
         if (schoolFetchError) throw schoolFetchError;
-        schoolStudents = directData || [];
+        schoolStudents = rpcRes?.success ? rpcRes.students : [];
       }
 
       const existingCodes = new Set(
@@ -133,10 +125,13 @@ export const ParentCodeTable: React.FC<ParentCodeTableProps> = ({ students: init
         existingCodes.add(currentCode);
         
         updates.push(
-          supabase
-            .from('students')
-            .update({ parent_code: newCode })
-            .eq('id', student.id)
+          supabase.rpc('teacher_update_student', {
+            p_teacher_id: teacher.id,
+            p_student_id: student.id,
+            p_name: student.name,
+            p_index_number: newCode,
+            p_school_name: teacher.school_name
+          })
         );
       }
 

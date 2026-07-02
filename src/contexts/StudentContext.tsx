@@ -77,38 +77,7 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.warn("RPC get_student_by_device failed or not found, trying query fallback...", rpcErr);
     }
 
-    // 2. Query fallback: Try direct select on students table using device_id
-    try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('device_id', deviceId)
-        .maybeSingle();
-
-      if (!error && data) {
-        const studentObj: Student = {
-          student_id: data.id,
-          name: data.name,
-          grade: data.grade || 'Grade 7',
-          school_name: data.school_name || '',
-          class_id: data.class_id,
-          index_number: data.index_number || '',
-          total_xp: data.total_xp || 0
-        };
-        setCurrentStudent(studentObj);
-        localStorage.setItem('azilearn_student', JSON.stringify({
-          id: studentObj.student_id,
-          name: studentObj.name,
-          grade: studentObj.grade,
-          class_id: studentObj.class_id,
-          school_name: studentObj.school_name
-        }));
-        setLoading(false);
-        return;
-      }
-    } catch (selectErr) {
-      console.warn("Direct query of device_id failed, trying local storage fallback...", selectErr);
-    }
+    // Fallback removed to prevent RLS query blocks
 
     // 3. Local Storage fallback for existing guest profile
     const cached = localStorage.getItem('azilearn_student');
@@ -127,12 +96,14 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           };
           setCurrentStudent(studentObj);
           
-          // Try to update their device_id in Supabase background to link the device
+          // Try to update their device_id in Supabase background to link the device using RPC
           try {
-            await supabase
-              .from('students')
-              .update({ device_id: deviceId })
-              .eq('id', parsed.id);
+            await supabase.rpc('student_self_register', {
+              p_name: parsed.name,
+              p_grade: parsed.grade || 'Grade 7',
+              p_device_id: deviceId,
+              p_class_id: parsed.class_id || null
+            });
           } catch (updateErr) {
             console.warn("Could not bind device_id in background:", updateErr);
           }
@@ -155,64 +126,40 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const identifyStudent = useCallback(async (name: string, grade: string) => {
     const deviceId = getOrCreateDeviceId();
     
-    // Check if student with name + grade already exists
-    const { data: existing, error: fetchErr } = await supabase
-      .from('students')
-      .select('*')
-      .ilike('name', name.trim())
-      .eq('grade', grade);
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
+      p_name: name.trim(),
+      p_grade: grade,
+      p_device_id: deviceId,
+      p_class_id: null
+    });
+
+    if (rpcErr) throw rpcErr;
 
     let studentRecord: any = null;
-
-    if (!fetchErr && existing && existing.length > 0) {
-      // Update existing student record with device_id
-      studentRecord = existing[0];
-      try {
-        const { data: updated, error: updateErr } = await supabase
-          .from('students')
-          .update({ device_id: deviceId })
-          .eq('id', studentRecord.id)
-          .select()
-          .single();
-        if (!updateErr && updated) {
-          studentRecord = updated;
+    if (rpcRes) {
+      if (rpcRes.id || rpcRes.student_id) {
+        studentRecord = {
+          id: rpcRes.id || rpcRes.student_id,
+          name: rpcRes.name,
+          grade: rpcRes.grade,
+          school_name: rpcRes.school_name,
+          class_id: rpcRes.class_id,
+          index_number: rpcRes.index_number,
+          total_xp: rpcRes.total_xp
+        };
+      } else if (rpcRes.success) {
+        const { data: devStudent } = await supabase.rpc('get_student_by_device', { p_device_id: deviceId });
+        if (devStudent && devStudent.success) {
+          studentRecord = {
+            id: devStudent.student_id,
+            name: devStudent.name,
+            grade: devStudent.grade,
+            school_name: devStudent.school_name,
+            class_id: devStudent.class_id,
+            index_number: devStudent.index_number,
+            total_xp: devStudent.total_xp
+          };
         }
-      } catch (e) {
-        console.warn("Error updating existing student device_id:", e);
-      }
-    } else {
-      // Insert new student with device_id
-      try {
-        const { data: created, error: createErr } = await supabase
-          .from('students')
-          .insert({
-            name: name.trim(),
-            grade: grade,
-            device_id: deviceId,
-            parent_code: null
-          })
-          .select()
-          .single();
-
-        if (createErr || !created) {
-          // fallback insertion without device_id if column missing or RLS error
-          const { data: createdFallback, error: fallbackErr } = await supabase
-            .from('students')
-            .insert({
-              name: name.trim(),
-              grade: grade,
-              parent_code: null
-            })
-            .select()
-            .single();
-
-          if (fallbackErr) throw fallbackErr;
-          studentRecord = createdFallback;
-        } else {
-          studentRecord = created;
-        }
-      } catch (insertErr: any) {
-        throw new Error(insertErr.message || 'Failed to register student.');
       }
     }
 

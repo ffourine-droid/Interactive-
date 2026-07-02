@@ -23,7 +23,7 @@ import {
   Download,
   ClipboardList
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from './Toast';
 
 type QuestionType = 'mcq' | 'short_answer' | 'photo';
@@ -152,6 +152,9 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     const teacherId = JSON.parse(teacherData).id;
 
     try {
+      // Set the teacher_id session config inside Postgres before running queries/RPCs
+      await setTeacherConfig(teacherId);
+
       let fetchedClasses: any[] = [];
       try {
         const { data, error } = await supabase.rpc('teacher_get_classes', {
@@ -285,17 +288,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         console.warn("RPC fetch failed, using fallback:", rpcErr);
       }
 
-      if (!fetchedStudents || fetchedStudents.length === 0) {
-        const { data, error } = await supabase
-          .from('students')
-          .select('id, name, parent_code')
-          .eq('class_id', classId)
-          .order('name');
-        if (error) throw error;
-        fetchedStudents = data || [];
-      } else {
-        fetchedStudents = [...fetchedStudents].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      }
+      // No direct fallback to avoid RLS restrictions
 
       setStudents(fetchedStudents);
       
@@ -377,21 +370,27 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         parent_code = nextIndex.toString().padStart(4, '0');
       }
 
-      const { data, error } = await supabase
-        .from('students')
-        .insert([{
+      const { data: rpcRes, error } = await supabase.rpc('teacher_add_student', {
+        p_teacher_id: tId,
+        p_class_id: form.class_id,
+        p_name: newStudentName.trim(),
+        p_grade: form.grade,
+        p_school_name: schoolName || null,
+        p_index_number: parent_code,
+        p_school_id: (teacherData as any)?.school_id || null
+      });
+
+      if (error) throw error;
+
+      if (rpcRes?.success) {
+        const mockStudent = {
+          id: rpcRes.student_id,
           name: newStudentName.trim(),
           class_id: form.class_id,
           grade: form.grade,
           parent_code: parent_code
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setStudents(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+        };
+        setStudents(prev => [...prev, mockStudent].sort((a, b) => a.name.localeCompare(b.name)));
         setNewStudentName('');
         setNewStudentCode('');
         showToast("Student added to class", "success");
@@ -449,22 +448,13 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       }
 
       if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: directData, error: fetchError } = await supabase
-          .from('students')
-          .select(`
-            name,
-            parent_code,
-            classes!inner (
-              teachers!inner (
-                school_name
-              )
-            )
-          `)
-          .eq('classes.teachers.school_name', schoolName)
-          .eq('grade', `Grade ${form.grade}`);
+        const { data: rpcRes, error: fetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
+          p_school_name: schoolName,
+          p_grade: `Grade ${form.grade}`
+        });
 
         if (fetchError) throw fetchError;
-        schoolStudents = directData || [];
+        schoolStudents = rpcRes?.success ? rpcRes.students : [];
       }
 
       const existingCodes = new Set(
@@ -509,19 +499,25 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         });
       }
 
-      const { data, error } = await supabase
-        .from('students')
-        .insert(newStudents)
-        .select();
+      const promises = newStudents.map(student => supabase.rpc('teacher_add_student', {
+        p_teacher_id: bulkTId,
+        p_class_id: form.class_id,
+        p_name: student.name.trim(),
+        p_grade: form.grade,
+        p_school_name: schoolName || null,
+        p_index_number: student.parent_code,
+        p_school_id: (teacherData as any)?.school_id || null
+      }));
 
-      if (error) throw error;
+      const results = await Promise.all(promises);
+      const failed = results.find(r => r.error);
+      if (failed) throw failed.error;
 
-      if (data) {
-        setStudents(prev => [...prev, ...data].sort((a, b) => a.name.localeCompare(b.name)));
-        setBulkNames('');
-        setShowBulkAdd(false);
-        showToast(`Added ${newStudents.length} students`, "success");
-      }
+      // Refetch class students using handleClassSelect to get clean complete list
+      await handleClassSelect(form.class_id, form.class_name);
+      setBulkNames('');
+      setShowBulkAdd(false);
+      showToast(`Added ${newStudents.length} students`, "success");
     } catch (err) {
       showToast("Failed to bulk add students", "error");
     } finally {
@@ -537,13 +533,15 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     if (!editingName.trim() || !editingCode.trim()) return;
 
     try {
-      const { error } = await supabase
-        .from('students')
-        .update({ 
-          name: editingName.trim(),
-          parent_code: editingCode.trim().padStart(4, '0')
-        })
-        .eq('id', studentId);
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      const tId = teacherStr ? JSON.parse(teacherStr).id : null;
+      const { error } = await supabase.rpc('teacher_update_student', {
+        p_teacher_id: tId,
+        p_student_id: studentId,
+        p_name: editingName.trim(),
+        p_index_number: editingCode.trim().padStart(4, '0'),
+        p_school_name: null
+      });
 
       if (error) throw error;
 
@@ -559,10 +557,12 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     if (!confirm("Are you sure you want to remove this student?")) return;
 
     try {
-      const { error } = await supabase
-        .from('students')
-        .delete()
-        .eq('id', studentId);
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      const tId = teacherStr ? JSON.parse(teacherStr).id : null;
+      const { error } = await supabase.rpc('teacher_delete_student', {
+        p_teacher_id: tId,
+        p_student_id: studentId
+      });
 
       if (error) throw error;
 

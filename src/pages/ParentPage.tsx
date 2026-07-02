@@ -42,7 +42,6 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
   
   const [loading, setLoading] = useState(false);
 
-  // Submits search details to lookup_student_for_parent RPC with client-side robust fallback
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -53,108 +52,7 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
 
     setLoading(true);
     try {
-      // 1. Try a robust client-side direct check on the database first.
-      // Since public RLS allows SELECT on students, classes, and teachers, this guarantees matching 
-      // under inconsistent/missing DB values (e.g. classes with NULL grade but student having Grade 9, or trailing spaces)
-      const { data: studentsList, error: directQueryError } = await supabase
-        .from('students')
-        .select(`
-          id,
-          name,
-          parent_code,
-          grade,
-          pin_attempts,
-          pin_locked,
-          parent_pin_hash,
-          classes (
-            id,
-            name,
-            grade,
-            teachers (
-              school_name
-            )
-          )
-        `)
-        .eq('parent_code', formData.indexNumber.trim());
-
-      let matchedStudent: any = null;
-
-      if (!directQueryError && studentsList && studentsList.length > 0) {
-        // Let's check matching criteria with forgiving comparisons
-        const inputName = formData.studentName.trim().toLowerCase();
-        const inputSchool = formData.schoolName.trim().toLowerCase();
-        const inputGrade = formData.grade.trim().toLowerCase();
-
-        // Helper to check if two grade patterns represent the same grade
-        const isGradeMatch = (dbStudentGrade: string, dbClassGrade: string, dbClassName: string, inpGrade: string) => {
-          const normInput = inpGrade.replace(/\s+/g, '').replace(/grade/g, ''); // e.g. "9", "7"
-          
-          const gradesToCheck = [dbStudentGrade, dbClassGrade, dbClassName].map(g => (g || '').trim().toLowerCase());
-          
-          for (const g of gradesToCheck) {
-            if (!g) continue;
-            const normG = g.replace(/\s+/g, '').replace(/grade/g, '');
-            if (normG === normInput) return true;
-            if (g.includes(inpGrade) || inpGrade.includes(g)) return true;
-            
-            // Textual translations (e.g., 9 -> nine, or nine -> 9)
-            const gradeWords: { [key: string]: string } = {
-              '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five',
-              '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
-              '11': 'eleven', '12': 'twelve'
-            };
-            const numPart = normG.match(/\d+/)?.[0] || normInput.match(/\d+/)?.[0];
-            if (numPart && gradeWords[numPart]) {
-              const word = gradeWords[numPart];
-              if (g.includes(word) || inpGrade.includes(word)) return true;
-            }
-          }
-          return false;
-        };
-
-        for (const s of studentsList) {
-          const nameMatch = s.name.trim().toLowerCase() === inputName;
-          
-          const classObj: any = Array.isArray(s.classes) ? s.classes[0] : s.classes;
-          const teacherObj = classObj && Array.isArray(classObj.teachers) ? classObj.teachers[0] : classObj?.teachers;
-          
-          const dbSchool = teacherObj?.school_name || '';
-          const schoolMatch = dbSchool.trim().toLowerCase() === inputSchool;
-          
-          const dbClassGrade = classObj?.grade || '';
-          const dbClassName = classObj?.name || '';
-          const gradeMatch = isGradeMatch(s.grade || '', dbClassGrade, dbClassName, inputGrade);
-
-          if (nameMatch && schoolMatch && gradeMatch) {
-            matchedStudent = s;
-            break;
-          }
-        }
-      }
-
-      // If we found a unique match via our robust client-side search, use it!
-      if (matchedStudent) {
-        if (matchedStudent.pin_locked) {
-          showToast("This account is temporarily locked due to too many failed attempts. Please contact the class teacher.", "error");
-          return;
-        }
-
-        setStudentId(matchedStudent.id);
-        setPinValue('');
-        setConfirmPinValue('');
-
-        const isPinSet = !!matchedStudent.parent_pin_hash;
-        if (!isPinSet) {
-          setStep('set_pin');
-          showToast("Student found! Please set a 4-digit access PIN.", "success");
-        } else {
-          setStep('enter_pin');
-          showToast("Student found! Enter your 4-digit PIN.", "success");
-        }
-        return;
-      }
-
-      // 2. If client-side SELECT didn't match (or there was an error), fall back to Postgres RPC:
+      // Direct call to Postgres RPC:
       const { data, error } = await supabase.rpc('lookup_student_for_parent', {
         p_school_name: formData.schoolName.trim(),
         p_grade: formData.grade,
@@ -286,39 +184,23 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
   // Pulls full student data from the database and displays the dashboard
   const loginParent = async (resolvedStudentId: string) => {
     try {
-      // 1. Fetch primary student
-      const { data: primaryStudent, error: fetchErr } = await supabase
-        .from('students')
-        .select(`
-          *,
-          classes (
-            name,
-            teachers (
-              school_name
-            )
-          )
-        `)
-        .eq('id', resolvedStudentId)
-        .single();
+      // Fetch full student and companions securely using parent_get_dashboard RPC
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('parent_get_dashboard', {
+        p_student_id: resolvedStudentId
+      });
 
-      if (fetchErr || !primaryStudent) {
-        showToast("Retrieval failed. Please try again.", "error");
-        return;
+      if (rpcErr || !rpcRes) {
+        throw rpcErr || new Error("Retrieval failed");
       }
 
-      // 2. Fetch companion student IDs for children registered in multiple classes with same name & index
-      const { data: companions } = await supabase
-        .from('students')
-        .select('id, class_id')
-        .eq('name', primaryStudent.name)
-        .eq('grade', primaryStudent.grade)
-        .eq('parent_code', primaryStudent.parent_code);
+      const primaryStudent = rpcRes.primary_student || rpcRes;
+      const companions = rpcRes.companions || [];
 
       const allStudentIds = companions && companions.length > 0 
-        ? companions.map(c => c.id) 
+        ? companions.map((c: any) => c.id) 
         : [primaryStudent.id];
       const allClassIds = companions && companions.length > 0 
-        ? companions.map(c => c.class_id) 
+        ? companions.map((c: any) => c.class_id) 
         : [primaryStudent.class_id];
 
       setStudent({

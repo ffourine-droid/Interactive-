@@ -5,7 +5,7 @@ import {
   HelpCircle, Type, List
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { Question, Exam } from '../types';
 
@@ -59,6 +59,9 @@ export default function CreateExamPage({ onBack, initialData, preSelectedClassId
       }
       const teacherData = JSON.parse(teacherStr);
       setTeacher(teacherData);
+
+      // Set the teacher_id session config inside Postgres before running queries/RPCs
+      await setTeacherConfig(teacherData.id);
 
       let fetchedClasses: any[] = [];
       try {
