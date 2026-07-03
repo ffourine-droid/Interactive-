@@ -300,12 +300,20 @@ export const StudentAssignmentView: React.FC<{
         setStep('success');
         showToast("School-wide assignment submitted! Excellent work! 🎉", "success");
       } else {
+        const cleanTeacherId = (id: any) => {
+          if (!id) return null;
+          const str = String(id).trim().toLowerCase();
+          if (str === 'null' || str === 'undefined' || str === '') return null;
+          if (str.length !== 36) return null;
+          return id;
+        };
+
         // Submit regular (non-broadcast) assignments via RPC to ensure teacher_id resolution and status alignment
         const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', {
           p_assignment_id: assignment.id,
           p_student_name: studentName.trim(),
           p_answers: finalAnswers,
-          p_teacher_id: assignment.teacher_id ?? null,
+          p_teacher_id: cleanTeacherId(assignment.teacher_id),
         });
 
         if (submitError) throw submitError;
