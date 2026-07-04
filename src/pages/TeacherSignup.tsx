@@ -42,43 +42,28 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
 
     setLoading(true);
     try {
-      // Check if a teacher with the same name and school already exists (case-insensitive)
-      const { data: existingTeachers, error: checkError } = await supabase
-        .from('teachers')
-        .select('id')
-        .ilike('name', formData.name.trim())
-        .ilike('school_name', formData.schoolName.trim());
-
-      if (existingTeachers && existingTeachers.length > 0) {
-        showToast("An account with this name and school already exists. Please login instead.", "error");
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('teachers')
-        .insert([{
-          name: formData.name.trim(),
-          school_name: formData.schoolName.trim(),
-          school_id: formData.schoolId || null,
-          pin: formData.pin
-        }])
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc('teacher_register', {
+        p_name: formData.name.trim(),
+        p_pin: formData.pin,
+        p_school_name: formData.schoolName.trim(),
+        p_email: null
+      });
 
       if (error) throw error;
 
-      if (data) {
-        localStorage.setItem('azilearn_teacher', JSON.stringify({
-          id: data.id,
-          name: data.name,
-          school_name: data.school_name,
-          school_id: data.school_id
-        }));
-        await setTeacherConfig(data.id);
-        showToast("Welcome to AziLearn!", "success");
-        onSuccess();
+      if (!data || !data.success) {
+        throw new Error(data?.message || "Signup failed");
       }
+
+      localStorage.setItem('azilearn_teacher', JSON.stringify({
+        id: data.id,
+        name: data.name,
+        school_name: data.school_name,
+        school_id: data.school_id
+      }));
+      await setTeacherConfig(data.id);
+      showToast("Welcome to AziLearn!", "success");
+      onSuccess();
     } catch (err: any) {
       showToast(err.message || "Signup failed", "error");
     } finally {

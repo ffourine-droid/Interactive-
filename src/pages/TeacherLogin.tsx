@@ -50,76 +50,29 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
 
     setLoading(true);
     try {
-      // 1. Try checking the credentials via our specialized PostgreSQL RPC
-      const { data, error: rpcError } = await supabase.rpc('teacher_login', {
+      // Use the newly deployed and verified secure teacher_login RPC
+      const { data, error } = await supabase.rpc('teacher_login', {
         p_name: formData.name.trim(),
-        p_school: formData.schoolName.trim(),
         p_pin: formData.pin.trim()
       });
 
-      const isFunctionMissing = rpcError && (
-        rpcError.message.includes("could not find the public.teacher_login") ||
-        rpcError.code === '42883' ||
-        rpcError.code === 'P0001'
-      );
-
-      if (rpcError && !isFunctionMissing) {
-        console.error("Teacher login RPC error:", rpcError);
-        showToast(`Database error: ${rpcError.message}`, "error");
-        return;
+      if (error) {
+        throw error;
       }
 
-      if (data) {
-        const typedData = data as any;
-        if (!typedData.success) {
-          showToast(typedData.message || "Incorrect details.", "error");
-          return;
-        }
-
-        localStorage.setItem('azilearn_teacher', JSON.stringify({
-          id: typedData.id,
-          name: typedData.name,
-          school_name: typedData.school_name
-        }));
-        await setTeacherConfig(typedData.id);
-        showToast(`Welcome back, Teacher ${typedData.name.split(' ')[0]}!`, "success");
-        onSuccess();
-        return;
-      }
-
-      // 2. Elegant fallback if RPC is not deployed in the database yet
-      console.warn("teacher_login RPC not found. Falling back to direct select query...");
-      const { data: fallbackData, error: selectError } = await supabase
-        .from('teachers')
-        .select('*')
-        .ilike('name', formData.name.trim())
-        .ilike('school_name', formData.schoolName.trim());
-
-      if (selectError) {
-        console.error("Teacher login select error:", selectError);
-        showToast(`Database error: ${selectError.message}`, "error");
-        return;
-      }
-
-      if (!fallbackData || fallbackData.length === 0) {
-        showToast("No teacher account found with this Name and School on AziLearn.", "error");
-        return;
-      }
-
-      const teacher = fallbackData.find(t => String(t.pin).trim() === formData.pin.trim());
-      
-      if (!teacher) {
-        showToast("Incorrect 4-Digit PIN. Please try again.", "error");
+      if (!data || !data.success) {
+        showToast(data?.message || "Incorrect details.", "error");
         return;
       }
 
       localStorage.setItem('azilearn_teacher', JSON.stringify({
-        id: teacher.id,
-        name: teacher.name,
-        school_name: teacher.school_name
+        id: data.id,
+        name: data.name,
+        school_name: data.school_name,
+        school_id: data.school_id
       }));
-      await setTeacherConfig(teacher.id);
-      showToast(`Welcome back, Teacher ${teacher.name.split(' ')[0]}!`, "success");
+      await setTeacherConfig(data.id);
+      showToast(`Welcome back, Teacher ${data.name.split(' ')[0]}!`, "success");
       onSuccess();
     } catch (err: any) {
       console.error("Teacher login exception:", err);

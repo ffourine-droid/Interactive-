@@ -1,0 +1,947 @@
+================================================================================
+AZILEARN PROJECT FLOWS EXPORT
+================================================================================
+This file contains the complete raw source code for:
+1. Teacher login & signup flow components, plus other active DB creation paths.
+2. Parent student-search, PIN creation, and verification flows in ParentPage.tsx.
+
+================================================================================
+SECTION 1: TEACHER SIGNUP / LOGIN / INSERTION FLOWS
+================================================================================
+
+--------------------------------------------------------------------------------
+1.1 /src/pages/TeacherSignup.tsx (Full File)
+--------------------------------------------------------------------------------
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { ArrowLeft, UserPlus, BookOpen, Key, AlertCircle, Loader2 } from 'lucide-react';
+import { motion } from 'motion/react';
+import { showToast } from '../components/Toast';
+
+export default function TeacherSignup() {
+  const navigate = useNavigate();
+  const [name, setName] = useState('');
+  const [schoolName, setSchoolName] = useState('');
+  const [pin, setPin] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !schoolName.trim() || !pin.trim()) {
+      showToast('Please fill out all fields.', 'error');
+      return;
+    }
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      showToast('PIN must be exactly 4 digits.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 1. Check if name already registered in this school
+      const { data: existing, error: checkErr } = await supabase
+        .from('teachers')
+        .select('id')
+        .eq('name', name.trim())
+        .ilike('school_name', schoolName.trim())
+        .maybeSingle();
+
+      if (checkErr) {
+        throw checkErr;
+      }
+
+      if (existing) {
+        throw new Error('A teacher with this name is already registered under this school.');
+      }
+
+      // 2. Insert new teacher record
+      const { data, error: insertErr } = await supabase
+        .from('teachers')
+        .insert([{
+          name: name.trim(),
+          school_name: schoolName.trim(),
+          pin: pin
+        }])
+        .select()
+        .single();
+
+      if (insertErr) {
+        throw insertErr;
+      }
+
+      if (data) {
+        showToast('Teacher account created successfully! 🎉', 'success');
+        // Save to localStorage for convenience
+        localStorage.setItem('azilearn_teacher', JSON.stringify(data));
+        navigate('/teacher');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'An error occurred during sign up.');
+      showToast(err.message || 'Sign up failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0e131f] text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-brand-primary/5 pointer-events-none" />
+      
+      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        <Link to="/" className="inline-flex items-center text-xs font-black uppercase tracking-wider text-emerald-400 hover:text-emerald-300 transition-colors mb-6">
+          <ArrowLeft size={14} className="mr-1" /> Back to Home
+        </Link>
+        <div className="flex items-center justify-center space-x-3 mb-2">
+          <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-emerald-400">
+            <UserPlus size={28} />
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-white uppercase">Teacher Sign Up</h1>
+        </div>
+        <p className="text-center text-sm text-slate-400">
+          Create an instructor profile to publish lessons, issue homework, and coordinate exams.
+        </p>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-[#151c2c]/80 backdrop-blur-md py-8 px-6 shadow-2xl rounded-3xl border border-slate-800"
+        >
+          {error && (
+            <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start space-x-3 text-rose-400 text-sm">
+              <AlertCircle size={18} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSignup} className="space-y-5">
+            <div>
+              <label htmlFor="name" className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                Full Name / Title
+              </label>
+              <div className="relative">
+                <input
+                  id="name"
+                  type="text"
+                  required
+                  placeholder="e.g. Mrs. Jane Smith"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="schoolName" className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                School Name
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-600">
+                  <BookOpen size={16} />
+                </div>
+                <input
+                  id="schoolName"
+                  type="text"
+                  required
+                  placeholder="e.g. Oakridge Academy"
+                  value={schoolName}
+                  onChange={(e) => setSchoolName(e.target.value)}
+                  className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 pl-11 pr-4 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="pin" className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                4-Digit Login PIN
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-600">
+                  <Key size={16} />
+                </div>
+                <input
+                  id="pin"
+                  type="password"
+                  maxLength={4}
+                  required
+                  placeholder="••••"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                  className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 pl-11 pr-4 text-white text-lg tracking-widest placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black uppercase tracking-wider py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 flex items-center justify-center space-x-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Registering...</span>
+                </>
+              ) : (
+                <span>Create Account</span>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6 pt-6 border-t border-slate-800/60 text-center">
+            <p className="text-sm text-slate-400">
+              Already have an account?{' '}
+              <Link to="/teacher/login" className="font-bold text-emerald-400 hover:text-emerald-300 transition-colors">
+                Log In
+              </Link>
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+
+--------------------------------------------------------------------------------
+1.2 /src/pages/TeacherLogin.tsx (Full File)
+--------------------------------------------------------------------------------
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { ArrowLeft, LogIn, Key, GraduationCap, AlertCircle, Loader2 } from 'lucide-react';
+import { motion } from 'motion/react';
+import { showToast } from '../components/Toast';
+
+export default function TeacherLogin() {
+  const navigate = useNavigate();
+  const [name, setName] = useState('');
+  const [pin, setPin] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !pin.trim()) {
+      showToast('Please fill out all fields.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 1. Look up by Name (case-insensitive checks could be useful, but eq is standard here)
+      const { data: teacher, error: loginErr } = await supabase
+        .from('teachers')
+        .select('*')
+        .eq('name', name.trim())
+        .limit(1)
+        .maybeSingle();
+
+      if (loginErr) {
+        throw loginErr;
+      }
+
+      if (!teacher) {
+        throw new Error('Teacher not found. Check spelling or sign up.');
+      }
+
+      // 2. Verify PIN matches
+      if (teacher.pin !== pin) {
+        throw new Error('Incorrect 4-digit PIN. Please try again.');
+      }
+
+      // Success setup
+      showToast(`Welcome back, ${teacher.name}!`, 'success');
+      localStorage.setItem('azilearn_teacher', JSON.stringify(teacher));
+      navigate('/teacher');
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Login failed.');
+      showToast(err.message || 'Login failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Quick fetch of any teacher to jumpstart evaluation
+      const { data, error: qErr } = await supabase
+        .from('teachers')
+        .select('*')
+        .limit(1);
+
+      if (qErr) throw qErr;
+      if (data && data.length > 0) {
+        const teacher = data[0];
+        setName(teacher.name);
+        setPin(teacher.pin);
+        showToast(`Auto-filled ${teacher.name}'s credentials`, 'info');
+      } else {
+        throw new Error('No teachers registered in DB yet. Please use Sign Up.');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Auto-fill failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0e131f] text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
+      <div className="absolute inset-0 bg-gradient-to-br from-brand-primary/5 via-transparent to-emerald-500/5 pointer-events-none" />
+      
+      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        <Link to="/" className="inline-flex items-center text-xs font-black uppercase tracking-wider text-emerald-400 hover:text-emerald-300 transition-colors mb-6">
+          <ArrowLeft size={14} className="mr-1" /> Back to Home
+        </Link>
+        <div className="flex items-center justify-center space-x-3 mb-2">
+          <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-emerald-400">
+            <GraduationCap size={28} />
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-white uppercase">Teacher Login</h1>
+        </div>
+        <p className="text-center text-sm text-slate-400">
+          Sign in with your registered instructor name and secure 4-digit PIN.
+        </p>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-[#151c2c]/80 backdrop-blur-md py-8 px-6 shadow-2xl rounded-3xl border border-slate-800"
+        >
+          {error && (
+            <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start space-x-3 text-rose-400 text-sm">
+              <AlertCircle size={18} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label htmlFor="name" className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                Instructor Full Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                required
+                placeholder="Mrs. Jane Smith"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-medium"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="pin" className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                4-Digit PIN
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-600">
+                  <Key size={16} />
+                </div>
+                <input
+                  id="pin"
+                  type="password"
+                  maxLength={4}
+                  required
+                  placeholder="••••"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                  className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 pl-11 pr-4 text-white text-lg tracking-widest placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black uppercase tracking-wider py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 flex items-center justify-center space-x-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>Signing in...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn size={18} />
+                    <span>Access Dashboard</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleQuickLogin}
+                className="w-full bg-slate-800/50 hover:bg-slate-800 text-slate-300 border border-slate-700/60 font-bold text-xs uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all"
+              >
+                Auto-Fill First Teacher (Dev Mode)
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-6 pt-6 border-t border-slate-800/60 text-center">
+            <p className="text-sm text-slate-400">
+              New instructor?{' '}
+              <Link to="/teacher/signup" className="font-bold text-emerald-400 hover:text-emerald-300 transition-colors font-sans">
+                Create an Account
+              </Link>
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+
+--------------------------------------------------------------------------------
+1.3 Fallback / Self-Healing inserts in other files
+--------------------------------------------------------------------------------
+
+A) From /src/pages/SchoolDashboard.tsx (Lines 503-524)
+- Triggered when setting up a school dashboard if no teacher exists to satisfy relational dependencies:
+```typescript
+const tempId = crypto.randomUUID();
+const { error: teacherInsertErr } = await supabase.from('teachers').insert({
+  id: tempId,
+  name: 'Admin',
+  school_name: cleanSchoolName,
+  school_id: schoolId || null,
+  pin: '1234'
+});
+```
+
+B) From /src/components/TeacherAssignmentCreator.tsx (Lines 668-687)
+- Triggered when creating an assignment if the active session teacher is missing from the table:
+```typescript
+const { error: insertTeacherErr } = await supabase
+  .from('teachers')
+  .insert({
+    id: teacherId,
+    name: tName,
+    school_name: tSchoolName,
+    school_id: tSchoolId,
+    pin: tPin
+  });
+```
+
+================================================================================
+SECTION 2: PARENT SEARCH / LOOKUP / PIN FLOWS IN ParentPage.tsx
+================================================================================
+
+--------------------------------------------------------------------------------
+2.1 /src/pages/ParentPage.tsx (Full File)
+--------------------------------------------------------------------------------
+import React, { useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { motion, AnimatePresence } from 'motion/react';
+import { Search, Key, ShieldCheck, HelpCircle, ArrowRight, ArrowLeft, Loader2, ChevronRight, User } from 'lucide-react';
+import { showToast } from '../components/Toast';
+import ParentStudentDashboard from '../components/ParentStudentDashboard';
+
+export default function ParentPage({ onBack }: { onBack?: () => void }) {
+  // Transition steps: 'lookup' | 'set_pin' | 'enter_pin'
+  const [step, setStep] = useState<'lookup' | 'set_pin' | 'enter_pin'>('lookup');
+  const [loading, setLoading] = useState(false);
+  
+  // Storage of student ID and details after successful lookup
+  const [student, setStudent] = useState<any | null>(null);
+
+  // Search Form State
+  const [formData, setFormData] = useState({
+    studentName: '',
+    schoolName: '',
+    grade: '',
+    indexNumber: '',
+  });
+
+  // PIN states
+  const [pinValue, setPinValue] = useState<string>('');
+  const [confirmPinValue, setConfirmPinValue] = useState<string>('');
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.studentName.trim() || !formData.schoolName.trim() || !formData.grade || !formData.indexNumber.trim()) {
+      showToast("Please provide all search credentials.", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('lookup_student_for_parent', {
+        p_student_name: formData.studentName.trim(),
+        p_school_name: formData.schoolName.trim(),
+        p_grade: formData.grade,
+        p_index_number: formData.indexNumber.trim()
+      });
+
+      if (error) {
+        showToast(error.message || "Error searching child. Try again.", "error");
+        setStudent(null);
+        return;
+      }
+
+      if (!data || !data.found) {
+        const errorMsg = data?.message 
+          ? data.message 
+          : "Lookup failed. Please check your inputs.";
+        showToast(errorMsg, "error");
+        setStudent(null);
+        return;
+      }
+
+      // Successful lookup fallback
+      setStudent({
+        id: data.student_id,
+        name: data.student_name,
+        school_name: data.school_name,
+        grade: data.grade,
+        index_number: data.index_number,
+        pin_set: data.pin_set
+      });
+
+      setPinValue('');
+      setConfirmPinValue('');
+
+      if (data.pin_set === false) {
+        setStep('set_pin');
+        showToast("Student found! Please set a 4-digit access PIN.", "success");
+      } else {
+        setStep('enter_pin');
+        showToast("Student found! Enter your 4-digit PIN.", "success");
+      }
+    } catch (err) {
+      showToast("Error searching. Try again later.", "error");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submits first-time PIN to set_parent_pin RPC
+  const handleSetPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!student) return;
+
+    if (pinValue.length !== 4 || confirmPinValue.length !== 4) {
+      showToast("PIN must be exactly 4 digits", "error");
+      return;
+    }
+
+    if (pinValue !== confirmPinValue) {
+      showToast("PINs do not match", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('set_parent_pin', {
+        p_student_id: student.id,
+        p_pin: pinValue
+      });
+
+      if (error) {
+        showToast(error.message || "Failed to set PIN", "error");
+        return;
+      }
+
+      if (!data || !data.success) {
+        showToast("Could not set PIN. Please try again.", "error");
+        return;
+      }
+
+      showToast("PIN set successfully!", "success");
+      // Advance to visual dashboard passing student and valid pin
+      setStep('enter_pin'); // transition inside state machine
+    } catch (err) {
+      showToast("Error setting PIN", "error");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submits returning parent's PIN to verify_parent_pin RPC
+  const handleVerifyPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!student) return;
+
+    if (pinValue.length !== 4) {
+      showToast("PIN must be exactly 4 digits", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('verify_parent_pin', {
+        p_student_id: student.id,
+        p_pin: pinValue
+      });
+
+      if (error) {
+        showToast(error.message || "Failed to verify PIN", "error");
+        return;
+      }
+
+      if (!data || !data.verified) {
+        if (data.attempts_left !== undefined) {
+          showToast(`Incorrect PIN. ${data.attempts_left} attempts left before account lockout.`, "error");
+        } else {
+          showToast("Incorrect PIN. Please try again.", "error");
+        }
+        return;
+      }
+
+      showToast("Parent authentication successful! Welcome.", "success");
+      // Setting PIN verified keeps us in the dashboard state!
+      // We pass verification because ParentStudentDashboard handles the layout!
+    } catch (err) {
+      showToast("Error verifying PIN", "error");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetToLookup = () => {
+    setStep('lookup');
+    setStudent(null);
+    setPinValue('');
+    setConfirmPinValue('');
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0e131f] text-slate-100 flex flex-col font-sans">
+      {/* Background Ambience */}
+      <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-brand-primary/5 via-emerald-500/5 to-transparent pointer-events-none" />
+
+      {/* Header Container */}
+      <header className="border-b border-slate-800/80 bg-[#111827]/80 backdrop-blur-md sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            {!student && onBack && step === 'lookup' && (
+              <button 
+                onClick={onBack}
+                className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all cursor-pointer mr-2"
+              >
+                <ArrowLeft size={16} />
+              </button>
+            )}
+            <div className="p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <h1 className="text-sm font-black tracking-wider uppercase text-white">Parent Access Portal</h1>
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Secure Guardian Verification</p>
+            </div>
+          </div>
+          {student && (
+            <button
+              onClick={handleResetToLookup}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-black uppercase tracking-wider rounded-xl transition-all border border-slate-700 cursor-pointer"
+            >
+              <ArrowLeft size={12} />
+              <span>Change Student</span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Primary Section */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 relative">
+        <AnimatePresence mode="wait">
+          {!student ? (
+            <motion.div
+              key="lookup"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="max-w-md mx-auto"
+            >
+              <div className="bg-[#151c2c]/80 backdrop-blur-md p-6 sm:p-8 rounded-3xl border border-slate-800/80 shadow-2xl relative">
+                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                  <Search size={120} />
+                </div>
+
+                <h2 className="text-lg font-black tracking-tight text-white uppercase mb-1">Lookup Student Profile</h2>
+                <p className="text-xs text-slate-400 mb-6 font-medium">To protect student privacy, matches are only returned on exact, matching records.</p>
+
+                <form onSubmit={handleLookup} className="space-y-5 relative z-10">
+                  {/* Student Name */}
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">Child's Full Name</label>
+                    <input
+                      type="text"
+                      name="studentName"
+                      required
+                      placeholder="e.g. John Doe"
+                      value={formData.studentName}
+                      onChange={handleInputChange}
+                      className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-medium text-sm"
+                    />
+                  </div>
+
+                  {/* School Selection */}
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">Registered School</label>
+                    <input
+                      type="text"
+                      name="schoolName"
+                      required
+                      placeholder="e.g. Oakridge Academy"
+                      value={formData.schoolName}
+                      onChange={handleInputChange}
+                      className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-medium text-sm"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Grade Level */}
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">Grade Level</label>
+                      <select
+                        name="grade"
+                        required
+                        value={formData.grade}
+                        onChange={handleInputChange}
+                        className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-bold text-sm"
+                      >
+                        <option value="">Select...</option>
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <option key={i + 1} value={`Grade ${i + 1}`}>Grade {i + 1}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Student Index Number */}
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">Index Number</label>
+                      <input
+                        type="text"
+                        name="indexNumber"
+                        required
+                        placeholder="e.g. 1024"
+                        value={formData.indexNumber}
+                        onChange={handleInputChange}
+                        className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-bold text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Search CTA */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black uppercase tracking-wider py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 flex items-center justify-center space-x-2 text-sm cursor-pointer mt-2"
+                  >
+                    {loading ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <>
+                        <span>Locate Child Records</span>
+                        <ChevronRight size={16} />
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              {/* Help Instructions Card */}
+              <div className="mt-6 p-5 bg-[#151c2c]/40 border border-slate-800/40 rounded-3xl flex items-start space-x-3.5">
+                <div className="p-2 bg-slate-800/50 rounded-xl text-slate-400 shrink-0">
+                  <HelpCircle size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-200">Where do I find these credentials?</h4>
+                  <p className="text-[11px] text-slate-400 leading-relaxed mt-1">
+                    Enter your child's index number to lookup their profile, then authenticate with your secure parent PIN.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <div className="w-full">
+              {/* Authenticated flow if pin exists, otherwise set PIN or enter PIN forms */}
+              {step === 'set_pin' && (
+                <motion.div
+                  key="set_pin"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  className="max-w-md mx-auto"
+                >
+                  <div className="bg-[#151c2c]/80 backdrop-blur-md p-6 sm:p-8 rounded-3xl border border-slate-800/80 shadow-2xl">
+                    <div className="flex items-center space-x-2.5 mb-2 text-emerald-400">
+                      <Key size={22} />
+                      <h2 className="text-lg font-black tracking-tight text-emerald-500 leading-tight">PIN Setup Required</h2>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-6 font-medium leading-relaxed">
+                      First-time parent detected. Create a 4-digit PIN to secure future access to {formData.studentName}'s records.
+                    </p>
+
+                    <form onSubmit={handleSetPin} className="space-y-5 relative z-10">
+                      {/* PIN Selection */}
+                      <div>
+                        <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                          Choose 4-Digit PIN
+                        </label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          required
+                          name="pin_setup"
+                          id="pin_setup"
+                          placeholder="••••"
+                          value={pinValue}
+                          onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ''))}
+                          className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-center text-xl tracking-widest text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-black"
+                        />
+                      </div>
+
+                      {/* PIN Confirmation */}
+                      <div>
+                        <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                          Confirm 4-Digit PIN
+                        </label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          required
+                          name="confirm_pin_setup"
+                          id="confirm_pin_setup"
+                          placeholder="••••"
+                          value={confirmPinValue}
+                          onChange={(e) => setConfirmPinValue(e.target.value.replace(/\D/g, ''))}
+                          className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-center text-xl tracking-widest text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-black"
+                        />
+                      </div>
+
+                      {/* Submit */}
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black uppercase tracking-wider py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 flex items-center justify-center space-x-2 text-sm cursor-pointer mt-2"
+                      >
+                        {loading ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <span>Save PIN & View progress</span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleResetToLookup}
+                        className="w-full text-center text-xs font-black uppercase tracking-wider text-slate-400 hover:text-slate-300 transition-colors py-1 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  </div>
+                </motion.div>
+              )}
+
+              {step === 'enter_pin' && (
+                <motion.div
+                  key="enter_pin"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  className="max-w-md mx-auto"
+                >
+                  <div className="bg-[#151c2c]/80 backdrop-blur-md p-6 sm:p-8 rounded-3xl border border-slate-800/80 shadow-2xl">
+                    <div className="flex items-center space-x-2.5 mb-2 text-emerald-400">
+                      <Key size={22} />
+                      <h2 className="text-lg font-black tracking-tight text-white leading-tight">Guardian Authorization</h2>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-6 font-medium leading-relaxed">
+                      Please enter your secure 4-digit parent PIN to authorize viewing {formData.studentName}'s records.
+                    </p>
+
+                    <form onSubmit={handleVerifyPin} className="space-y-5 relative z-10">
+                      {/* Enter PIN */}
+                      <div>
+                        <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                          Enter 4-Digit Parent PIN
+                        </label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          required
+                          name="pin_verify"
+                          id="pin_verify"
+                          placeholder="••••"
+                          value={pinValue}
+                          onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ''))}
+                          className="w-full bg-[#0e131f] border border-slate-800 rounded-2xl py-3 px-4 text-center text-xl tracking-widest text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-black"
+                        />
+                      </div>
+
+                      {/* Submit */}
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black uppercase tracking-wider py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 flex items-center justify-center space-x-2 text-sm cursor-pointer mt-2"
+                      >
+                        {loading ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <span>Verify PIN & View</span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleResetToLookup}
+                        className="w-full text-center text-xs font-black uppercase tracking-wider text-slate-400 hover:text-slate-300 transition-colors py-1 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </form>
+
+                    {/* Forgot PIN disclaimer */}
+                    <div className="mt-6 pt-5 border-t border-slate-800/60 text-center">
+                      <p className="text-[10px] text-slate-500 leading-relaxed font-semibold uppercase">
+                        Forgot your parent PIN? Please contact {formData.studentName}'s class teacher to reset your parent security credentials.
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Verified dashboard access */}
+              {step !== 'set_pin' && step !== 'enter_pin' && (
+                <ParentStudentDashboard student={student} parentPin={pinValue} />
+              )}
+            </div>
+          )}
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
