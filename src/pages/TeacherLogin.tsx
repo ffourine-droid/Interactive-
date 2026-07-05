@@ -53,6 +53,7 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
       // Use the newly deployed and verified secure teacher_login RPC
       const { data, error } = await supabase.rpc('teacher_login', {
         p_name: formData.name.trim(),
+        p_school: formData.schoolName.trim(),
         p_pin: formData.pin.trim()
       });
 

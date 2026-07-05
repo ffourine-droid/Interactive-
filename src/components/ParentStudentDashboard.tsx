@@ -98,6 +98,96 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const [examData, setExamData] = useState<any | null>(null);
   const [loadingExamDetails, setLoadingExamDetails] = useState(false);
 
+  // Live polling and synchronization state
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+  const [secondsSinceUpdate, setSecondsSinceUpdate] = useState(0);
+  const [isTabVisible, setIsTabVisible] = useState(true);
+  const lastRpcDataStrRef = React.useRef<string>('');
+
+  // Keep track of Page Visibility API state
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabVisible(document.visibilityState === 'visible');
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Timer to track seconds since last successful update
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsSinceUpdate(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Core RPC Fetch Function
+  const fetchProgressData = async () => {
+    if (!student?.id || !parentPin) return;
+
+    try {
+      const { data, error } = await supabase.rpc('get_student_progress_for_parent', {
+        p_student_id: student.id,
+        p_pin: parentPin
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        if (data.success) {
+          setConsecutiveFailures(0);
+          const submissionsPayload = data.submissions || [];
+          const acknowledgementsPayload = data.acknowledgements || [];
+          const dataPayload = {
+            submissions: submissionsPayload,
+            acknowledgements: acknowledgementsPayload
+          };
+          const dataStr = JSON.stringify(dataPayload);
+
+          // Deep comparison to prevent unnecessary UI flickers/re-renders
+          if (dataStr !== lastRpcDataStrRef.current) {
+            setSubmissions(submissionsPayload);
+            setAcknowledgements(acknowledgementsPayload);
+            lastRpcDataStrRef.current = dataStr;
+          }
+          setSecondsSinceUpdate(0);
+        } else {
+          console.warn("get_student_progress_for_parent success is false:", data.message);
+          setConsecutiveFailures(prev => prev + 1);
+        }
+      } else {
+        setConsecutiveFailures(prev => prev + 1);
+      }
+    } catch (err: any) {
+      console.error("Error in get_student_progress_for_parent polling cycle:", err);
+      setConsecutiveFailures(prev => prev + 1);
+    }
+  };
+
+  // Polling effect hook: runs every 15 seconds, pauses when tab is inactive, resumes instantly
+  useEffect(() => {
+    if (!student?.id || !parentPin) return;
+
+    // Fetch immediately on mount or when visibility shifts back to true
+    if (isTabVisible) {
+      fetchProgressData();
+    }
+
+    if (!isTabVisible) return;
+
+    const interval = setInterval(() => {
+      fetchProgressData();
+    }, 15000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [student?.id, parentPin, isTabVisible]);
+
   useEffect(() => {
     if (student) {
       fetchData();
@@ -142,76 +232,146 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
     }
     setLoading(true);
     try {
-      const studentIds = student.all_student_ids || (student.id ? [student.id] : []);
-      const classIds = student.all_class_ids || (student.class_id ? [student.class_id] : []);
+      const rawStudentIds = student.all_student_ids || (student.id ? [student.id] : []);
+      const studentIds = rawStudentIds.filter((id: any) => typeof id === 'string' && id.trim() !== '' && id !== 'undefined');
+
+      const rawClassIds = student.all_class_ids || (student.class_id ? [student.class_id] : []);
+      const classIds = rawClassIds.filter((id: any) => typeof id === 'string' && id.trim() !== '' && id !== 'undefined');
 
       // Try RPC first for assignments
       let fetchedAssignments: any[] = [];
       let rpcSuccess = false;
 
-      if (student.id) {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_get_assignments', {
-          p_student_id: student.id
-        });
-        if (!rpcErr && rpcRes && rpcRes.success) {
-          fetchedAssignments = rpcRes.assignments || [];
-          rpcSuccess = true;
-        } else if (rpcErr) {
-          console.warn("student_get_assignments RPC failed inside parent dashboard:", rpcErr.message);
+      if (student.id && student.id !== 'undefined') {
+        try {
+          const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_get_assignments', {
+            p_student_id: student.id
+          });
+          if (!rpcErr && rpcRes && rpcRes.success) {
+            fetchedAssignments = rpcRes.assignments || [];
+            rpcSuccess = true;
+          } else if (rpcErr) {
+            console.warn("student_get_assignments RPC failed inside parent dashboard:", rpcErr.message);
+          }
+        } catch (e) {
+          console.warn("student_get_assignments RPC check caught an exception:", e);
         }
       }
 
-      // Fetch normal class assignments and school broadcasts in parallel if RPC failed
-      const normalQuery = !rpcSuccess && classIds.length > 0
-        ? supabase
+      let normalAssignments: any[] = [];
+      let broadcastAssignments: any[] = [];
+      let examAttemptsData: any[] = [];
+
+      // 1. Fetch normal assignments
+      if (!rpcSuccess && classIds.length > 0) {
+        try {
+          let { data, error } = await supabase
             .from('assignments')
             .select('id, title, subject, grade, due_date, class_id, class_name, questions, created_at, is_broadcast, school_name')
             .in('class_id', classIds)
-            .order('created_at', { ascending: false })
-        : Promise.resolve({ data: [], error: null });
+            .order('created_at', { ascending: false });
 
-      const broadcastQuery = !rpcSuccess
-        ? supabase
+          if (error && (error.message?.includes('school_name') || error.code === '42703')) {
+            const fallbackRes = await supabase
+              .from('assignments')
+              .select('id, title, subject, grade, due_date, class_id, class_name, questions, created_at, is_broadcast, target_school_name')
+              .in('class_id', classIds)
+              .order('created_at', { ascending: false });
+            data = fallbackRes.data as any;
+            error = fallbackRes.error;
+          }
+
+          if (error) {
+            console.error("Error fetching class assignments:", error);
+          } else {
+            normalAssignments = (data || []).map((a: any) => ({
+              ...a,
+              school_name: a.school_name || a.target_school_name || ''
+            }));
+          }
+        } catch (e) {
+          console.error("Exception fetching class assignments:", e);
+        }
+      }
+
+      // 2. Fetch broadcast assignments
+      if (!rpcSuccess) {
+        try {
+          let { data, error } = await supabase
             .from('assignments')
             .select('id, title, subject, grade, due_date, class_id, class_name, questions, created_at, is_broadcast, school_name')
             .eq('is_broadcast', true)
             .eq('grade', student.grade)
-            .order('created_at', { ascending: false })
-        : Promise.resolve({ data: [], error: null });
+            .order('created_at', { ascending: false });
 
-      const [assignmentsRes, broadcastsRes, progressRes, examsRes] = await Promise.all([
-        normalQuery,
-        broadcastQuery,
-        supabase.rpc('get_student_progress_for_parent', {
-          p_student_id: student.id || '',
-          p_pin: parentPin
-        }),
-        supabase
-          .from('exam_attempts')
-          .select(`
-            id, exam_id, score, total_marks, teacher_feedback, parent_feedback, teacher_reply, submitted_at, answers, grading,
-            exam:exam_id (id, title, subject)
-          `)
-          .in('student_id', studentIds)
-          .eq('is_submitted', true)
-          .order('submitted_at', { ascending: false })
-      ]);
+          if (error && (error.message?.includes('school_name') || error.code === '42703')) {
+            const fallbackRes = await supabase
+              .from('assignments')
+              .select('id, title, subject, grade, due_date, class_id, class_name, questions, created_at, is_broadcast, target_school_name')
+              .eq('is_broadcast', true)
+              .eq('grade', student.grade)
+              .order('created_at', { ascending: false });
+            data = fallbackRes.data as any;
+            error = fallbackRes.error;
+          }
 
-      if (!rpcSuccess && assignmentsRes.error) throw assignmentsRes.error;
-      if (progressRes.error) throw progressRes.error;
-      if (examsRes.error) throw examsRes.error;
-
-      const progressData = progressRes.data || {};
-      if (progressData.success === false) {
-        throw new Error(progressData.error || "Wrong parent PIN / access denied.");
+          if (error) {
+            console.error("Error fetching broadcast assignments:", error);
+          } else {
+            broadcastAssignments = (data || []).map((a: any) => ({
+              ...a,
+              school_name: a.school_name || a.target_school_name || ''
+            }));
+          }
+        } catch (e) {
+          console.error("Exception fetching broadcast assignments:", e);
+        }
       }
 
+      // 4. Fetch exam attempts securely, avoiding nested relational joins that might crash the query
+      if (studentIds.length > 0) {
+        try {
+          const { data: attempts, error: attemptsErr } = await supabase
+            .from('exam_attempts')
+            .select('id, exam_id, score, total_marks, teacher_feedback, parent_feedback, teacher_reply, submitted_at, answers, grading')
+            .in('student_id', studentIds)
+            .eq('is_submitted', true)
+            .order('submitted_at', { ascending: false });
+
+          if (attemptsErr) {
+            console.error("Error fetching exam attempts:", attemptsErr);
+          } else if (attempts) {
+            const examIds = Array.from(new Set(attempts.map((a: any) => a.exam_id).filter(Boolean)));
+            const examsMap: Record<string, any> = {};
+            if (examIds.length > 0) {
+              try {
+                const { data: examsList, error: examsErr } = await supabase
+                  .from('exams')
+                  .select('id, title, subject')
+                  .in('id', examIds);
+                if (!examsErr && examsList) {
+                  examsList.forEach((e: any) => {
+                    examsMap[e.id] = e;
+                  });
+                }
+              } catch (e) {
+                console.error("Exception fetching exam details for attempts:", e);
+              }
+            }
+            examAttemptsData = attempts.map((a: any) => ({
+              ...a,
+              exam: examsMap[a.exam_id] || null
+            }));
+          }
+        } catch (e) {
+          console.error("Exception fetching exam attempts:", e);
+        }
+      }
+
+      // Map and set assignments state
       if (rpcSuccess) {
         setAssignments(fetchedAssignments);
       } else {
-        const normalAssignments = assignmentsRes.data || [];
-        const broadcastAssignments = broadcastsRes.data || [];
-
         // Filter broadcasts belonging to the student's school
         const schoolBroadcasts = broadcastAssignments.filter(b => {
           if (student.school_name && b.school_name) {
@@ -230,61 +390,29 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
 
         setAssignments(sortedAssignments);
       }
-      setExamAttempts(examsRes.data || []);
-      setAcknowledgements(progressData.acknowledgements || []);
 
-      // Fetch the full assignment submissions with complete student answers directly
-      const [submissionsById, submissionsByName] = await Promise.all([
-        supabase
-          .from('assignment_submissions')
-          .select('*')
-          .in('student_id', studentIds),
-        student.name
-          ? supabase
-              .from('assignment_submissions')
-              .select('*')
-              .eq('student_name', student.name)
-          : Promise.resolve({ data: [], error: null })
-      ]);
+      setExamAttempts(examAttemptsData);
 
-      const mergedSubmissionsMap: Record<string, any> = {};
-      if (submissionsByName.data) {
-        submissionsByName.data.forEach((s: any) => {
-          mergedSubmissionsMap[s.id] = s;
-        });
-      }
-      if (submissionsById.data) {
-        submissionsById.data.forEach((s: any) => {
-          mergedSubmissionsMap[s.id] = s;
-        });
-      }
-
-      const mergedList = Object.values(mergedSubmissionsMap);
-
-      if (mergedList.length > 0) {
-        setSubmissions(mergedList);
-      } else {
-        setSubmissions(progressData.submissions || []);
-      }
-
-      // Fetch dynamic note sessions progress
-      const usernamesToQuery = student.name ? [student.name] : [];
-      if ((student as any).username) {
-        usernamesToQuery.push((student as any).username);
-      }
-      if (student.id) {
-        usernamesToQuery.push(student.id);
-      }
+      // 6. Fetch student note sessions with error safety
+      const usernamesToQuery = [
+        student.name,
+        (student as any).username,
+        student.id
+      ].filter((u): u is string => typeof u === 'string' && u.trim() !== '' && u !== 'undefined');
 
       if (usernamesToQuery.length > 0) {
-        const { data: noteSessionsData, error: noteSessionsError } = await supabase
-          .from('student_note_sessions')
-          .select('*')
-          .in('username', usernamesToQuery)
-          .order('updated_at', { ascending: false });
+        try {
+          const { data: noteSessionsData, error: noteSessionsError } = await supabase
+            .from('student_note_sessions')
+            .select('*')
+            .in('username', usernamesToQuery)
+            .order('updated_at', { ascending: false });
 
-        if (!noteSessionsError && noteSessionsData) {
-          setNoteSessions(noteSessionsData);
+          if (!noteSessionsError && noteSessionsData) {
+            setNoteSessions(noteSessionsData);
+          }
+        } catch (e) {
+          console.error("Exception fetching note sessions:", e);
         }
       }
     } catch (err: any) {
@@ -384,10 +512,42 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
               <span className="px-3 py-1 bg-brand-accent/10 border border-brand-accent/20 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-accent">
                 {(Array.isArray(student.classes) ? student.classes[0]?.name : student.classes?.name) || 'Assigned Class'}
               </span>
+
+              {/* Dynamic live indicator badge */}
+              {isTabVisible ? (
+                consecutiveFailures >= 2 ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-amber-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    Offline • Sync Error
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-emerald-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping duration-1000" />
+                    Live • {secondsSinceUpdate === 0 ? 'just now' : `${secondsSinceUpdate}s ago`}
+                  </span>
+                )
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-bg border border-brand-border rounded-full text-[10px] font-black uppercase tracking-widest text-brand-muted">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-muted" />
+                  Paused
+                </span>
+              )}
             </div>
           </div>
         </div>
       </header>
+
+      {consecutiveFailures >= 2 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 px-6 py-4 rounded-[2rem] flex items-start gap-3.5 text-xs font-bold animate-in fade-in slide-in-from-top-2 duration-300">
+          <AlertTriangle size={18} className="shrink-0 text-amber-500 mt-0.5 animate-bounce" />
+          <div className="space-y-0.5">
+            <h4 className="font-black uppercase tracking-wider text-[10px] text-amber-500">Live Syncing Interrupted</h4>
+            <p className="opacity-90 font-medium leading-relaxed">
+              We couldn't refresh the progress records in the last few attempts. Please check your internet connection. AZILearn is automatically attempting to reconnect...
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4">
         <div className="flex items-center justify-between px-2">

@@ -52,31 +52,28 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
 
     setLoading(true);
     try {
-      // Direct call to Postgres RPC:
-      const { data, error } = await supabase.rpc('lookup_student_for_parent', {
-        p_school_name: formData.schoolName.trim(),
-        p_grade: formData.grade,
-        p_index_number: formData.indexNumber.trim(),
-        p_name: formData.studentName.trim()
-      });
+      // Direct call to Postgres view:
+      const { data, error } = await supabase
+        .from('students_public')
+        .select('*')
+        .ilike('school_name', formData.schoolName.trim())
+        .eq('grade', formData.grade)
+        .eq('index_number', formData.indexNumber.trim())
+        .ilike('name', `%${formData.studentName.trim()}%`)
+        .maybeSingle();
 
       if (error) {
         showToast(error.message || "Error searching child. Try again.", "error");
         return;
       }
 
-      if (!data || data.success === false) {
-        const errorMsg = data?.error === 'student_not_found' 
-          ? "Student not found. Please verify the Details."
-          : data?.error === 'account_locked'
-          ? "This account is temporarily locked due to too many failed attempts. Please contact the class teacher."
-          : "Lookup failed. Please check your inputs.";
-        showToast(errorMsg, "error");
+      if (!data) {
+        showToast("Student not found. Please verify the Details.", "error");
         return;
       }
 
-      // Successful lookup fallback
-      const resolvedStudentId = data.student_id;
+      // Successful lookup
+      const resolvedStudentId = data.id;
       if (!resolvedStudentId) {
         showToast("Unable to resolve Student ID. Contact teacher.", "error");
         return;
