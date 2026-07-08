@@ -25,7 +25,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.schoolName || !formData.pin || !formData.confirmPin) {
+    if (!formData.name || !formData.pin || !formData.confirmPin) {
       showToast("Please fill all fields", "error");
       return;
     }
@@ -45,7 +45,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
       const { data, error } = await supabase.rpc('teacher_register', {
         p_name: formData.name.trim(),
         p_pin: formData.pin,
-        p_school_name: formData.schoolName.trim(),
+        p_school_name: formData.schoolName.trim() || null,
         p_email: null
       });
 
@@ -61,6 +61,14 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
         school_name: data.school_name,
         school_id: data.school_id
       }));
+
+      // Check the school_linked field in response — if false, set banner flag to show later
+      if (data.school_linked === false) {
+        localStorage.setItem('azilearn_show_school_link_banner', 'true');
+      } else {
+        localStorage.removeItem('azilearn_show_school_link_banner');
+      }
+
       await setTeacherConfig(data.id);
       showToast("Welcome to AziLearn!", "success");
       onSuccess();
@@ -111,6 +119,7 @@ const TeacherSignup: React.FC<TeacherSignupProps> = ({ onBack, onSuccess, onNavi
 
           <div className="space-y-2">
             <LinkSchoolField
+              label="School Name (Optional)"
               currentSchoolName={formData.schoolName}
               onChangeText={(text) => setFormData(prev => ({ ...prev, schoolName: text }))}
               onLinked={(school) => setFormData(prev => ({ ...prev, schoolId: school.id, schoolName: school.name }))}

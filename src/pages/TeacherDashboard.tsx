@@ -30,6 +30,7 @@ import { SlidesViewer } from '../components/SlidesViewer';
 import { Experiment } from '../types';
 import ModerationPage from './ModerationPage';
 import { SchoolSetupModal } from '../components/SchoolSetupModal';
+import LinkSchoolField from '../components/LinkSchoolField';
 
 interface Assignment {
   id: string;
@@ -52,6 +53,7 @@ interface Teacher {
   name: string;
   school_name: string;
   school_id?: string | null;
+  school_linked?: boolean;
 }
 
 interface TeacherDashboardProps {
@@ -87,6 +89,22 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [editingClassName, setEditingClassName] = useState<string>('');
   const [isSchoolSetupOpen, setIsSchoolSetupOpen] = useState(false);
+  const [showLinkSchoolBanner, setShowLinkSchoolBanner] = useState(false);
+
+  // New state for dismissible banner & inline linking form
+  const [isSchoolBannerDismissed, setIsSchoolBannerDismissed] = useState(() => {
+    return localStorage.getItem('azilearn_dismiss_link_school_banner') === 'true';
+  });
+  const [showInlineLinkForm, setShowInlineLinkForm] = useState(false);
+  const [selectedSchool, setSelectedSchool] = useState<{ id: string; name: string } | null>(null);
+  const [isLinkingSchool, setIsLinkingSchool] = useState(false);
+
+  useEffect(() => {
+    const showBanner = localStorage.getItem('azilearn_show_school_link_banner');
+    if (showBanner === 'true') {
+      setShowLinkSchoolBanner(true);
+    }
+  }, []);
 
   const handleImportByCode = async (passedCode?: string) => {
     const finalCode = (passedCode || importCode).trim().toUpperCase();
@@ -567,7 +585,55 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       };
       setTeacher(updated);
       localStorage.setItem('azilearn_teacher', JSON.stringify(updated));
+      localStorage.removeItem('azilearn_show_school_link_banner');
+      setShowLinkSchoolBanner(false);
       fetchDashboardData(teacher.id);
+    }
+  };
+
+  const handleLinkSchoolFromBanner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSchool || !teacher?.id) return;
+
+    setIsLinkingSchool(true);
+    try {
+      const { data, error } = await supabase.rpc('link_teacher_school', {
+        p_teacher_id: teacher.id,
+        p_school_id: selectedSchool.id
+      });
+
+      if (error) throw error;
+
+      if (data && data.success === false) {
+        showToast(data.message || "Failed to link school", "error");
+        return;
+      }
+
+      showToast(`Successfully linked to ${selectedSchool.name || 'your school'}! 🏫`, 'success');
+
+      const finalSchoolName = selectedSchool.name || (data && data.school_name) || 'Linked School';
+      
+      const updatedTeacher = {
+        ...teacher,
+        school_id: selectedSchool.id,
+        school_name: finalSchoolName,
+        school_linked: true
+      };
+      setTeacher(updatedTeacher);
+      localStorage.setItem('azilearn_teacher', JSON.stringify(updatedTeacher));
+
+      // Refresh other dashboard stats and data
+      fetchDashboardData(teacher.id);
+      
+      // Close form and hide banner
+      setShowInlineLinkForm(false);
+      setIsSchoolBannerDismissed(true);
+      localStorage.setItem('azilearn_dismiss_link_school_banner', 'true');
+    } catch (err: any) {
+      console.error("Error linking school from banner:", err);
+      showToast(err.message || "Failed to link school", "error");
+    } finally {
+      setIsLinkingSchool(false);
     }
   };
 
@@ -630,24 +696,74 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       </header>
 
       <main className="px-4 py-4 space-y-4">
-        {!teacher?.school_id && (
-          <div className="bg-brand-accent/5 border border-brand-accent/20 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0" id="unlinked-school-banner">
-            <div className="space-y-1">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-accent flex items-center gap-1.5">
-                <School size={12} />
-                Unlinked School Profile
-              </h4>
-              <p className="text-[9px] font-bold text-brand-muted leading-relaxed">
-                Your teacher profile is not linked to a registered school account yet. Link or register your school to enable full administrative dashboard capabilities.
-              </p>
+        {(!isSchoolBannerDismissed && (teacher?.school_linked === false || !teacher?.school_id || teacher?.school_name === 'Unassigned')) && (
+          <div className="bg-brand-accent/5 border border-brand-accent/25 rounded-2xl p-4 flex flex-col gap-3 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300" id="dismissible-school-banner">
+            <div className="flex items-center justify-between gap-3 w-full">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-brand-accent/10 flex items-center justify-center text-brand-accent shrink-0">
+                  <School size={16} />
+                </div>
+                <p className="text-xs font-bold text-brand-text leading-relaxed">
+                  You haven't linked a school yet —{' '}
+                  <button
+                    onClick={() => setShowInlineLinkForm(!showInlineLinkForm)}
+                    className="text-brand-accent hover:underline font-black uppercase tracking-wider text-[10px] ml-1"
+                  >
+                    {showInlineLinkForm ? '[Hide Form]' : '[Link school]'}
+                  </button>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsSchoolBannerDismissed(true);
+                  localStorage.setItem('azilearn_dismiss_link_school_banner', 'true');
+                }}
+                className="p-1.5 hover:bg-brand-border/40 rounded-lg text-brand-muted hover:text-brand-text transition-colors shrink-0"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
             </div>
-            <button
-              onClick={() => setIsSchoolSetupOpen(true)}
-              className="self-start sm:self-center px-4 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors shrink-0"
-              id="banner-link-school-btn"
-            >
-              Link School Now
-            </button>
+
+            {showInlineLinkForm && (
+              <form onSubmit={handleLinkSchoolFromBanner} className="space-y-3 pt-3 border-t border-brand-border/30 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="max-w-md">
+                  <LinkSchoolField
+                    label="Search and Select Your School"
+                    currentSchoolName={selectedSchool?.name || ''}
+                    onLinked={(school) => setSelectedSchool(school)}
+                    onChangeText={(text) => {
+                      if (selectedSchool && text !== selectedSchool.name) {
+                        setSelectedSchool(null);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-2 justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineLinkForm(false)}
+                    className="px-3 py-1.5 border border-brand-border rounded-xl text-[9px] font-black uppercase tracking-widest text-brand-muted hover:bg-brand-bg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!selectedSchool || isLinkingSchool}
+                    className="px-4 py-1.5 bg-brand-accent hover:bg-brand-accent/90 disabled:opacity-50 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+                  >
+                    {isLinkingSchool ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        Linking...
+                      </>
+                    ) : (
+                      'Submit Link'
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
         <div className="space-y-3">

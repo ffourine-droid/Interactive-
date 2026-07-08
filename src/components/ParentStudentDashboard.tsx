@@ -83,6 +83,7 @@ interface ParentStudentDashboardProps {
 export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ student, parentPin }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [fetchedStudent, setFetchedStudent] = useState<any>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [examAttempts, setExamAttempts] = useState<ExamAttempt[]>([]);
@@ -140,6 +141,9 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       if (data) {
         if (data.success) {
           setConsecutiveFailures(0);
+          if (data.student) {
+            setFetchedStudent(data.student);
+          }
           const submissionsPayload = data.submissions || [];
           const acknowledgementsPayload = data.acknowledgements || [];
           const dataPayload = {
@@ -174,19 +178,77 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
 
     // Fetch immediately on mount or when visibility shifts back to true
     if (isTabVisible) {
-      fetchProgressData();
+      fetchData(true);
     }
 
     if (!isTabVisible) return;
 
     const interval = setInterval(() => {
-      fetchProgressData();
+      fetchData(true);
     }, 15000);
 
     return () => {
       clearInterval(interval);
     };
   }, [student?.id, parentPin, isTabVisible]);
+
+  // Realtime subscription effect to keep all tables in sync instantly on database changes
+  useEffect(() => {
+    if (!student?.id) return;
+
+    const realtimeChannel = supabase
+      .channel(`parent-dashboard-${student.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'assignment_submissions'
+      }, (payload) => {
+        const sub = payload.new as any || payload.old as any;
+        if (sub?.student_id === student.id) {
+          fetchData(true);
+        }
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'exam_attempts'
+      }, (payload) => {
+        const att = payload.new as any || payload.old as any;
+        if (att?.student_id === student.id) {
+          fetchData(true);
+        }
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'student_note_sessions'
+      }, (payload) => {
+        const sess = payload.new as any || payload.old as any;
+        const usernamesToQuery = [
+          student.name,
+          (student as any).username,
+          student.id
+        ].filter((u): u is string => typeof u === 'string' && u.trim() !== '' && u !== 'undefined');
+        if (sess?.username && usernamesToQuery.includes(sess.username)) {
+          fetchData(true);
+        }
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'parent_acknowledgements'
+      }, (payload) => {
+        const ack = payload.new as any || payload.old as any;
+        if (ack?.student_id === student.id) {
+          fetchData(true);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(realtimeChannel);
+    };
+  }, [student?.id]);
 
   useEffect(() => {
     if (student) {
@@ -225,13 +287,18 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (silent = false) => {
     if (!student) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     try {
+      // First, fetch direct progress data including the student object
+      await fetchProgressData();
+
       const rawStudentIds = student.all_student_ids || (student.id ? [student.id] : []);
       const studentIds = rawStudentIds.filter((id: any) => typeof id === 'string' && id.trim() !== '' && id !== 'undefined');
 
@@ -493,24 +560,29 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
     );
   }
 
+  const displayName = fetchedStudent?.name || student.name || 'Student';
+  const displayGrade = fetchedStudent?.grade || student.grade || 'No Grade';
+  const displayIndexNumber = fetchedStudent?.index_number || student.parent_code || 'N/A';
+  const displayClassName = fetchedStudent?.class_name || (Array.isArray(student.classes) ? student.classes[0]?.name : student.classes?.name) || 'Assigned Class';
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-sm">
         <div className="flex items-center gap-6">
           <div className="w-20 h-20 bg-brand-accent rounded-[2rem] flex items-center justify-center text-white text-3xl font-black shadow-xl shadow-brand-accent/20">
-            {(student.name || '').charAt(0)}
+            {(displayName || '').charAt(0)}
           </div>
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-brand-text">{student.name || 'Student'}</h1>
+            <h1 className="text-3xl font-black tracking-tight text-brand-text">{displayName || 'Student'}</h1>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span className="px-3 py-1 bg-brand-bg border border-brand-border rounded-full text-[10px] font-black uppercase tracking-widest text-brand-muted">
-                {student.grade || 'No Grade'}
+                {displayGrade || 'No Grade'}
               </span>
               <span className="px-3 py-1 bg-brand-surface border border-brand-accent/30 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-accent font-mono">
-                Index: {student.parent_code || 'N/A'}
+                Index: {displayIndexNumber}
               </span>
               <span className="px-3 py-1 bg-brand-accent/10 border border-brand-accent/20 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-accent">
-                {(Array.isArray(student.classes) ? student.classes[0]?.name : student.classes?.name) || 'Assigned Class'}
+                {displayClassName}
               </span>
 
               {/* Dynamic live indicator badge */}

@@ -7,6 +7,7 @@ interface LinkSchoolFieldProps {
   currentSchoolName?: string;
   onLinked?: (school: { id: string; name: string }) => void;
   onChangeText?: (text: string) => void;
+  label?: string;
 }
 
 /**
@@ -21,7 +22,7 @@ interface LinkSchoolFieldProps {
  *     onLinked={(school) => setTeacher(t => ({ ...t, school_id: school.id, school_name: school.name }))}
  *   />
  */
-export default function LinkSchoolField({ teacherId, currentSchoolName, onLinked, onChangeText }: LinkSchoolFieldProps) {
+export default function LinkSchoolField({ teacherId, currentSchoolName, onLinked, onChangeText, label }: LinkSchoolFieldProps) {
   const [query, setQuery] = useState(currentSchoolName || "");
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
@@ -88,7 +89,7 @@ export default function LinkSchoolField({ teacherId, currentSchoolName, onLinked
 
   return (
     <div className="relative font-sans w-full">
-      <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted ml-1 mb-2">School Name</label>
+      <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted ml-1 mb-2">{label || "School Name"}</label>
       <div className="relative">
         <School className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
         <input

@@ -8,7 +8,8 @@ import {
   ChevronRight,
   GraduationCap,
   Lock,
-  LockKeyhole
+  LockKeyhole,
+  LogOut
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -221,19 +222,21 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text p-4 pb-12">
-      <main className="max-w-md mx-auto py-6">
+      <main className={`${student ? 'max-w-4xl' : 'max-w-md'} mx-auto py-6`}>
         
         {/* Navigation / Back Header */}
-        {!student && onBack && step === 'lookup' && (
+        {!student && onBack && (
           <button 
             type="button"
-            onClick={onBack}
+            onClick={step === 'lookup' ? onBack : handleResetToLookup}
             className="inline-flex items-center gap-2 text-brand-muted hover:text-brand-accent transition-colors mb-6 group"
           >
             <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border flex items-center justify-center group-hover:border-brand-accent group-hover:bg-brand-accent/5">
               <ArrowLeft size={14} />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest">Go Back</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">
+              {step === 'lookup' ? 'Go Back' : 'Back to Search'}
+            </span>
           </button>
         )}
 
@@ -531,6 +534,19 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                   </div>
                   <span className="text-[10px] font-black uppercase tracking-widest">Switch Student</span>
                 </button>
+
+                {onBack && (
+                  <button 
+                    type="button"
+                    onClick={onBack}
+                    className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-muted hover:text-brand-accent transition-all group cursor-pointer"
+                  >
+                    <span className="text-[10px] font-black uppercase tracking-widest">Exit Portal</span>
+                    <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border flex items-center justify-center group-hover:border-brand-accent group-hover:bg-brand-accent/5">
+                      <LogOut size={14} />
+                    </div>
+                  </button>
+                )}
               </div>
               <ParentStudentDashboard student={student} parentPin={pinValue} />
             </motion.div>
