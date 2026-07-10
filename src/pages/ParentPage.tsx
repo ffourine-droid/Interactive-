@@ -191,7 +191,16 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
         throw rpcErr || new Error("Retrieval failed");
       }
 
-      const primaryStudent = rpcRes.primary_student || rpcRes;
+      if (rpcRes.success === false) {
+        showToast(rpcRes.message || "Error launching dashboard", "error");
+        return;
+      }
+
+      const primaryStudent = rpcRes.student;
+      if (!primaryStudent || !primaryStudent.id) {
+        showToast("Error launching dashboard: student data missing", "error");
+        return;
+      }
       const companions = rpcRes.companions || [];
 
       const allStudentIds = companions && companions.length > 0 

@@ -894,11 +894,33 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                             </div>
                           </div>
                         ) : (
-                          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${isOverdue ? 'bg-red-500/5 border-red-500/10 text-red-600' : 'bg-brand-muted/5 border-brand-border text-brand-muted'}`}>
-                            <AlertTriangle size={14} />
-                            <span className="text-[10px] font-black uppercase tracking-widest">
-                              {isOverdue ? 'Missed Work' : 'Not Submitted Yet'}
-                            </span>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${isOverdue ? 'bg-red-500/5 border-red-500/10 text-red-600' : 'bg-brand-muted/5 border-brand-border text-brand-muted'}`}>
+                              <AlertTriangle size={14} />
+                              <span className="text-[10px] font-black uppercase tracking-widest">
+                                {isOverdue ? 'Missed Work' : 'Not Submitted Yet'}
+                              </span>
+                            </div>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedSubmission({ 
+                                  assignment, 
+                                  submission: { 
+                                    id: '', 
+                                    assignment_id: assignment.id, 
+                                    score: null, 
+                                    status: 'pending', 
+                                    submitted_at: '', 
+                                    answers: {} 
+                                  } 
+                                });
+                              }}
+                              className="px-3 py-1.5 rounded-xl border-2 border-brand-accent/30 hover:border-brand-accent bg-transparent text-brand-accent text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-1.5"
+                            >
+                              <FileText size={12} />
+                              View Full Work Sent
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1063,55 +1085,114 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
 
               <div className="flex-1 overflow-y-auto p-8 space-y-8">
                 {/* Remarks Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                   {/* Teacher's Feedback (Read Only) */}
-                   {(selectedSubmission?.submission.teacher_comment || selectedExam?.teacher_feedback) ? (
-                    <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-6 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <Award className="text-brand-accent" size={20} />
-                        <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</h3>
-                      </div>
-                      <p className="text-sm font-bold text-brand-text leading-relaxed">
-                        "{selectedSubmission?.submission.teacher_comment || selectedExam?.teacher_feedback}"
-                      </p>
-                      
-                      {(selectedSubmission?.submission.teacher_reply || selectedExam?.teacher_reply) && (
-                        <div className="mt-4 pt-4 border-t border-brand-accent/10">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-brand-accent mb-2">Teacher's Reply to your Remarks</p>
-                          <p className="font-bold text-xs text-brand-text italic">
-                            "{selectedSubmission?.submission.teacher_reply || selectedExam?.teacher_reply}"
-                          </p>
+                {selectedSubmission && selectedSubmission.submission?.id ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     {/* Teacher's Feedback (Read Only) */}
+                     {selectedSubmission.submission.teacher_comment ? (
+                      <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-6 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <Award className="text-brand-accent" size={20} />
+                          <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</h3>
                         </div>
-                      )}
-                    </section>
-                   ) : (
-                    <div className="bg-brand-bg border border-brand-border border-dashed rounded-[2rem] p-6 flex items-center justify-center text-brand-muted text-[10px] font-black uppercase tracking-widest">
-                      No teacher comments yet
-                    </div>
-                   )}
-
-                   {/* Parent's Remarks (Editable) */}
-                   <section className="bg-emerald-500/5 border border-emerald-500/20 rounded-[2rem] p-6 space-y-4">
-                      <div className="flex items-center gap-3">
-                        <User className="text-emerald-600" size={20} />
-                        <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600">My Remarks</h3>
+                        <p className="text-sm font-bold text-brand-text leading-relaxed">
+                          "{selectedSubmission.submission.teacher_comment}"
+                        </p>
+                        
+                        {selectedSubmission.submission.teacher_reply && (
+                          <div className="mt-4 pt-4 border-t border-brand-accent/10">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-brand-accent mb-2">Teacher's Reply to your Remarks</p>
+                            <p className="font-bold text-xs text-brand-text italic">
+                              "{selectedSubmission.submission.teacher_reply}"
+                            </p>
+                          </div>
+                        )}
+                      </section>
+                     ) : (
+                      <div className="bg-brand-bg border border-brand-border border-dashed rounded-[2rem] p-6 flex items-center justify-center text-brand-muted text-[10px] font-black uppercase tracking-widest">
+                        No teacher comments yet
                       </div>
-                      <textarea 
-                        placeholder="Add your notes or questions for the teacher..."
-                        value={modalFeedbackText}
-                        onChange={(e) => setModalFeedbackText(e.target.value)}
-                        className="w-full bg-white dark:bg-brand-card border-none rounded-2xl p-4 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 min-h-[100px] resize-none transition-all"
-                      />
-                      <button 
-                        onClick={() => handleSaveParentFeedback(selectedSubmission?.submission.id || selectedExam?.id || '', selectedSubmission ? 'assignment' : 'exam', true)}
-                        disabled={savingFeedback}
-                        className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
-                      >
-                        {savingFeedback ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                        {savingFeedback ? 'Saving...' : 'Save Remarks'}
-                      </button>
-                   </section>
-                </div>
+                     )}
+
+                     {/* Parent's Remarks (Editable) */}
+                     <section className="bg-emerald-500/5 border border-emerald-500/20 rounded-[2rem] p-6 space-y-4">
+                        <div className="flex items-center gap-3">
+                          <User className="text-emerald-600" size={20} />
+                          <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600">My Remarks</h3>
+                        </div>
+                        <textarea 
+                          placeholder="Add your notes or questions for the teacher..."
+                          value={modalFeedbackText}
+                          onChange={(e) => setModalFeedbackText(e.target.value)}
+                          className="w-full bg-white dark:bg-brand-card border-none rounded-2xl p-4 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 min-h-[100px] resize-none transition-all"
+                        />
+                        <button 
+                          onClick={() => handleSaveParentFeedback(selectedSubmission.submission.id, 'assignment', true)}
+                          disabled={savingFeedback}
+                          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+                        >
+                          {savingFeedback ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                          {savingFeedback ? 'Saving...' : 'Save Remarks'}
+                        </button>
+                     </section>
+                  </div>
+                ) : selectedExam ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     {/* Teacher's Feedback (Read Only) */}
+                     {selectedExam.teacher_feedback ? (
+                      <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-6 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <Award className="text-brand-accent" size={20} />
+                          <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</h3>
+                        </div>
+                        <p className="text-sm font-bold text-brand-text leading-relaxed">
+                          "{selectedExam.teacher_feedback}"
+                        </p>
+                        
+                        {selectedExam.teacher_reply && (
+                          <div className="mt-4 pt-4 border-t border-brand-accent/10">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-brand-accent mb-2">Teacher's Reply to your Remarks</p>
+                            <p className="font-bold text-xs text-brand-text italic">
+                              "{selectedExam.teacher_reply}"
+                            </p>
+                          </div>
+                        )}
+                      </section>
+                     ) : (
+                      <div className="bg-brand-bg border border-brand-border border-dashed rounded-[2rem] p-6 flex items-center justify-center text-brand-muted text-[10px] font-black uppercase tracking-widest">
+                        No teacher comments yet
+                      </div>
+                     )}
+
+                     {/* Parent's Remarks (Editable) */}
+                     <section className="bg-emerald-500/5 border border-emerald-500/20 rounded-[2rem] p-6 space-y-4">
+                        <div className="flex items-center gap-3">
+                          <User className="text-emerald-600" size={20} />
+                          <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600">My Remarks</h3>
+                        </div>
+                        <textarea 
+                          placeholder="Add your notes or questions for the teacher..."
+                          value={modalFeedbackText}
+                          onChange={(e) => setModalFeedbackText(e.target.value)}
+                          className="w-full bg-white dark:bg-brand-card border-none rounded-2xl p-4 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 min-h-[100px] resize-none transition-all"
+                        />
+                        <button 
+                          onClick={() => handleSaveParentFeedback(selectedExam.id, 'exam', true)}
+                          disabled={savingFeedback}
+                          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+                        >
+                          {savingFeedback ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                          {savingFeedback ? 'Saving...' : 'Save Remarks'}
+                        </button>
+                     </section>
+                  </div>
+                ) : (
+                  <div className="bg-amber-500/5 border border-amber-500/20 rounded-[2rem] p-6 text-center">
+                    <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">Work Not Yet Submitted</p>
+                    <p className="text-[11px] text-brand-muted leading-relaxed">
+                      This assignment has not been completed by the student yet. Direct parent feedback and teacher grading remarks will become available once the student submits their answers.
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-6">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-muted ml-2">Questions & Answers</h4>
@@ -1123,6 +1204,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                   )}
 
                   {selectedSubmission && selectedSubmission.assignment.questions?.map((q: any, idx: number) => {
+                    const isSubmissionSubmitted = !!selectedSubmission.submission?.id;
                     const submissionAnswers = selectedSubmission.submission?.answers || {};
                     const qAnswer = submissionAnswers[q.id] !== undefined
                       ? submissionAnswers[q.id]
@@ -1134,33 +1216,62 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                           <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
                         </div>
                         <div className="pl-10">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Submitted Answer</p>
-                          {q.type === 'mcq' ? (
-                            <div className="flex items-center gap-2">
-                               <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(qAnswer) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
-                                 {q.options?.[parseInt(qAnswer)] || 'No choice selected'}
-                               </div>
-                               {parseInt(qAnswer) === q.correct_option ? (
-                                 <CheckCircle2 size={16} className="text-emerald-500" />
-                               ) : (
-                                 <AlertTriangle size={16} className="text-red-500" />
-                               )}
-                            </div>
-                          ) : q.type === 'photo' ? (
-                            <div className="space-y-2">
-                              {qAnswer ? (
-                                <img 
-                                  src={qAnswer} 
-                                  alt="Work" 
-                                  className="rounded-2xl border border-brand-border w-full max-w-sm object-cover shadow-sm"
-                                  referrerPolicy="no-referrer"
-                                />
+                          {isSubmissionSubmitted ? (
+                            <>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Submitted Answer</p>
+                              {q.type === 'mcq' ? (
+                                <div className="flex items-center gap-2">
+                                   <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(qAnswer) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
+                                     {q.options?.[parseInt(qAnswer)] || 'No choice selected'}
+                                   </div>
+                                   {parseInt(qAnswer) === q.correct_option ? (
+                                     <CheckCircle2 size={16} className="text-emerald-500" />
+                                   ) : (
+                                     <AlertTriangle size={16} className="text-red-500" />
+                                   )}
+                                </div>
+                              ) : q.type === 'photo' ? (
+                                <div className="space-y-2">
+                                  {qAnswer ? (
+                                    <img 
+                                      src={qAnswer} 
+                                      alt="Work" 
+                                      className="rounded-2xl border border-brand-border w-full max-w-sm object-cover shadow-sm"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <p className="text-xs font-semibold text-brand-muted">No photo uploaded</p>
+                                  )}
+                                </div>
                               ) : (
-                                <p className="text-xs font-semibold text-brand-muted">No photo uploaded</p>
+                                <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{qAnswer || 'No answer provided'}</p>
                               )}
-                            </div>
+                            </>
                           ) : (
-                            <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{qAnswer || 'No answer provided'}</p>
+                            <>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Question Details & Answer Key</p>
+                              {q.type === 'mcq' ? (
+                                <div className="space-y-2 mt-2">
+                                  {q.options?.map((opt: string, oIdx: number) => {
+                                    const isCorrectOpt = oIdx === q.correct_option;
+                                    return (
+                                      <div 
+                                        key={oIdx} 
+                                        className={`px-4 py-2 rounded-xl text-sm font-bold border ${isCorrectOpt ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-brand-surface border-brand-border/50 text-brand-muted'}`}
+                                      >
+                                        <span className="mr-2">{oIdx + 1}.</span> {opt} {isCorrectOpt && '✓ (Correct Answer)'}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <div className="px-4 py-3 bg-brand-surface border border-brand-border rounded-xl text-xs font-medium text-brand-muted leading-relaxed">
+                                    This is an open-ended question requiring a <span className="font-black text-brand-accent uppercase">{q.type === 'photo' ? 'Photo / Image Upload' : 'Written / Text Response'}</span> from the student.
+                                  </div>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
