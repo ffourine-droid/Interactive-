@@ -19,7 +19,9 @@ import {
   Shield,
   Edit2,
   Trash2,
-  X
+  X,
+  Award,
+  RefreshCw
 } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -81,7 +83,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [newClassName, setNewClassName] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
-  const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions' | 'forum_moderation'>('classes');
+  const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions' | 'forum_moderation' | 'grading_queue'>('classes');
+  const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
+  const [loadingPendingSubmissions, setLoadingPendingSubmissions] = useState(false);
+  const [gradingMarks, setGradingMarks] = useState<Record<string, number>>({});
+  const [gradingComments, setGradingComments] = useState<Record<string, string>>({});
+  const [submittingGrades, setSubmittingGrades] = useState<Record<string, boolean>>({});
   const [showImportModal, setShowImportModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [importCode, setImportCode] = useState('');
@@ -105,6 +112,101 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       setShowLinkSchoolBanner(true);
     }
   }, []);
+
+  const fetchPendingSubmissions = async (teacherId: string) => {
+    try {
+      setLoadingPendingSubmissions(true);
+      const { data, error } = await supabase.rpc('teacher_get_pending_submissions', {
+        p_teacher_id: teacherId
+      });
+      if (error) throw error;
+      
+      if (data && data.success === false) {
+        showToast(data.message || "Failed to fetch pending submissions", "error");
+        setPendingSubmissions([]);
+      } else if (data && data.submissions) {
+        setPendingSubmissions(data.submissions);
+      } else {
+        setPendingSubmissions(data || []);
+      }
+    } catch (err: any) {
+      console.error("Failed to load pending submissions", err);
+      showToast(err.message || "Failed to load pending submissions", "error");
+    } finally {
+      setLoadingPendingSubmissions(false);
+    }
+  };
+
+  const handleGradeQuestion = async (submissionId: string, questionId: string, maxMarks: number) => {
+    const key = `${submissionId}-${questionId}`;
+    const enteredMarks = gradingMarks[key] ?? 0;
+    const enteredComment = gradingComments[key] || '';
+
+    if (enteredMarks < 0 || enteredMarks > maxMarks) {
+      showToast(`Marks must be between 0 and ${maxMarks}`, "error");
+      return;
+    }
+
+    setSubmittingGrades(prev => ({ ...prev, [key]: true }));
+
+    try {
+      const { data, error } = await supabase.rpc('teacher_grade_question', {
+        p_teacher_id: teacher?.id,
+        p_submission_id: submissionId,
+        p_question_id: questionId,
+        p_marks_awarded: enteredMarks,
+        p_comment: enteredComment || null
+      });
+
+      if (error) throw error;
+
+      if (data && data.success === false) {
+        showToast(data.message || "Failed to save grade", "error");
+        return;
+      }
+
+      showToast("Question graded successfully!", "success");
+
+      // Update state based on fully_graded
+      setPendingSubmissions(prev => {
+        if (data?.fully_graded) {
+          // Remove the entire submission card
+          return prev.filter(sub => sub.submission_id !== submissionId);
+        } else {
+          // Remove only this question from the submission card
+          return prev.map(sub => {
+            if (sub.submission_id === submissionId) {
+              return {
+                ...sub,
+                pending_questions: sub.pending_questions.filter((q: any) => q.question_id !== questionId)
+              };
+            }
+            return sub;
+          }).filter(sub => sub.pending_questions.length > 0);
+        }
+      });
+
+      // Clear state inputs for this key
+      setGradingMarks(prev => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+      setGradingComments(prev => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+    } catch (err: any) {
+      showToast(err.message || "Failed to save grade", "error");
+    } finally {
+      setSubmittingGrades(prev => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+    }
+  };
 
   const handleImportByCode = async (passedCode?: string) => {
     const finalCode = (passedCode || importCode).trim().toUpperCase();
@@ -257,6 +359,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
     setTeacher(t);
     fetchDashboardData(t.id);
+    fetchPendingSubmissions(t.id);
 
     // Global real-time listener for teacher's classes
     const activityChannel = supabase
@@ -268,6 +371,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       }, (payload) => {
         setRecentActivity(prev => [payload.new, ...prev].slice(0, 5));
         fetchDashboardData(t.id);
+        fetchPendingSubmissions(t.id);
         showToast(`New assignment from ${payload.new.student_name}!`, "info");
       })
       .on('postgres_changes', {
@@ -285,6 +389,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       supabase.removeChannel(activityChannel);
     };
   }, []);
+
+  useEffect(() => {
+    if (activeView === 'grading_queue' && teacher?.id) {
+      fetchPendingSubmissions(teacher.id);
+    }
+  }, [activeView, teacher?.id]);
 
   const fetchDashboardData = async (teacherId: string) => {
     try {
@@ -805,10 +915,19 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <Shield size={12} /> Forum Mod
               {activeView === 'forum_moderation' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
             </button>
+            <button
+              onClick={() => setActiveView('grading_queue')}
+              className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 pb-2 transition-all relative shrink-0 ${
+                activeView === 'grading_queue' ? 'text-brand-accent' : 'text-brand-muted'
+              }`}
+            >
+              <Award size={12} /> Grading Queue
+              {activeView === 'grading_queue' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
+            </button>
           </div>
 
           {/* Action buttons — scroll horizontally, never wrap */}
-          {activeView !== 'forum_moderation' && (
+          {activeView !== 'forum_moderation' && activeView !== 'grading_queue' && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
               {activeView === 'classes' ? (
                 <>
@@ -1097,8 +1216,188 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         ) : activeView === 'competitions' ? (
           <TeacherCompetitionManager teacherId={teacher?.id || ''} />
-        ) : (
+        ) : activeView === 'forum_moderation' ? (
           <ModerationPage embedMode={true} />
+        ) : (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between bg-brand-surface border border-brand-border p-6 rounded-[2rem] shadow-sm">
+              <div>
+                <h2 className="text-xl font-black tracking-tight uppercase leading-none">Grading Queue</h2>
+                <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-2">
+                  {pendingSubmissions.length} submission{pendingSubmissions.length !== 1 ? 's' : ''} awaiting grades
+                </p>
+              </div>
+              <button
+                onClick={() => teacher?.id && fetchPendingSubmissions(teacher.id)}
+                disabled={loadingPendingSubmissions}
+                className="p-3 bg-brand-bg hover:bg-brand-accent/10 border border-brand-border text-brand-muted hover:text-brand-accent rounded-xl transition-all disabled:opacity-50 flex items-center justify-center"
+                title="Refresh Queue"
+              >
+                <RefreshCw size={16} className={loadingPendingSubmissions ? "animate-spin text-brand-accent" : ""} />
+              </button>
+            </div>
+
+            {loadingPendingSubmissions ? (
+              <div className="py-20 text-center space-y-4 bg-brand-surface border border-brand-border rounded-[2.5rem]">
+                <Loader2 className="animate-spin text-brand-accent/20 mx-auto" size={48} />
+                <p className="text-brand-muted font-bold animate-pulse">Loading pending submissions...</p>
+              </div>
+            ) : pendingSubmissions.length === 0 ? (
+              <div className="py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
+                <div className="w-16 h-16 bg-brand-accent/5 rounded-full flex items-center justify-center mx-auto text-brand-accent/30">
+                  <Award size={32} />
+                </div>
+                <div>
+                  <p className="text-brand-muted font-bold">All caught up!</p>
+                  <p className="text-xs text-brand-muted/60 mt-1">There are no pending submissions awaiting grades at this time.</p>
+                </div>
+                <button
+                  onClick={() => teacher?.id && fetchPendingSubmissions(teacher.id)}
+                  className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-accent/90 transition-colors mx-auto block"
+                >
+                  Refresh Queue
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {pendingSubmissions.map((sub, sIdx) => (
+                  <motion.div
+                    key={sub.submission_id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: sIdx * 0.05 }}
+                    className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 md:p-8 shadow-sm space-y-6"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-brand-border pb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <span className="px-2.5 py-1 bg-brand-accent/10 text-brand-accent text-[9px] font-black uppercase tracking-wider rounded-lg">
+                            {sub.subject}
+                          </span>
+                          <span className="text-xs font-bold text-brand-text">
+                            Student: <span className="font-black text-brand-accent">{sub.student_name}</span>
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-black tracking-tight text-brand-text">
+                          {sub.assignment_title}
+                        </h3>
+                      </div>
+                      <div className="text-left md:text-right">
+                        <p className="text-[9px] font-black text-brand-muted uppercase tracking-wider mb-1">Submitted At</p>
+                        <p className="text-xs font-bold text-brand-text">
+                          {new Date(sub.submitted_at).toLocaleDateString(undefined, { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                          })} at {new Date(sub.submitted_at).toLocaleTimeString(undefined, { 
+                            hour: 'numeric', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      {sub.pending_questions?.map((q: any, qIdx: number) => {
+                        const key = `${sub.submission_id}-${q.question_id}`;
+                        const isSaving = !!submittingGrades[key];
+                        return (
+                          <div 
+                            key={q.question_id}
+                            className="bg-brand-bg/40 border border-brand-border rounded-3xl p-5 space-y-4"
+                          >
+                            <div className="flex items-start gap-3">
+                              <span className="w-6 h-6 rounded-full bg-brand-accent/10 flex items-center justify-center text-brand-accent font-black text-xs shrink-0 mt-0.5">
+                                {qIdx + 1}
+                              </span>
+                              <div className="space-y-1">
+                                <h4 className="font-bold text-sm leading-snug text-brand-text">
+                                  {q.question_text}
+                                </h4>
+                                <span className="inline-block text-[8px] font-black uppercase tracking-widest text-brand-muted">
+                                  Type: {q.question_type === 'photo' ? 'Photo Upload' : 'Short Answer'} • Max Marks: {q.max_marks}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="pl-9 space-y-4">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">
+                                  Student's Answer
+                                </p>
+                                {q.question_type === 'photo' ? (
+                                  q.student_answer ? (
+                                    <img 
+                                      src={q.student_answer} 
+                                      alt="Student Submission" 
+                                      className="rounded-2xl border border-brand-border max-w-full md:max-w-md object-contain shadow-sm bg-black/5"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <p className="text-xs font-semibold text-brand-muted italic">No image uploaded</p>
+                                  )
+                                ) : (
+                                  <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">
+                                    {q.student_answer || 'No answer provided'}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="pt-2 border-t border-brand-border/40 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-black uppercase tracking-widest text-brand-muted px-1 block">Marks Awarded</label>
+                                  <input 
+                                    type="number"
+                                    min="0"
+                                    max={q.max_marks}
+                                    placeholder={`0 - ${q.max_marks}`}
+                                    value={gradingMarks[key] ?? ''}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value);
+                                      setGradingMarks(prev => ({
+                                        ...prev,
+                                        [key]: isNaN(val) ? 0 : val
+                                      }));
+                                    }}
+                                    className="px-3 py-2 bg-brand-surface border border-brand-border rounded-xl text-xs font-bold text-brand-text outline-none focus:border-brand-accent/50 w-full sm:w-32"
+                                  />
+                                </div>
+
+                                <div className="space-y-1 flex-1">
+                                  <label className="text-[9px] font-black uppercase tracking-widest text-brand-muted px-1 block">Feedback/Comments</label>
+                                  <input 
+                                    type="text"
+                                    placeholder="Optional comment for student & parent..."
+                                    value={gradingComments[key] ?? ''}
+                                    onChange={(e) => setGradingComments(prev => ({
+                                      ...prev,
+                                      [key]: e.target.value
+                                    }))}
+                                    className="w-full px-3 py-2 bg-brand-surface border border-brand-border rounded-xl text-xs font-bold text-brand-text outline-none focus:border-brand-accent/50"
+                                  />
+                                </div>
+
+                                <div className="sm:self-end">
+                                  <button
+                                    onClick={() => handleGradeQuestion(sub.submission_id, q.question_id, q.max_marks)}
+                                    disabled={isSaving}
+                                    className="w-full sm:w-auto px-5 py-2.5 bg-brand-accent hover:bg-brand-accent/90 disabled:opacity-50 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all shadow-md shadow-brand-accent/10 active:scale-95"
+                                  >
+                                    {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                    {isSaving ? 'Saving...' : 'Save Grade'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </main>
 
