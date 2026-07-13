@@ -85,20 +85,60 @@ export default function CreateExamPage({ onBack, initialData, preSelectedClassId
       }
 
       if (!fetchedClasses || fetchedClasses.length === 0) {
-        const { data: dbData, error: dbError } = await supabase
-          .from('classes')
-          .select('id, name, grade')
-          .eq('teacher_id', teacherData.id);
-        if (!dbError && dbData) {
-          fetchedClasses = dbData;
+        try {
+          const { data: subjectClasses, error: tsError } = await supabase
+            .from('teacher_subjects')
+            .select('class_id')
+            .eq('teacher_id', teacherData.id);
+
+          if (!tsError && subjectClasses && subjectClasses.length > 0) {
+            const classIds = subjectClasses.map((sc: any) => sc.class_id);
+            const { data: dbData, error: dbError } = await supabase
+              .from('classes')
+              .select('id, name, grade')
+              .in('id', classIds);
+            if (!dbError && dbData) {
+              fetchedClasses = dbData;
+            }
+          }
+        } catch (dbErr) {
+          console.error("Direct classes query fallback failed:", dbErr);
         }
       }
 
-      setClasses(fetchedClasses);
-      if (fetchedClasses && fetchedClasses.length > 0) {
-        const defaultClass = preSelectedClassId ? fetchedClasses.find(c => c.id === preSelectedClassId) : fetchedClasses[0];
-        const finalClassId = defaultClass?.id || fetchedClasses[0].id;
-        const finalGrade = defaultClass?.grade || fetchedClasses[0].grade || formData.grade;
+      // Add local classes if any
+      try {
+        const localClassesRaw = localStorage.getItem(`local_classes_${teacherData.id}`);
+        if (localClassesRaw) {
+          const localClasses = JSON.parse(localClassesRaw);
+          fetchedClasses = [...fetchedClasses, ...localClasses];
+        }
+      } catch (localErr) {
+        console.error("Failed to parse local classes:", localErr);
+      }
+
+      let filteredClasses = fetchedClasses;
+      try {
+        const { data: subjectClasses, error: tsError } = await supabase
+          .from('teacher_subjects')
+          .select('class_id')
+          .eq('teacher_id', teacherData.id);
+
+        if (!tsError && subjectClasses && subjectClasses.length > 0) {
+          const classIds = subjectClasses.map((sc: any) => sc.class_id);
+          filteredClasses = fetchedClasses.filter((c: any) => c.is_local || classIds.includes(c.id));
+        } else if (!tsError && subjectClasses && subjectClasses.length === 0) {
+          filteredClasses = fetchedClasses.filter((c: any) => c.is_local);
+        }
+      } catch (tsErr) {
+        console.error("Failed to filter classes by teacher_subjects:", tsErr);
+      }
+
+      setClasses(filteredClasses);
+      if (filteredClasses && filteredClasses.length > 0) {
+        const defaultClass = preSelectedClassId ? filteredClasses.find(c => c.id === preSelectedClassId) : filteredClasses[0];
+        const finalClassId = defaultClass?.id || filteredClasses[0].id;
+        const finalGrade = defaultClass?.grade || filteredClasses[0].grade || formData.grade;
         
         setFormData(prev => ({ 
           ...prev, 

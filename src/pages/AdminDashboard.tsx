@@ -21,6 +21,7 @@ import {
   AlertCircle,
   Zap,
   Users,
+  X,
   BookOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -43,7 +44,7 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards' | 'curriculum' | 'schools'>('overview');
+  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards' | 'curriculum' | 'schools' | 'teaching_assignments'>('overview');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
 
@@ -106,6 +107,123 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   });
   const [schoolCreationResult, setSchoolCreationResult] = useState<any>(null);
   const [creatingSchool, setCreatingSchool] = useState(false);
+
+  // Teaching Assignments state
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string>('');
+  const [teachingAssignmentsLoading, setTeachingAssignmentsLoading] = useState(false);
+  const [teachingAssignmentsData, setTeachingAssignmentsData] = useState<any>(null);
+  const [newSubjectName, setNewSubjectName] = useState<Record<string, string>>({});
+  const [newSubjectTeacherId, setNewSubjectTeacherId] = useState<Record<string, string>>({});
+  const [addingAssignment, setAddingAssignment] = useState<Record<string, boolean>>({});
+
+  const fetchTeachingAssignments = async (schoolId: string) => {
+    if (!schoolId) return;
+    setTeachingAssignmentsLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_get_school_teaching_assignments', {
+        p_school_id: schoolId
+      });
+      if (error) throw error;
+      if (data && data.success === false) {
+        showToast(data.message || "Failed to fetch teaching assignments", "error");
+        setTeachingAssignmentsData(null);
+      } else {
+        setTeachingAssignmentsData(data || null);
+      }
+    } catch (err: any) {
+      console.error("Error fetching teaching assignments:", err);
+      showToast(err.message || "Failed to fetch teaching assignments", "error");
+    } finally {
+      setTeachingAssignmentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'teaching_assignments') {
+      if (selectedSchoolId) {
+        fetchTeachingAssignments(selectedSchoolId);
+      } else if (schoolsList.length > 0) {
+        const firstSchoolId = schoolsList[0].id;
+        setSelectedSchoolId(firstSchoolId);
+        fetchTeachingAssignments(firstSchoolId);
+      } else {
+        fetchSchoolsList();
+      }
+    }
+  }, [activeTab, schoolsList]);
+
+  const handleAddTeacherSubject = async (classId: string) => {
+    const subject = (newSubjectName[classId] || '').trim();
+    const teacherId = newSubjectTeacherId[classId];
+
+    if (!subject) {
+      showToast("Please enter a subject name", "error");
+      return;
+    }
+    if (!teacherId) {
+      showToast("Please select a teacher", "error");
+      return;
+    }
+
+    setAddingAssignment(prev => ({ ...prev, [classId]: true }));
+    try {
+      const { data, error } = await supabase.rpc('admin_assign_teacher_subject', {
+        p_teacher_id: teacherId,
+        p_class_id: classId,
+        p_subject: subject
+      });
+
+      if (error) throw error;
+
+      if (data && data.success === false) {
+        showToast(data.message || "Failed to assign teacher", "error");
+      } else {
+        showToast("Teacher assigned successfully!", "success");
+        setNewSubjectName(prev => ({ ...prev, [classId]: '' }));
+        if (selectedSchoolId) {
+          fetchTeachingAssignments(selectedSchoolId);
+        }
+      }
+    } catch (err: any) {
+      showToast(err.message || "An unexpected error occurred", "error");
+    } finally {
+      setAddingAssignment(prev => ({ ...prev, [classId]: false }));
+    }
+  };
+
+  const handleRemoveTeacherSubject = async (assignmentId: string) => {
+    try {
+      const { data, error } = await supabase.rpc('admin_remove_teacher_subject', {
+        p_assignment_id: assignmentId
+      });
+
+      if (error) throw error;
+
+      if (data && data.success === false) {
+        showToast(data.message || "Failed to remove assignment", "error");
+      } else {
+        showToast("Assignment removed successfully!", "success");
+        if (selectedSchoolId) {
+          fetchTeachingAssignments(selectedSchoolId);
+        }
+      }
+    } catch (err: any) {
+      showToast(err.message || "An unexpected error occurred", "error");
+    }
+  };
+
+  const groupClassesByGrade = (classesList: any[]) => {
+    const groups: Record<string, any[]> = {};
+    if (!classesList) return groups;
+    classesList.forEach(cls => {
+      const grade = cls.grade || 'Other';
+      if (!groups[grade]) {
+        groups[grade] = [];
+      }
+      groups[grade].push(cls);
+    });
+    return groups;
+  };
 
   const fetchSchoolsList = async () => {
     setLoading(true);
@@ -615,6 +733,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             { id: 'requests' as const, icon: MessageCircle, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
             { id: 'teachers' as const, icon: Users, label: 'Teachers', badge: 0 },
             { id: 'schools' as const, icon: School, label: 'Schools', badge: 0 },
+            { id: 'teaching_assignments' as const, icon: Award, label: 'Teaching Assignments', badge: 0 },
             { id: 'forum_moderation' as const, icon: ShieldAlert, label: 'Forum Mod', badge: unresolvedFlags.length }
           ].map(tab => {
             const isSelected = activeTab === tab.id;
@@ -682,6 +801,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                 { id: 'requests' as const, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
                 { id: 'teachers' as const, label: 'Teachers', badge: 0 },
                 { id: 'schools' as const, label: 'Schools', badge: 0 },
+                { id: 'teaching_assignments' as const, label: 'Assignments', badge: 0 },
                 { id: 'forum_moderation' as const, label: 'Forum Mod', badge: unresolvedFlags.length }
               ].map(tab => {
                 const isSelected = activeTab === tab.id;
@@ -1433,6 +1553,185 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ────── TABS: TEACHING ASSIGNMENTS ────── */}
+          {!loading && activeTab === 'teaching_assignments' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-brand-surface border border-brand-border p-6 rounded-[2rem] shadow-sm">
+                <div>
+                  <h2 className="text-xl font-black tracking-tight uppercase leading-none">Manage Teaching Assignments</h2>
+                  <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-2">
+                    Assign subjects and educators to school classes
+                  </p>
+                </div>
+                {schoolsList.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted shrink-0">Select School:</label>
+                    <select
+                      value={selectedSchoolId}
+                      onChange={(e) => {
+                        setSelectedSchoolId(e.target.value);
+                        fetchTeachingAssignments(e.target.value);
+                      }}
+                      className="px-3 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold text-brand-text outline-none focus:border-brand-accent/50"
+                    >
+                      <option value="">-- Choose School --</option>
+                      {schoolsList.map((sch) => (
+                        <option key={sch.id} value={sch.id}>{sch.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {teachingAssignmentsLoading ? (
+                <div className="py-20 text-center space-y-4 bg-brand-surface border border-brand-border rounded-[2.5rem]">
+                  <Loader2 className="animate-spin text-brand-accent/20 mx-auto" size={48} />
+                  <p className="text-brand-muted font-bold animate-pulse">Loading teaching assignments...</p>
+                </div>
+              ) : !selectedSchoolId ? (
+                <div className="py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
+                  <p className="text-brand-muted font-bold">No School Selected</p>
+                  <p className="text-xs text-brand-muted/60">Please select a school from the dropdown to manage assignments.</p>
+                </div>
+              ) : !teachingAssignmentsData ? (
+                <div className="py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
+                  <p className="text-brand-muted font-bold">Failed to load data</p>
+                  <button 
+                    onClick={() => fetchTeachingAssignments(selectedSchoolId)}
+                    className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-accent/90 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {/* Class Assignment Grid grouped by Grade */}
+                  {(() => {
+                    const classesByGrade = groupClassesByGrade(teachingAssignmentsData.classes || []);
+                    const gradesKeys = Object.keys(classesByGrade).sort();
+
+                    if (gradesKeys.length === 0) {
+                      return (
+                        <div className="py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
+                          <p className="text-brand-muted font-bold">No classes found in this school</p>
+                          <p className="text-xs text-brand-muted/60">Add classes through a teacher account or database to assign subjects.</p>
+                        </div>
+                      );
+                    }
+
+                    return gradesKeys.map((grade) => (
+                      <div key={grade} className="space-y-4">
+                        <h3 className="text-sm font-black text-brand-accent uppercase tracking-wider border-b border-brand-border pb-2">
+                          {grade}
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {classesByGrade[grade].map((cls) => {
+                            const hasAssignments = cls.assignments && cls.assignments.length > 0;
+                            return (
+                              <div
+                                key={cls.class_id}
+                                className={`bg-brand-surface border rounded-[2rem] p-6 shadow-sm transition-all space-y-4 flex flex-col justify-between ${
+                                  !hasAssignments
+                                    ? 'border-red-500/30 bg-red-500/5'
+                                    : 'border-brand-border'
+                                }`}
+                              >
+                                <div className="space-y-3">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <h4 className="font-bold text-sm text-brand-text">{cls.class_name}</h4>
+                                      <p className="text-[9px] text-brand-muted uppercase font-black tracking-widest mt-0.5">
+                                        Class ID: {cls.class_id}
+                                      </p>
+                                    </div>
+                                    {!hasAssignments && (
+                                      <span className="px-2 py-0.5 bg-red-500/10 text-red-500 border border-red-500/20 text-[8px] font-black uppercase tracking-wider rounded-md">
+                                        No subjects assigned
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Subject chips */}
+                                  <div className="flex flex-wrap gap-2 pt-1 min-h-[40px] items-center">
+                                    {hasAssignments ? (
+                                      cls.assignments.map((asg: any) => (
+                                        <div
+                                          key={asg.assignment_id}
+                                          className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold text-brand-text"
+                                        >
+                                          <span>
+                                            <span className="text-brand-accent font-black">{asg.subject}</span>
+                                            <span className="text-brand-muted"> — {asg.teacher_name}</span>
+                                          </span>
+                                          <button
+                                            onClick={() => handleRemoveTeacherSubject(asg.assignment_id)}
+                                            className="w-4 h-4 rounded-full hover:bg-red-500/10 text-brand-muted hover:text-red-500 flex items-center justify-center transition-colors"
+                                            title="Remove teaching assignment"
+                                          >
+                                            <X size={10} className="stroke-[3]" />
+                                          </button>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-xs font-semibold text-red-400 italic">No assigned educators for this class yet.</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Add subject control */}
+                                <div className="border-t border-brand-border/60 pt-4 mt-auto">
+                                  <p className="text-[9px] font-black text-brand-muted uppercase tracking-wider mb-2">+ Add subject</p>
+                                  <div className="flex flex-col sm:flex-row gap-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Subject (e.g. Science)"
+                                      value={newSubjectName[cls.class_id] || ''}
+                                      onChange={(e) =>
+                                        setNewSubjectName((prev) => ({
+                                          ...prev,
+                                          [cls.class_id]: e.target.value,
+                                        }))
+                                      }
+                                      className="flex-1 bg-brand-bg border border-brand-border rounded-xl px-3 py-2 text-xs text-brand-text placeholder-brand-muted/40 focus:outline-none focus:border-brand-accent/50 min-w-0"
+                                    />
+                                    <select
+                                      value={newSubjectTeacherId[cls.class_id] || ''}
+                                      onChange={(e) =>
+                                        setNewSubjectTeacherId((prev) => ({
+                                          ...prev,
+                                          [cls.class_id]: e.target.value,
+                                        }))
+                                      }
+                                      className="bg-brand-bg border border-brand-border rounded-xl px-3 py-2 text-xs text-brand-text focus:outline-none focus:border-brand-accent/50"
+                                    >
+                                      <option value="">Select Teacher...</option>
+                                      {(teachingAssignmentsData.teachers || []).map((t: any) => (
+                                        <option key={t.teacher_id} value={t.teacher_id}>
+                                          {t.teacher_name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      onClick={() => handleAddTeacherSubject(cls.class_id)}
+                                      disabled={addingAssignment[cls.class_id]}
+                                      className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-accent/90 transition-colors disabled:opacity-50 shrink-0"
+                                    >
+                                      {addingAssignment[cls.class_id] ? 'Adding...' : 'Add'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
             </div>
           )}
 

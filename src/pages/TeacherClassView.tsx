@@ -189,6 +189,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       // Set the teacher_id session config inside Postgres before running queries/RPCs
       await setTeacherConfig(teacherId);
 
+      const isLocal = classId.startsWith('local_');
+
       // 1. Fetch assignments, students, exams, teacher info, and class info in parallel
       const [assignmentsRes, studentsRes, teacherRes, examsRes, classRes] = await Promise.all([
         supabase
@@ -196,7 +198,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at, share_code, is_broadcast')
           .eq('teacher_id', teacherId)
           .order('created_at', { ascending: false }),
-        (async () => {
+        isLocal ? Promise.resolve({ data: [], error: null }) : (async () => {
           try {
             const { data, error } = await supabase.rpc('teacher_get_class_students', {
               p_teacher_id: teacherId,
@@ -226,12 +228,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           .select('id, name, school_name')
           .eq('id', teacherId)
           .maybeSingle(),
-        supabase
+        isLocal ? Promise.resolve({ data: [], error: null }) : supabase
           .from('exams')
           .select('*')
           .eq('class_id', classId)
           .order('created_at', { ascending: false }),
-        supabase
+        isLocal ? Promise.resolve({ data: null, error: null }) : supabase
           .from('classes')
           .select('id, name, grade')
           .eq('id', classId)
@@ -243,16 +245,36 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       if (teacherRes.error) throw teacherRes.error;
       if (examsRes.error) throw examsRes.error;
 
-      const assignmentsData = assignmentsRes.data || [];
-      const studentsData = studentsRes.data || [];
-      const examsData = examsRes.data || [];
+      let assignmentsData = assignmentsRes.data || [];
+      let studentsData = studentsRes.data || [];
+      let examsData = examsRes.data || [];
+      let classData = classRes.data;
+
+      if (classId.startsWith('local_')) {
+        // Load class info from local classes
+        const localClassesRaw = localStorage.getItem(`local_classes_${teacherId}`);
+        if (localClassesRaw) {
+          const localClasses = JSON.parse(localClassesRaw);
+          classData = localClasses.find((c: any) => c.id === classId) || null;
+        }
+
+        // Load students from local students list
+        const localStudentsRaw = localStorage.getItem(`local_students_${classId}`);
+        if (localStudentsRaw) {
+          studentsData = JSON.parse(localStudentsRaw);
+        }
+
+        // Filter assignments & exams for this local class
+        assignmentsData = assignmentsData.filter((a: any) => a.class_id === classId);
+        examsData = examsData.filter((e: any) => e.class_id === classId);
+      }
       
       setAssignments(assignmentsData);
       setStudents(studentsData);
       setTeacher(teacherRes.data);
       setExams(examsData);
-      if (classRes && !classRes.error && classRes.data) {
-        setClassGrade(classRes.data.grade || '');
+      if (classData) {
+        setClassGrade(classData.grade || '');
       }
 
       // 2. Fetch submissions, acknowledgements, and exam attempts only for these students/assignments/exams

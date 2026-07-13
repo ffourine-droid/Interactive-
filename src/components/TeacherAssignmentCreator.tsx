@@ -177,20 +177,60 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       }
 
       if (!fetchedClasses || fetchedClasses.length === 0) {
-        const { data: dbData, error: dbError } = await supabase
-          .from('classes')
-          .select('id, name, grade')
-          .eq('teacher_id', teacherId);
-        if (!dbError && dbData) {
-          fetchedClasses = dbData;
+        try {
+          const { data: subjectClasses, error: tsError } = await supabase
+            .from('teacher_subjects')
+            .select('class_id')
+            .eq('teacher_id', teacherId);
+
+          if (!tsError && subjectClasses && subjectClasses.length > 0) {
+            const classIds = subjectClasses.map((sc: any) => sc.class_id);
+            const { data: dbData, error: dbError } = await supabase
+              .from('classes')
+              .select('id, name, grade')
+              .in('id', classIds);
+            if (!dbError && dbData) {
+              fetchedClasses = dbData;
+            }
+          }
+        } catch (dbErr) {
+          console.error("Direct classes query fallback failed:", dbErr);
         }
       }
 
-      setClasses(fetchedClasses);
+      // Add local classes if any
+      try {
+        const localClassesRaw = localStorage.getItem(`local_classes_${teacherId}`);
+        if (localClassesRaw) {
+          const localClasses = JSON.parse(localClassesRaw);
+          fetchedClasses = [...fetchedClasses, ...localClasses];
+        }
+      } catch (localErr) {
+        console.error("Failed to parse local classes:", localErr);
+      }
+
+      let filteredClasses = fetchedClasses;
+      try {
+        const { data: subjectClasses, error: tsError } = await supabase
+          .from('teacher_subjects')
+          .select('class_id')
+          .eq('teacher_id', teacherId);
+
+        if (!tsError && subjectClasses && subjectClasses.length > 0) {
+          const classIds = subjectClasses.map((sc: any) => sc.class_id);
+          filteredClasses = fetchedClasses.filter((c: any) => c.is_local || classIds.includes(c.id));
+        } else if (!tsError && subjectClasses && subjectClasses.length === 0) {
+          filteredClasses = fetchedClasses.filter((c: any) => c.is_local);
+        }
+      } catch (tsErr) {
+        console.error("Failed to filter classes by teacher_subjects:", tsErr);
+      }
+
+      setClasses(filteredClasses);
 
       // If we have a pre-selected class, initialize its data
       if (preSelectedClassId) {
-        const cls = fetchedClasses.find(c => c.id === preSelectedClassId);
+        const cls = filteredClasses.find(c => c.id === preSelectedClassId);
         if (cls) {
           handleClassSelect(preSelectedClassId, cls.name);
         }

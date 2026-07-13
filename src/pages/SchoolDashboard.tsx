@@ -130,20 +130,37 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
 
             if (!fallbackError && fallbackData) {
               const teacherIds = fallbackData.map(t => t.id);
-              let classesData: any[] = [];
+              let clsData: any[] = [];
+              let tsData: any[] = [];
               if (teacherIds.length > 0) {
-                const { data: clsData, error: clsError } = await supabase
-                  .from('classes')
-                  .select('*')
+                const { data: mappingData, error: mappingError } = await supabase
+                  .from('teacher_subjects')
+                  .select('class_id, teacher_id')
                   .in('teacher_id', teacherIds);
-                if (!clsError && clsData) {
-                  classesData = clsData;
+                if (!mappingError && mappingData) {
+                  tsData = mappingData;
+                  const classIds = mappingData.map((x: any) => x.class_id).filter(Boolean);
+                  if (classIds.length > 0) {
+                    const { data: classesResult, error: clsError } = await supabase
+                      .from('classes')
+                      .select('id, name, grade')
+                      .in('id', classIds);
+                    if (!clsError && classesResult) {
+                      clsData = classesResult;
+                    }
+                  }
                 }
               }
-              teachersData = fallbackData.map(t => ({
-                ...t,
-                classes: classesData.filter(c => c.teacher_id === t.id)
-              }));
+              teachersData = fallbackData.map(t => {
+                const teacherClassIds = tsData
+                  .filter((x: any) => x.teacher_id === t.id)
+                  .map((x: any) => x.class_id);
+                const teacherClasses = clsData.filter((c: any) => teacherClassIds.includes(c.id));
+                return {
+                  ...t,
+                  classes: teacherClasses
+                };
+              });
             }
           }
         } else {
@@ -154,20 +171,37 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
 
           if (!fallbackError && fallbackData) {
             const teacherIds = fallbackData.map(t => t.id);
-            let classesData: any[] = [];
+            let clsData: any[] = [];
+            let tsData: any[] = [];
             if (teacherIds.length > 0) {
-              const { data: clsData, error: clsError } = await supabase
-                .from('classes')
-                .select('*')
+              const { data: mappingData, error: mappingError } = await supabase
+                .from('teacher_subjects')
+                .select('class_id, teacher_id')
                 .in('teacher_id', teacherIds);
-              if (!clsError && clsData) {
-                classesData = clsData;
+              if (!mappingError && mappingData) {
+                tsData = mappingData;
+                const classIds = mappingData.map((x: any) => x.class_id).filter(Boolean);
+                if (classIds.length > 0) {
+                  const { data: classesResult, error: clsError } = await supabase
+                    .from('classes')
+                    .select('id, name, grade')
+                    .in('id', classIds);
+                  if (!clsError && classesResult) {
+                    clsData = classesResult;
+                  }
+                }
               }
             }
-            teachersData = fallbackData.map(t => ({
-              ...t,
-              classes: classesData.filter(c => c.teacher_id === t.id)
-            }));
+            teachersData = fallbackData.map(t => {
+              const teacherClassIds = tsData
+                .filter((x: any) => x.teacher_id === t.id)
+                .map((x: any) => x.class_id);
+              const teacherClasses = clsData.filter((c: any) => teacherClassIds.includes(c.id));
+              return {
+                ...t,
+                classes: teacherClasses
+              };
+            });
           }
         }
       } catch (teacherErr) {
