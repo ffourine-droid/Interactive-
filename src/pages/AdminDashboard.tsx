@@ -44,7 +44,7 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards' | 'curriculum' | 'schools' | 'teaching_assignments'>('overview');
+  const [activeTab, setActiveTab ] = useState<'overview' | 'shared' | 'system' | 'teachers' | 'arena' | 'requests' | 'stories' | 'forum_moderation' | 'flashcards' | 'curriculum' | 'schools' | 'teaching_assignments' | 'classes_students'>('overview');
   const [subTab, setSubTab] = useState<'assessments' | 'assignments'>('assessments');
   const [sharedWorks, setSharedWorks] = useState<any[]>([]);
 
@@ -116,6 +116,233 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [newSubjectTeacherId, setNewSubjectTeacherId] = useState<Record<string, string>>({});
   const [addingAssignment, setAddingAssignment] = useState<Record<string, boolean>>({});
 
+  // Classes & Students administration states
+  const [selectedSchoolIdForClasses, setSelectedSchoolIdForClasses] = useState<string>('');
+  const [classesForSelectedSchool, setClassesForSelectedSchool] = useState<any[]>([]);
+  const [selectedClassIdForStudents, setSelectedClassIdForStudents] = useState<string>('');
+  const [newClassName, setNewClassName] = useState('');
+  const [newClassGrade, setNewClassGrade] = useState('Grade 7');
+  const [singleStudentName, setSingleStudentName] = useState('');
+  const [singleStudentIndex, setSingleStudentIndex] = useState('');
+  const [bulkStudentsInput, setBulkStudentsInput] = useState('');
+  const [bulkAddResults, setBulkAddResults] = useState<any[] | null>(null);
+  const [isCreatingClass, setIsCreatingClass] = useState(false);
+  const [isAddingSingleStudent, setIsAddingSingleStudent] = useState(false);
+  const [isBulkAdding, setIsBulkAdding] = useState(false);
+  const [studentsInSelectedClass, setStudentsInSelectedClass] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+
+  const fetchClassesForSchool = async (schoolId: string) => {
+    if (!schoolId) {
+      setClassesForSelectedSchool([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc('admin_get_school_classes', {
+        p_school_id: schoolId
+      });
+      if (error) throw error;
+      
+      const classesList = (data && data.success && data.classes) ? data.classes : [];
+      const mappedClasses = classesList.map((c: any) => ({
+        ...c,
+        id: c.class_id
+      }));
+      setClassesForSelectedSchool(mappedClasses);
+      
+      // Select first class by default if none selected or not in new classes list
+      if (mappedClasses && mappedClasses.length > 0) {
+        const currentStillValid = selectedClassIdForStudents && mappedClasses.some((c: any) => c.id === selectedClassIdForStudents);
+        const targetClassId = currentStillValid ? selectedClassIdForStudents : mappedClasses[0].id;
+        setSelectedClassIdForStudents(targetClassId);
+        fetchStudentsInClass(targetClassId);
+      } else {
+        setSelectedClassIdForStudents('');
+        setStudentsInSelectedClass([]);
+      }
+    } catch (err: any) {
+      console.error("Error fetching classes for school:", err);
+      showToast(err.message || "Failed to fetch classes", "error");
+    }
+  };
+
+  const fetchStudentsInClass = async (classId: string) => {
+    if (!classId) {
+      setStudentsInSelectedClass([]);
+      return;
+    }
+    setLoadingStudents(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_get_class_roster', {
+        p_class_id: classId
+      });
+      if (error) throw error;
+
+      const studentsList = (data && data.success && data.students) ? data.students : [];
+      const mappedStudents = studentsList.map((s: any) => ({
+        ...s,
+        id: s.student_id || s.id,
+        parent_code: s.parent_code || s.index_number
+      }));
+      setStudentsInSelectedClass(mappedStudents);
+    } catch (err: any) {
+      console.error("Error fetching students in class:", err);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  const handleAdminCreateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSchoolIdForClasses) {
+      showToast("Please select a school first", "error");
+      return;
+    }
+    if (!newClassName.trim() || !newClassGrade) {
+      showToast("Class name and grade are required", "error");
+      return;
+    }
+    setIsCreatingClass(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_create_class', {
+        p_school_id: selectedSchoolIdForClasses,
+        p_name: newClassName.trim(),
+        p_grade: newClassGrade
+      });
+
+      if (error) {
+        showToast(error.message || "Failed to create class", "error");
+      } else if (data && data.success === false) {
+        showToast(data.message || "Failed to create class", "error");
+      } else {
+        showToast(`Class "${newClassName.trim()}" created successfully!`, "success");
+        setNewClassName('');
+        fetchClassesForSchool(selectedSchoolIdForClasses);
+      }
+    } catch (err: any) {
+      showToast(err.message || "An unexpected error occurred", "error");
+    } finally {
+      setIsCreatingClass(false);
+    }
+  };
+
+  const handleAdminAddStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClassIdForStudents) {
+      showToast("Please select a class first", "error");
+      return;
+    }
+    if (!singleStudentName.trim() || !singleStudentIndex.trim()) {
+      showToast("Student name and index number are required", "error");
+      return;
+    }
+    setIsAddingSingleStudent(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_add_student', {
+        p_class_id: selectedClassIdForStudents,
+        p_name: singleStudentName.trim(),
+        p_index_number: singleStudentIndex.trim()
+      });
+
+      if (error) {
+        showToast(error.message || "Failed to add student", "error");
+      } else if (data && data.success === false) {
+        showToast(data.message || "Failed to add student", "error");
+      } else {
+        showToast(`Student "${singleStudentName.trim()}" added successfully!`, "success");
+        setSingleStudentName('');
+        setSingleStudentIndex('');
+        fetchStudentsInClass(selectedClassIdForStudents);
+        if (selectedSchoolIdForClasses) {
+          fetchClassesForSchool(selectedSchoolIdForClasses);
+        }
+      }
+    } catch (err: any) {
+      showToast(err.message || "An unexpected error occurred", "error");
+    } finally {
+      setIsAddingSingleStudent(false);
+    }
+  };
+
+  const handleAdminBulkAddStudents = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClassIdForStudents) {
+      showToast("Please select a class first", "error");
+      return;
+    }
+    if (!bulkStudentsInput.trim()) {
+      showToast("Please enter student data first", "error");
+      return;
+    }
+
+    setIsBulkAdding(true);
+    setBulkAddResults(null);
+
+    const lines = bulkStudentsInput.split('\n').map(l => l.trim()).filter(Boolean);
+    const parsedStudents: { name: string; index_number: string }[] = [];
+
+    for (const line of lines) {
+      let name = '';
+      let index = '';
+      if (line.includes(',')) {
+        const parts = line.split(',');
+        name = parts[0].trim();
+        index = parts[1].trim().replace(/\D/g, '');
+      } else if (line.includes('\t')) {
+        const parts = line.split('\t');
+        name = parts[0].trim();
+        index = parts[1].trim().replace(/\D/g, '');
+      } else {
+        // Look for numbers at the end of the line
+        const match = line.match(/(.*?)\s+(\d+)$/);
+        if (match) {
+          name = match[1].trim();
+          index = match[2].trim();
+        } else {
+          name = line;
+          index = '';
+        }
+      }
+      if (name) {
+        parsedStudents.push({ name, index_number: index });
+      }
+    }
+
+    if (parsedStudents.length === 0) {
+      showToast("No valid student records parsed. Use format: Name, Index", "error");
+      setIsBulkAdding(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('admin_bulk_add_students', {
+        p_class_id: selectedClassIdForStudents,
+        p_students: parsedStudents
+      });
+
+      if (error) {
+        showToast(error.message || "Bulk add failed", "error");
+      } else if (data && data.success === false) {
+        showToast(data.message || "Bulk add failed", "error");
+      } else {
+        const result = data as any;
+        showToast(`Processed bulk add! Added: ${result.added}, Failed: ${result.failed}`, result.failed > 0 ? "info" : "success");
+        setBulkAddResults(result.results || []);
+        if (result.added > 0) {
+          setBulkStudentsInput('');
+          fetchStudentsInClass(selectedClassIdForStudents);
+          if (selectedSchoolIdForClasses) {
+            fetchClassesForSchool(selectedSchoolIdForClasses);
+          }
+        }
+      }
+    } catch (err: any) {
+      showToast(err.message || "An unexpected error occurred", "error");
+    } finally {
+      setIsBulkAdding(false);
+    }
+  };
+
   const fetchTeachingAssignments = async (schoolId: string) => {
     if (!schoolId) return;
     setTeachingAssignmentsLoading(true);
@@ -182,6 +409,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
         setNewSubjectName(prev => ({ ...prev, [classId]: '' }));
         if (selectedSchoolId) {
           fetchTeachingAssignments(selectedSchoolId);
+          fetchClassesForSchool(selectedSchoolId);
         }
       }
     } catch (err: any) {
@@ -205,6 +433,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
         showToast("Assignment removed successfully!", "success");
         if (selectedSchoolId) {
           fetchTeachingAssignments(selectedSchoolId);
+          fetchClassesForSchool(selectedSchoolId);
         }
       }
     } catch (err: any) {
@@ -327,8 +556,26 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
     else if (activeTab === 'teachers') fetchTeachersList();
     else if (activeTab === 'requests') fetchRequests();
     else if (activeTab === 'forum_moderation') fetchForumData();
-    else if (activeTab === 'schools') fetchSchoolsList();
+    else if (activeTab === 'schools' || activeTab === 'classes_students') fetchSchoolsList();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'classes_students') {
+      if (selectedSchoolIdForClasses) {
+        fetchClassesForSchool(selectedSchoolIdForClasses);
+      } else if (schoolsList.length > 0) {
+        const firstSch = schoolsList[0].id;
+        setSelectedSchoolIdForClasses(firstSch);
+        fetchClassesForSchool(firstSch);
+      }
+    }
+  }, [activeTab, schoolsList]);
+
+  useEffect(() => {
+    if (selectedClassIdForStudents) {
+      fetchStudentsInClass(selectedClassIdForStudents);
+    }
+  }, [selectedClassIdForStudents]);
 
   const fetchForumData = async () => {
     setLoading(true);
@@ -733,6 +980,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             { id: 'requests' as const, icon: MessageCircle, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
             { id: 'teachers' as const, icon: Users, label: 'Teachers', badge: 0 },
             { id: 'schools' as const, icon: School, label: 'Schools', badge: 0 },
+            { id: 'classes_students' as const, icon: Users, label: 'Classes & Students', badge: 0 },
             { id: 'teaching_assignments' as const, icon: Award, label: 'Teaching Assignments', badge: 0 },
             { id: 'forum_moderation' as const, icon: ShieldAlert, label: 'Forum Mod', badge: unresolvedFlags.length }
           ].map(tab => {
@@ -801,6 +1049,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                 { id: 'requests' as const, label: 'Requests', badge: teacherRequests.filter(r => r.status === 'pending').length },
                 { id: 'teachers' as const, label: 'Teachers', badge: 0 },
                 { id: 'schools' as const, label: 'Schools', badge: 0 },
+                { id: 'classes_students' as const, label: 'Classes & Students', badge: 0 },
                 { id: 'teaching_assignments' as const, label: 'Assignments', badge: 0 },
                 { id: 'forum_moderation' as const, label: 'Forum Mod', badge: unresolvedFlags.length }
               ].map(tab => {
@@ -1553,6 +1802,356 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ────── TABS: CLASSES & STUDENTS MANAGEMENT ────── */}
+          {!loading && activeTab === 'classes_students' && (
+            <div className="space-y-6 animate-in fade-in duration-300 font-sans">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-brand-surface border border-brand-border p-6 rounded-[2rem] shadow-sm">
+                <div>
+                  <h2 className="text-xl font-black tracking-tight uppercase leading-none">Classes & Students Control</h2>
+                  <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-2">
+                    Centralized registry. Create classes and add students with their unique index numbers.
+                  </p>
+                </div>
+                {schoolsList.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted shrink-0">Active School:</label>
+                    <select
+                      value={selectedSchoolIdForClasses}
+                      onChange={(e) => {
+                        setSelectedSchoolIdForClasses(e.target.value);
+                        fetchClassesForSchool(e.target.value);
+                      }}
+                      className="px-3 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold text-brand-text outline-none focus:border-brand-accent/50"
+                    >
+                      <option value="">-- Select School --</option>
+                      {schoolsList.map((sch) => (
+                        <option key={sch.id} value={sch.id}>{sch.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {!selectedSchoolIdForClasses ? (
+                <div className="py-20 text-center space-y-4 bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem]">
+                  <School size={48} className="mx-auto text-brand-muted opacity-40" />
+                  <p className="text-brand-muted font-bold">No School Selected</p>
+                  <p className="text-xs text-brand-muted/60">Please select a school to manage classes and students.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  {/* Left Column: Create Class Form */}
+                  <div className="lg:col-span-4 space-y-6">
+                    <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 space-y-4">
+                      <div>
+                        <h4 className="text-sm font-black uppercase tracking-wider text-brand-text flex items-center gap-2">
+                          <Plus size={16} className="text-brand-accent" />
+                          Create Class
+                        </h4>
+                        <p className="text-[9px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">
+                          Define a new class and grade for the chosen school
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleAdminCreateClass} className="space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Class Name</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Grade Nine North"
+                            value={newClassName}
+                            onChange={(e) => setNewClassName(e.target.value)}
+                            className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Class Grade / Year</label>
+                          <select
+                            value={newClassGrade}
+                            onChange={(e) => setNewClassGrade(e.target.value)}
+                            className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text focus:outline-none focus:border-brand-accent/50 w-full"
+                          >
+                            {["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"].map(grd => (
+                              <option key={grd} value={grd}>{grd}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isCreatingClass}
+                          className="bg-brand-accent text-white px-5 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-brand-accent/15 hover:scale-[1.02] active:scale-[0.98] transition-all w-full flex items-center justify-center gap-2"
+                        >
+                          {isCreatingClass ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              Creating...
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={14} />
+                              Create Class Unit
+                            </>
+                          )}
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Single Student Addition Form */}
+                    <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 space-y-4">
+                      <div>
+                        <h4 className="text-sm font-black uppercase tracking-wider text-brand-text flex items-center gap-2">
+                          <Plus size={16} className="text-emerald-500" />
+                          Add Student Profile
+                        </h4>
+                        <p className="text-[9px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">
+                          Register a single student into a selected class
+                        </p>
+                      </div>
+
+                      {classesForSelectedSchool.length === 0 ? (
+                        <p className="text-xs text-brand-muted font-bold uppercase tracking-wider py-4 text-center">
+                          Create a class first to add students!
+                        </p>
+                      ) : (
+                        <form onSubmit={handleAdminAddStudent} className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Select Class</label>
+                            <select
+                              value={selectedClassIdForStudents}
+                              onChange={(e) => setSelectedClassIdForStudents(e.target.value)}
+                              className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text focus:outline-none focus:border-brand-accent/50 w-full font-bold"
+                            >
+                              {classesForSelectedSchool.map(cls => (
+                                <option key={cls.id} value={cls.id}>
+                                  {cls.name} ({cls.grade}) — {cls.student_count ?? 0} students
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Full Student Name</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Caleb Kiprop"
+                              value={singleStudentName}
+                              onChange={(e) => setSingleStudentName(e.target.value)}
+                              className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Index Number / Register Code</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. 50124"
+                              value={singleStudentIndex}
+                              onChange={(e) => setSingleStudentIndex(e.target.value)}
+                              className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/50 focus:outline-none focus:border-brand-accent/50 w-full font-mono"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isAddingSingleStudent}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-600/15 hover:scale-[1.02] active:scale-[0.98] transition-all w-full flex items-center justify-center gap-2"
+                          >
+                            {isAddingSingleStudent ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                Registering...
+                              </>
+                            ) : (
+                              <>
+                                <Plus size={14} />
+                                Add Student
+                              </>
+                            )}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Bulk Add and Student list */}
+                  <div className="lg:col-span-8 space-y-8">
+                    {/* Bulk Add Students Form */}
+                    <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 space-y-4">
+                      <div>
+                        <h4 className="text-sm font-black uppercase tracking-wider text-brand-text flex items-center gap-2">
+                          <Users size={16} className="text-indigo-500" />
+                          Bulk Add Students (Paste or Upload)
+                        </h4>
+                        <p className="text-[9px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">
+                          Paste lists or type many student profiles simultaneously to save time.
+                        </p>
+                      </div>
+
+                      {classesForSelectedSchool.length === 0 ? (
+                        <p className="text-xs text-brand-muted font-bold uppercase tracking-wider py-4 text-center">
+                          Create a class first to bulk add students!
+                        </p>
+                      ) : (
+                        <form onSubmit={handleAdminBulkAddStudents} className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">Select Target Class</label>
+                            <select
+                              value={selectedClassIdForStudents}
+                              onChange={(e) => setSelectedClassIdForStudents(e.target.value)}
+                              className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text focus:outline-none focus:border-brand-accent/50 w-56 font-bold"
+                            >
+                              {classesForSelectedSchool.map(cls => (
+                                <option key={cls.id} value={cls.id}>
+                                  {cls.name} ({cls.grade}) — {cls.student_count ?? 0} students
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-brand-muted uppercase tracking-widest block">
+                              Paste Student List (one student per line, format: "Name, IndexNumber")
+                            </label>
+                            <textarea
+                              rows={6}
+                              placeholder="e.g.&#10;Abdi Ibrahim, 90021&#10;Wanjiku Mwangi, 90022&#10;Fatuma Ali, 90023"
+                              value={bulkStudentsInput}
+                              onChange={(e) => setBulkStudentsInput(e.target.value)}
+                              className="bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-xs text-brand-text placeholder-brand-muted/40 focus:outline-none focus:border-brand-accent/50 w-full font-mono leading-relaxed"
+                            />
+                            <p className="text-[9px] text-brand-muted leading-tight">
+                              💡 Supports tab or comma separation. We will automatically parse names and filter out any invalid formats.
+                            </p>
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isBulkAdding}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-600/15 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                          >
+                            {isBulkAdding ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                Processing Registry Upload...
+                              </>
+                            ) : (
+                              <>
+                                <Users size={14} />
+                                Bulk Dispatch Students
+                              </>
+                            )}
+                          </button>
+                        </form>
+                      )}
+
+                      {/* Render Bulk Results with Error Rows */}
+                      {bulkAddResults && (
+                        <div className="space-y-3 pt-4 border-t border-brand-border">
+                          <div className="flex items-center justify-between">
+                            <h5 className="text-xs font-black uppercase tracking-wider text-brand-text">Bulk Process Report</h5>
+                            <button
+                              onClick={() => setBulkAddResults(null)}
+                              className="text-[9px] font-black text-brand-muted uppercase hover:text-brand-text"
+                            >
+                              Clear Report
+                            </button>
+                          </div>
+
+                          <div className="overflow-x-auto border border-brand-border/40 rounded-xl">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-brand-bg/50 border-b border-brand-border text-[9px] font-black uppercase tracking-widest text-brand-muted">
+                                <tr>
+                                  <th className="px-4 py-2">Index</th>
+                                  <th className="px-4 py-2">Name</th>
+                                  <th className="px-4 py-2">Status</th>
+                                  <th className="px-4 py-2">Result Details / Message</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-brand-border font-medium">
+                                {bulkAddResults.map((res, i) => (
+                                  <tr
+                                    key={i}
+                                    className={res.success ? 'bg-emerald-500/5' : 'bg-red-500/5 text-red-400'}
+                                  >
+                                    <td className="px-4 py-2 font-mono text-[11px]">{res.index_number || 'N/A'}</td>
+                                    <td className="px-4 py-2 text-brand-text">{res.name}</td>
+                                    <td className="px-4 py-2">
+                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                        res.success ? 'bg-emerald-500/15 text-emerald-500' : 'bg-red-500/15 text-red-500'
+                                      }`}>
+                                        {res.success ? 'Success' : 'Failed'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 text-[11px] text-brand-muted font-normal">
+                                      {res.success ? `Registered with ID ${res.student_id?.substring(0,8)}...` : (res.message || 'Already registered / conflict')}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Class Students Directory */}
+                    {selectedClassIdForStudents && (
+                      <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-sm font-black uppercase tracking-wider text-brand-text">
+                              Class Roster Listing
+                            </h4>
+                            <p className="text-[9px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">
+                              List of registered student index numbers in database
+                            </p>
+                          </div>
+                          <p className="text-[10px] font-black text-indigo-500 bg-indigo-500/15 border border-indigo-500/20 px-3 py-1.5 rounded-xl uppercase tracking-widest">
+                            {studentsInSelectedClass.length} Students
+                          </p>
+                        </div>
+
+                        {loadingStudents ? (
+                          <div className="py-12 text-center text-brand-muted font-bold uppercase animate-pulse text-[10px]">
+                            Loading roster...
+                          </div>
+                        ) : studentsInSelectedClass.length === 0 ? (
+                          <div className="py-12 text-center text-brand-muted border border-brand-border/40 border-dashed rounded-2xl text-[10px] font-black uppercase tracking-wider">
+                            No students registered in this class unit yet.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-1">
+                            {studentsInSelectedClass.map(student => (
+                              <div
+                                key={student.id}
+                                className="bg-brand-bg/40 border border-brand-border/60 rounded-xl p-3 flex items-center justify-between gap-3 font-medium"
+                              >
+                                <div>
+                                  <p className="text-xs font-black text-brand-text">{student.name}</p>
+                                  <p className="text-[9px] text-brand-muted uppercase font-bold tracking-widest mt-0.5">
+                                    Code: {student.parent_code || student.index_number || '-'}
+                                  </p>
+                                </div>
+                                <span className="text-[10px] font-mono text-indigo-500 font-bold">
+                                  #{student.index_number || 'N/A'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

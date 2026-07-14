@@ -307,12 +307,25 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         const teacherStr = localStorage.getItem('azilearn_teacher');
         if (teacherStr) {
           const teacher = JSON.parse(teacherStr);
+          console.log("Selected class ID:", classId, "Teacher ID:", teacher.id);
           const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
             p_teacher_id: teacher.id,
             p_class_id: classId
           });
-          if (!rpcError && rpcData) {
-            if (Array.isArray(rpcData)) {
+          
+          if (rpcError) {
+            console.error("RPC Error fetching students:", rpcError);
+            showToast("Couldn't load students: " + rpcError.message, "error");
+          } else if (rpcData && (rpcData.error || rpcData.success === false)) {
+            const errMsg = rpcData.error || rpcData.message || "Unknown error";
+            console.error("RPC student response contains error:", errMsg);
+            showToast("Couldn't load students: " + errMsg, "error");
+          } else if (!rpcData) {
+            showToast("Couldn't load students: Empty response from server", "error");
+          } else {
+            if (rpcData.success && Array.isArray(rpcData.students)) {
+              fetchedStudents = rpcData.students;
+            } else if (Array.isArray(rpcData)) {
               fetchedStudents = rpcData;
             } else if (typeof rpcData === 'object') {
               const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
@@ -342,274 +355,6 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       showToast("Error fetching student/class data", "error");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const addStudentToClass = async () => {
-    if (!newStudentName.trim() || !form.class_id || form.class_id === 'new') return;
-
-    try {
-      // 1. Get the current teacher's school name to uniquely identify students by school
-      const teacherStr = localStorage.getItem('azilearn_teacher');
-      if (!teacherStr) return;
-      const tId = JSON.parse(teacherStr).id;
-
-      const { data: teacherData } = await supabase
-        .from('teachers')
-        .select('school_name')
-        .eq('id', tId)
-        .single();
-
-      const schoolName = teacherData?.school_name || '';
-
-      // 2. Check if student already exists in this grade and school
-      let allTeacherStudents: any[] = [];
-      try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
-          p_teacher_id: tId
-        });
-        if (!rpcError && rpcData) {
-          if (Array.isArray(rpcData)) {
-            allTeacherStudents = rpcData;
-          } else if (typeof rpcData === 'object') {
-            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
-            if (innerArray) {
-              allTeacherStudents = innerArray as any[];
-            } else if ((rpcData as any).id) {
-              allTeacherStudents = [rpcData];
-            }
-          }
-        }
-      } catch (e) {
-        console.warn(e);
-      }
-
-      const existingStudent = allTeacherStudents.find(s => s.name?.toLowerCase() === newStudentName.trim().toLowerCase() && s.grade === form.grade);
-
-      let parent_code = newStudentCode.trim();
-
-      if (existingStudent) {
-        setNewStudentName('');
-        setNewStudentCode('');
-        const confirmUseExisting = confirm(`Student ${newStudentName.trim()} already exists in another class at this school with Index #${existingStudent.parent_code}. Use this index?`);
-        if (!confirmUseExisting) return;
-        parent_code = existingStudent.parent_code;
-      } else if (!parent_code) {
-        const schoolStudents = allTeacherStudents.filter(s => s.grade === form.grade);
-
-        let nextIndex = 1;
-        if (schoolStudents && schoolStudents.length > 0) {
-          const indices = schoolStudents
-            .map(s => parseInt(s.parent_code))
-            .filter(n => !isNaN(n));
-          if (indices.length > 0) {
-            nextIndex = Math.max(...indices) + 1;
-          }
-        }
-        
-        parent_code = nextIndex.toString().padStart(4, '0');
-      }
-
-      const { data: rpcRes, error } = await supabase.rpc('teacher_add_student', {
-        p_teacher_id: tId,
-        p_class_id: form.class_id,
-        p_name: newStudentName.trim(),
-        p_grade: form.grade,
-        p_school_name: schoolName || null,
-        p_index_number: parent_code,
-        p_school_id: (teacherData as any)?.school_id || null
-      });
-
-      if (error) throw error;
-
-      if (rpcRes?.success) {
-        const mockStudent = {
-          id: rpcRes.student_id,
-          name: newStudentName.trim(),
-          class_id: form.class_id,
-          grade: form.grade,
-          parent_code: parent_code
-        };
-        setStudents(prev => [...prev, mockStudent].sort((a, b) => a.name.localeCompare(b.name)));
-        setNewStudentName('');
-        setNewStudentCode('');
-        showToast("Student added to class", "success");
-      }
-    } catch (err) {
-      showToast("Failed to add student. Code might be taken.", "error");
-    }
-  };
-
-  const handleBulkAdd = async () => {
-    if (!bulkNames.trim() || !form.class_id || form.class_id === 'new' || !form.grade) return;
-
-    const lines = bulkNames
-      .split('\n')
-      .map(n => n.trim())
-      .filter(n => n.length > 0);
-
-    if (lines.length === 0) return;
-
-    try {
-      setLoading(true);
-      
-      // Get school name
-      const teacherStr = localStorage.getItem('azilearn_teacher');
-      if (!teacherStr) return;
-      const bulkTId = JSON.parse(teacherStr).id;
-
-      const { data: teacherData } = await supabase
-        .from('teachers')
-        .select('school_name')
-        .eq('id', bulkTId)
-        .single();
-      const schoolName = teacherData?.school_name || '';
-
-      // Get current school students for index
-      let schoolStudents: any[] = [];
-      try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
-          p_teacher_id: bulkTId
-        });
-        if (!rpcError && rpcData) {
-          if (Array.isArray(rpcData)) {
-            schoolStudents = rpcData;
-          } else if (typeof rpcData === 'object') {
-            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
-            if (innerArray) {
-              schoolStudents = innerArray as any[];
-            } else if ((rpcData as any).id) {
-              schoolStudents = [rpcData];
-            }
-          }
-        }
-      } catch (e) {
-        console.warn(e);
-      }
-
-      if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: rpcRes, error: fetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
-          p_school_name: schoolName,
-          p_grade: `Grade ${form.grade}`
-        });
-
-        if (fetchError) throw fetchError;
-        schoolStudents = rpcRes?.success ? rpcRes.students : [];
-      }
-
-      const existingCodes = new Set(
-        (schoolStudents || [])
-          .map(s => parseInt(s.parent_code))
-          .filter(n => !isNaN(n))
-      );
-
-      let currentCode = 1;
-      const newStudents = [];
-
-      for (const line of lines) {
-        let name = line;
-        let parent_code = '';
-
-        if (line.includes(',')) {
-          const parts = line.split(',');
-          name = parts[0].trim();
-          parent_code = parts[1].trim().replace(/\D/g, '').padStart(4, '0');
-        }
-
-        // Check if student with this name already exists in this school/grade
-        const existingStudent = (schoolStudents || []).find(s => s.name.toLowerCase() === name.toLowerCase());
-        
-        if (existingStudent) {
-          parent_code = existingStudent.parent_code;
-        } else if (!parent_code || existingCodes.has(parseInt(parent_code))) {
-          while (existingCodes.has(currentCode)) {
-            currentCode++;
-          }
-          parent_code = currentCode.toString().padStart(4, '0');
-          existingCodes.add(parseInt(parent_code));
-        } else {
-          existingCodes.add(parseInt(parent_code));
-        }
-        
-        newStudents.push({
-          name,
-          class_id: form.class_id,
-          grade: form.grade,
-          parent_code: parent_code
-        });
-      }
-
-      const promises = newStudents.map(student => supabase.rpc('teacher_add_student', {
-        p_teacher_id: bulkTId,
-        p_class_id: form.class_id,
-        p_name: student.name.trim(),
-        p_grade: form.grade,
-        p_school_name: schoolName || null,
-        p_index_number: student.parent_code,
-        p_school_id: (teacherData as any)?.school_id || null
-      }));
-
-      const results = await Promise.all(promises);
-      const failed = results.find(r => r.error);
-      if (failed) throw failed.error;
-
-      // Refetch class students using handleClassSelect to get clean complete list
-      await handleClassSelect(form.class_id, form.class_name);
-      setBulkNames('');
-      setShowBulkAdd(false);
-      showToast(`Added ${newStudents.length} students`, "success");
-    } catch (err) {
-      showToast("Failed to bulk add students", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
-  const [editingCode, setEditingCode] = useState('');
-
-  const updateStudent = async (studentId: string) => {
-    if (!editingName.trim() || !editingCode.trim()) return;
-
-    try {
-      const teacherStr = localStorage.getItem('azilearn_teacher');
-      const tId = teacherStr ? JSON.parse(teacherStr).id : null;
-      const { error } = await supabase.rpc('teacher_update_student', {
-        p_teacher_id: tId,
-        p_student_id: studentId,
-        p_name: editingName.trim(),
-        p_index_number: editingCode.trim().padStart(4, '0'),
-        p_school_name: null
-      });
-
-      if (error) throw error;
-
-      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, name: editingName.trim(), parent_code: editingCode.trim().padStart(4, '0') } : s).sort((a, b) => a.name.localeCompare(b.name)));
-      setEditingStudentId(null);
-      showToast("Student updated", "success");
-    } catch (err) {
-      showToast("Failed to update student. Code might be taken.", "error");
-    }
-  };
-
-  const removeStudentFromClass = async (studentId: string) => {
-    if (!confirm("Are you sure you want to remove this student?")) return;
-
-    try {
-      const teacherStr = localStorage.getItem('azilearn_teacher');
-      const tId = teacherStr ? JSON.parse(teacherStr).id : null;
-      const { error } = await supabase.rpc('teacher_delete_student', {
-        p_teacher_id: tId,
-        p_student_id: studentId
-      });
-
-      if (error) throw error;
-
-      setStudents(prev => prev.filter(s => s.id !== studentId));
-      showToast("Student deleted", "info");
-    } catch (err) {
-      showToast("Failed to remove student", "error");
     }
   };
 
@@ -1059,67 +804,15 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                     
                     <div className="max-h-48 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-brand-border">
                       {students.map(student => (
-                        <div key={student.id} className="flex items-center justify-between p-3 bg-brand-bg rounded-xl border border-brand-border group">
-                          {editingStudentId === student.id ? (
-                            <div className="flex-1 flex gap-2">
-                              <input 
-                                type="text"
-                                maxLength={4}
-                                className="w-12 bg-transparent border-b border-brand-accent outline-none font-black text-xs text-brand-accent text-center"
-                                value={editingCode}
-                                onChange={e => setEditingCode(e.target.value.replace(/\D/g, ''))}
-                              />
-                              <input 
-                                type="text"
-                                className="flex-1 bg-transparent border-none outline-none font-bold text-sm"
-                                value={editingName}
-                                autoFocus
-                                onChange={e => setEditingName(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') updateStudent(student.id);
-                                  if (e.key === 'Escape') setEditingStudentId(null);
-                                }}
-                              />
-                              <button onClick={() => updateStudent(student.id)} className="text-emerald-500"><Check size={16} /></button>
-                              <button onClick={() => setEditingStudentId(null)} className="text-brand-muted"><X size={16} /></button>
-                            </div>
-                          ) : (
-                            <div className="flex-1 flex items-center gap-3">
-                              <span className="text-[10px] font-black text-brand-accent bg-brand-accent/5 px-2 py-0.5 rounded border border-brand-accent/10 font-mono">
-                                {student.parent_code || '----'}
-                              </span>
-                              <span 
-                                className="text-sm font-bold cursor-pointer hover:text-brand-accent transition-colors flex-1"
-                                onClick={() => {
-                                  setEditingStudentId(student.id);
-                                  setEditingName(student.name);
-                                  setEditingCode(student.parent_code || '');
-                                }}
-                              >
-                                {student.name}
-                              </span>
-                            </div>
-                          )}
-                          {!editingStudentId && (
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                              <button 
-                                onClick={() => {
-                                  setEditingStudentId(student.id);
-                                  setEditingName(student.name);
-                                  setEditingCode(student.parent_code || '');
-                                }}
-                                className="p-1.5 text-brand-muted hover:text-brand-accent hover:bg-brand-accent/5 rounded-lg"
-                              >
-                                <Type size={14} />
-                              </button>
-                              <button 
-                                onClick={() => removeStudentFromClass(student.id)}
-                                className="p-1.5 text-brand-muted hover:text-red-500 hover:bg-red-500/5 rounded-lg"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          )}
+                        <div key={student.id} className="flex items-center justify-between p-3 bg-brand-bg rounded-xl border border-brand-border">
+                          <div className="flex-1 flex items-center gap-3">
+                            <span className="text-[10px] font-black text-brand-accent bg-brand-accent/5 px-2 py-0.5 rounded border border-brand-accent/10 font-mono">
+                              {student.parent_code || '----'}
+                            </span>
+                            <span className="text-sm font-bold text-brand-text">
+                              {student.name}
+                            </span>
+                          </div>
                         </div>
                       ))}
                       {students.length === 0 && (
@@ -1127,64 +820,14 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                       )}
                     </div>
 
-                    <div className="flex gap-2 mb-4">
-                      <button 
-                        onClick={() => setShowBulkAdd(!showBulkAdd)}
-                        className={`flex-1 py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-                          showBulkAdd ? 'bg-brand-accent text-white border-brand-accent' : 'bg-brand-surface text-brand-muted border-brand-border hover:border-brand-accent/50'
-                        }`}
-                      >
-                        <ClipboardList size={12} className="inline mr-2" />
-                        {showBulkAdd ? 'Single Add' : 'Bulk Add Mode'}
-                      </button>
+                    <div className="p-3 bg-brand-bg border border-brand-border rounded-xl text-center">
+                      <p className="text-[10px] text-brand-muted font-bold">
+                        Need to update this roster?
+                      </p>
+                      <p className="text-[9px] text-brand-muted/70 mt-0.5">
+                        Classes and student rosters are managed by your school admin.
+                      </p>
                     </div>
-
-                    {showBulkAdd ? (
-                      <div className="space-y-3">
-                        <textarea 
-                          placeholder="Name, Index (one per line)...&#10;John Doe, 0001&#10;Jane Smith, 0002"
-                          rows={4}
-                          className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 text-sm font-bold outline-none focus:border-brand-accent/50 resize-none"
-                          value={bulkNames}
-                          onChange={e => setBulkNames(e.target.value)}
-                        />
-                        <p className="text-[9px] text-brand-muted/70 italic px-1">Tip: Comma-separated name and index number works best.</p>
-                        <button 
-                          onClick={handleBulkAdd}
-                          disabled={loading || !bulkNames.trim()}
-                          className="w-full bg-brand-accent text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          {loading ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
-                          Add {bulkNames.split('\n').filter(n => n.trim()).length || ''} Students
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <input 
-                          type="text"
-                          placeholder="Name..."
-                          className="flex-[2] bg-brand-bg border border-brand-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-brand-accent/50"
-                          value={newStudentName}
-                          onChange={e => setNewStudentName(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && addStudentToClass()}
-                        />
-                        <input 
-                          type="text"
-                          placeholder="Index"
-                          maxLength={4}
-                          className="flex-1 bg-brand-bg border border-brand-border rounded-xl px-3 py-2 text-xs font-black text-center outline-none focus:border-brand-accent/50"
-                          value={newStudentCode}
-                          onChange={e => setNewStudentCode(e.target.value.replace(/\D/g, ''))}
-                          onKeyDown={e => e.key === 'Enter' && addStudentToClass()}
-                        />
-                        <button 
-                          onClick={addStudentToClass}
-                          className="p-2.5 bg-brand-accent text-white rounded-xl shadow-lg shadow-brand-accent/20 active:scale-95 transition-transform"
-                        >
-                          <Plus size={18} />
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="relative">

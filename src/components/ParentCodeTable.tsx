@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Share2, Sparkles, Loader2, RotateCcw } from 'lucide-react';
+import { Copy, Check, Share2, RotateCcw } from 'lucide-react';
 import { useToast } from './Toast';
 import { supabase } from '../lib/supabase';
 
@@ -27,7 +27,6 @@ export const ParentCodeTable: React.FC<ParentCodeTableProps> = ({ students: init
   const { showToast } = useToast();
   const [students, setStudents] = useState(initialStudents);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [isAssigning, setIsAssigning] = useState(false);
   const assignmentAttempted = React.useRef(false);
 
   useEffect(() => {
@@ -62,95 +61,6 @@ export const ParentCodeTable: React.FC<ParentCodeTableProps> = ({ students: init
     }
   };
 
-  const handleAutoAssign = async (silent = false) => {
-    if (!teacher?.school_name || students.length === 0) return;
-    
-    const studentsWithoutCode = students.filter(s => !s.parent_code || s.parent_code === '----');
-    if (studentsWithoutCode.length === 0) return;
-
-    try {
-      if (!silent) setIsAssigning(true);
-      // More robust grade extraction
-      let grade = className;
-      if (students.length > 0 && students[0].grade) {
-        grade = students[0].grade;
-      }
-      
-      let schoolStudents: any[] = [];
-      try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
-          p_teacher_id: teacher.id
-        });
-        if (!rpcError && rpcData) {
-          if (Array.isArray(rpcData)) {
-            schoolStudents = rpcData;
-          } else if (typeof rpcData === 'object') {
-            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
-            if (innerArray) {
-              schoolStudents = innerArray as any[];
-            } else if ((rpcData as any).id) {
-              schoolStudents = [rpcData];
-            }
-          }
-        }
-      } catch (rpcErr) {
-        console.warn("RPC fetch failed in ParentCodeTable:", rpcErr);
-      }
-
-      if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: rpcRes, error: schoolFetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
-          p_school_name: teacher.school_name,
-          p_grade: grade
-        });
-
-        if (schoolFetchError) throw schoolFetchError;
-        schoolStudents = rpcRes?.success ? rpcRes.students : [];
-      }
-
-      const existingCodes = new Set(
-        (schoolStudents || [])
-          .map(s => parseInt(s.parent_code))
-          .filter(n => !isNaN(n))
-      );
-
-      let currentCode = 1;
-      const updates = [];
-
-      for (const student of studentsWithoutCode) {
-        if (!student.id) continue;
-        while (existingCodes.has(currentCode)) {
-          currentCode++;
-        }
-        const newCode = currentCode.toString().padStart(4, '0');
-        existingCodes.add(currentCode);
-        
-        updates.push(
-          supabase.rpc('teacher_update_student', {
-            p_teacher_id: teacher.id,
-            p_student_id: student.id,
-            p_name: student.name,
-            p_index_number: newCode,
-            p_school_name: teacher.school_name
-          })
-        );
-      }
-
-      await Promise.all(updates);
-      if (!silent) showToast(`Automatically assigned ${updates.length} index numbers!`, "success");
-      
-      if (onUpdate) {
-        onUpdate();
-      } else if (!silent) {
-        window.location.reload(); 
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("Error auto-assigning codes", "error");
-    } finally {
-      setIsAssigning(false);
-    }
-  };
-
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -177,16 +87,6 @@ export const ParentCodeTable: React.FC<ParentCodeTableProps> = ({ students: init
           <p className="text-[9px] text-brand-muted italic">Share these with parents for the portal</p>
         </div>
         <div className="flex items-center gap-2">
-          {students.some(s => !s.parent_code || s.parent_code === '----') && (
-            <button 
-              onClick={handleAutoAssign}
-              disabled={isAssigning}
-              className="flex items-center gap-2 px-3 py-1.5 bg-brand-accent text-white rounded-full text-[9px] font-black uppercase tracking-widest hover:opacity-90 transition-all shadow-lg shadow-brand-accent/20"
-            >
-              {isAssigning ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />}
-              Fix Missing Codes
-            </button>
-          )}
           <button 
             onClick={copyAllCodes}
             className="flex items-center gap-2 px-3 py-1.5 bg-brand-accent/10 rounded-full text-[9px] font-black uppercase tracking-widest text-brand-accent hover:bg-brand-accent hover:text-white transition-all"

@@ -27,6 +27,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import SchoolTeachersList from '../components/SchoolTeachersList';
+import { SchoolClassesManager } from '../components/SchoolClassesManager';
 
 interface SchoolDashboardProps {
   schoolName: string;
@@ -64,7 +65,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
   const [broadcasts, setBroadcasts] = useState<BroadcastAssignment[]>([]);
   
   // Navigation & Creation states
-  const [activeTab, setActiveTab] = useState<'teachers' | 'broadcasts'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'classes' | 'broadcasts'>('teachers');
   const [creationStep, setCreationStep] = useState<null | 'details' | 'grades' | 'review' | 'success'>(null);
   const [isAddingGrade, setIsAddingGrade] = useState(false);
   const [editingGradeBlockId, setEditingGradeBlockId] = useState<string | null>(null);
@@ -687,9 +688,9 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
       </header>
 
       {/* 2. Main Area / Creation Multi-Step Views */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 pb-24 relative">
+      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 pb-24 relative">
         <AnimatePresence mode="wait">
-          {/* Dashboard Mode (Teachers or Broadcasts tabs) */}
+          {/* Dashboard Mode (Teachers, Classes, or Broadcasts tabs) */}
           {creationStep === null && (
             <motion.div
               key="dashboard"
@@ -699,17 +700,24 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
               className="space-y-6"
             >
               {/* Tab Toggles */}
-              <div className="flex bg-brand-surface border border-brand-border p-1.5 rounded-2xl max-w-sm">
+              <div className="flex bg-brand-surface border border-brand-border p-1.5 rounded-2xl w-full md:max-w-xl flex-wrap md:flex-nowrap gap-1">
                 <button
                   onClick={() => setActiveTab('teachers')}
-                  className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeTab === 'teachers' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                  className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'teachers' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
                 >
                   <Users size={16} />
-                  Teachers & Classes
+                  Linked Teachers
+                </button>
+                <button
+                  onClick={() => setActiveTab('classes')}
+                  className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'classes' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                >
+                  <GraduationCap size={16} />
+                  Classes & Rosters
                 </button>
                 <button
                   onClick={() => setActiveTab('broadcasts')}
-                  className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeTab === 'broadcasts' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                  className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'broadcasts' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
                 >
                   <Radio size={16} />
                   Active Broadcasts
@@ -723,6 +731,8 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
                 </div>
               ) : activeTab === 'teachers' ? (
                 <SchoolTeachersList schoolId={schoolId} />
+              ) : activeTab === 'classes' ? (
+                <SchoolClassesManager schoolId={schoolId} />
               ) : (
                 /* Active Broadcasts List */
                 <div className="space-y-4">

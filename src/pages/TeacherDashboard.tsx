@@ -81,6 +81,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [newClassName, setNewClassName] = useState('');
+  const [newClassSubject, setNewClassSubject] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
   const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions' | 'forum_moderation' | 'grading_queue'>('classes');
@@ -149,6 +150,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       setSearchQuery('');
       setSelectedJoinClassId(null);
       setEnteredSubject('');
+      setNewClassSubject('');
       fetchSchoolClasses();
     }
   }, [isAddingClass]);
@@ -628,233 +630,6 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   };
 
-  const handleAddClass = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newClassName.trim() || !selectedGrade || !teacher) return;
-
-    try {
-      setLoading(true);
-      // 1. Create Class
-      let classData: any = null;
-      let classError: any = null;
-      let usedLocalFallback = false;
-
-      try {
-        const { data: rawClassData, error } = await supabase.rpc('teacher_create_class', {
-          p_teacher_id: teacher.id,
-          p_name: newClassName.trim(),
-          p_grade: selectedGrade
-        });
-        classError = error;
-        if (!error && rawClassData) {
-          classData = Array.isArray(rawClassData) ? rawClassData[0] : rawClassData;
-        }
-      } catch (err: any) {
-        console.warn("RPC teacher_create_class failed, trying direct insert fallback:", err);
-        classError = err;
-      }
-
-      // Fallback: direct table insert if RPC fails or is missing
-      if (classError || !classData) {
-        console.log("Falling back to direct insert into public.classes table...");
-        try {
-          const { data: directData, error: directError } = await supabase
-            .from('classes')
-            .insert({
-              name: newClassName.trim(),
-              grade: selectedGrade,
-              school_id: teacher.school_id || null
-            })
-            .select()
-            .single();
-
-          if (directError) {
-            throw directError;
-          }
-          classData = directData;
-
-          // Link class to teacher in teacher_subjects
-          try {
-            await supabase
-              .from('teacher_subjects')
-              .insert({
-                teacher_id: teacher.id,
-                class_id: classData.id,
-                subject: 'General'
-              });
-          } catch (linkErr) {
-            console.warn("Could not auto-link class in teacher_subjects:", linkErr);
-          }
-        } catch (fallbackErr: any) {
-          console.warn("Direct insert failed or RLS blocked. Triggering fully polished Local Session Fallback...", fallbackErr);
-          usedLocalFallback = true;
-          
-          // Create local class object
-          classData = {
-            id: `local_${Date.now()}`,
-            name: newClassName.trim(),
-            grade: selectedGrade,
-            created_at: new Date().toISOString(),
-            school_id: teacher.school_id || null,
-            is_local: true
-          };
-
-          // Save local class to localStorage
-          const localClassesRaw = localStorage.getItem(`local_classes_${teacher.id}`);
-          const localClasses = localClassesRaw ? JSON.parse(localClassesRaw) : [];
-          localClasses.push(classData);
-          localStorage.setItem(`local_classes_${teacher.id}`, JSON.stringify(localClasses));
-        }
-      }
-
-      // 2. Add Students if provided
-      if (studentNames.trim()) {
-        const lines = studentNames.split('\n').map(n => n.trim()).filter(n => n);
-        if (lines.length > 0) {
-          if (usedLocalFallback) {
-            // Save students locally under local_students_classId
-            const localStudents = lines.map((line, idx) => {
-              let name = line;
-              let code = '';
-              if (line.includes(',')) {
-                const parts = line.split(',');
-                name = parts[0].trim();
-                code = parts[1].trim().replace(/\D/g, '').padStart(4, '0');
-              }
-              const parent_code = code || (idx + 1).toString().padStart(4, '0');
-              return {
-                id: `local_student_${Date.now()}_${idx}`,
-                name,
-                class_id: classData.id,
-                grade: selectedGrade,
-                parent_code,
-                created_at: new Date().toISOString(),
-                is_local: true
-              };
-            });
-            localStorage.setItem(`local_students_${classData.id}`, JSON.stringify(localStudents));
-          } else {
-            // Try inserting students via database
-            try {
-              // Get current highest index for this school/grade to continue sequence using secure RPC
-              const { data: rpcRes, error: fetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
-                p_school_name: teacher.school_name,
-                p_grade: selectedGrade
-              });
-
-              if (fetchError) throw fetchError;
-              const existingStudents = rpcRes?.success ? rpcRes.students : [];
-
-              const existingCodes = new Set(
-                (existingStudents || [])
-                  .map(s => parseInt(s.parent_code))
-                  .filter(n => !isNaN(n))
-              );
-
-              let currentCode = 1;
-              const studentsToInsert = [];
-
-              for (const line of lines) {
-                let name = line;
-                let parent_code = '';
-
-                if (line.includes(',')) {
-                  const parts = line.split(',');
-                  name = parts[0].trim();
-                  parent_code = parts[1].trim().replace(/\D/g, '').padStart(4, '0');
-                }
-
-                // Check if student with this name already exists in this school/grade
-                const existingStudent = (existingStudents || []).find(s => s.name.toLowerCase() === name.toLowerCase());
-                
-                if (existingStudent) {
-                  // Reuse existing index number
-                  parent_code = existingStudent.parent_code;
-                } else if (!parent_code || existingCodes.has(parseInt(parent_code))) {
-                  while (existingCodes.has(currentCode)) {
-                    currentCode++;
-                  }
-                  parent_code = currentCode.toString().padStart(4, '0');
-                  existingCodes.add(parseInt(parent_code));
-                } else {
-                  existingCodes.add(parseInt(parent_code));
-                }
-
-                studentsToInsert.push({
-                  class_id: classData.id,
-                  name,
-                  grade: selectedGrade,
-                  parent_code: parent_code,
-                  school_name: teacher.school_name,
-                  index_number: parent_code
-                });
-              }
-
-              const rpcPromises = studentsToInsert.map(student => 
-                supabase.rpc('teacher_add_student', {
-                  p_teacher_id: teacher.id,
-                  p_class_id: classData.id,
-                  p_name: student.name.trim(),
-                  p_grade: selectedGrade,
-                  p_school_name: teacher.school_name || null,
-                  p_index_number: student.parent_code,
-                  p_school_id: teacher.school_id || null
-                })
-              );
-
-              const rpcResults = await Promise.all(rpcPromises);
-              const firstError = rpcResults.find(res => res.error);
-              if (firstError) throw firstError.error;
-            } catch (studentInsertErr: any) {
-              console.warn("Database student insertion failed, falling back to local storage for these students:", studentInsertErr);
-              // Save students locally under local_students_classId
-              const localStudents = lines.map((line, idx) => {
-                let name = line;
-                let code = '';
-                if (line.includes(',')) {
-                  const parts = line.split(',');
-                  name = parts[0].trim();
-                  code = parts[1].trim().replace(/\D/g, '').padStart(4, '0');
-                }
-                const parent_code = code || (idx + 1).toString().padStart(4, '0');
-                return {
-                  id: `local_student_${Date.now()}_${idx}`,
-                  name,
-                  class_id: classData.id,
-                  grade: selectedGrade,
-                  parent_code,
-                  created_at: new Date().toISOString(),
-                  is_local: true
-                };
-              });
-              localStorage.setItem(`local_students_${classData.id}`, JSON.stringify(localStudents));
-              usedLocalFallback = true;
-            }
-          }
-        }
-      }
-
-      if (usedLocalFallback) {
-        showToast("Class and students created locally! To synchronize with your remote Supabase database, please execute the SQL definitions in 'supabase_teacher_create_class.sql'.", "info", 8000);
-      } else {
-        showToast("Class created successfully!", "success");
-      }
-
-      setIsAddingClass(false);
-      setNewClassName('');
-      setSelectedGrade('');
-      setStudentNames('');
-      fetchDashboardData(teacher.id);
-      
-      // Navigate to the new class view immediately
-      onViewClass(classData.id, classData.name);
-    } catch (err: any) {
-      showToast(err.message || "Failed to create class", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleRenameClass = async (classId: string, newName: string) => {
     if (!teacher || !newName.trim()) return;
     try {
@@ -1250,7 +1025,6 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-brand-surface border border-brand-accent/30 rounded-[2rem] p-6 shadow-xl space-y-4"
               >
-                {classFlowStep === 'browse' ? (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
                       <div>
@@ -1425,90 +1199,16 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       })()}
                     </div>
 
-                    {/* Create New Class Alternative */}
-                    <div className="pt-2 border-t border-brand-border/50 flex flex-col items-center">
-                      <p className="text-[10px] text-brand-muted/70 italic text-center mb-2">
-                        Don't see your class listed? Avoid duplicates by searching first.
+                    {/* Admin notice */}
+                    <div className="pt-4 border-t border-brand-border/50 text-center">
+                      <p className="text-[10.5px] text-brand-muted/80 font-black uppercase tracking-wider">
+                        Don't see your class?
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => setClassFlowStep('create')}
-                        className="w-full py-3 border border-brand-accent/40 hover:bg-brand-accent/5 text-brand-accent hover:border-brand-accent rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center"
-                      >
-                        None of these — Create a brand new class
-                      </button>
+                      <p className="text-[10px] text-brand-muted/60 mt-1">
+                        Please ask your school administrator to add the class and student roster.
+                      </p>
                     </div>
                   </div>
-                ) : (
-                  /* Create step */
-                  <form onSubmit={handleAddClass} className="space-y-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => setClassFlowStep('browse')}
-                          className="text-brand-accent hover:underline font-bold text-xs flex items-center gap-1.5"
-                        >
-                          <ArrowLeft size={12} /> Back to Browse
-                        </button>
-                        <h3 className="font-bold tracking-tight text-lg mt-1">Create New Class</h3>
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={() => setIsAddingClass(false)}
-                        className="text-brand-muted hover:text-brand-accent font-medium text-sm self-start"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Class Name</label>
-                          <input 
-                            type="text"
-                            placeholder="e.g. 9 North"
-                            className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 text-brand-text"
-                            value={newClassName}
-                            onChange={(e) => setNewClassName(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Grade Level</label>
-                          <select 
-                            className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 appearance-none text-brand-text"
-                            value={selectedGrade}
-                            onChange={(e) => setSelectedGrade(e.target.value)}
-                            required
-                          >
-                            <option value="">Select Grade...</option>
-                            {grades.map(g => (
-                              <option key={g} value={g}>{g}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-black uppercase tracking-wider text-brand-muted px-1 whitespace-nowrap">Students (One per line: Name, Index)</label>
-                        <textarea 
-                          placeholder="John Doe, 0001&#10;Jane Smith, 0002&#10;Ali Omar (auto-indexes)..."
-                          className="w-full bg-brand-bg border border-brand-border rounded-xl p-3 font-bold outline-none focus:border-brand-accent/50 min-h-[100px] text-brand-text"
-                          value={studentNames}
-                          onChange={(e) => setStudentNames(e.target.value)}
-                        />
-                        <p className="text-[9px] text-brand-muted/70 italic px-1">Tip: Comma-separated name and index number works best.</p>
-                      </div>
-                      <button 
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-4 bg-brand-accent text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-accent/20 active:scale-95 transition-all disabled:opacity-50"
-                      >
-                        {loading ? "Creating..." : "Save Class & Students"}
-                      </button>
-                    </div>
-                  </form>
-                )}
               </motion.div>
             )}
 

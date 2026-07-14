@@ -1,21 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
-  UserPlus, 
-  Edit2, 
-  Trash2, 
-  Check, 
-  X, 
-  Loader2,
   Hash,
   Search,
-  ArrowRight,
-  Sparkles,
-  ClipboardList,
-  ChevronDown,
-  ChevronUp,
-  Plus
+  Loader2,
+  Info
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -38,17 +27,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
   const { showToast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [autoAssigning, setAutoAssigning] = useState(false);
-  const [showBulkAdd, setShowBulkAdd] = useState(false);
-  const [bulkNames, setBulkNames] = useState('');
-  const [newStudentName, setNewStudentName] = useState('');
-  const [newStudentCode, setNewStudentCode] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editCode, setEditCode] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const assignmentAttempted = React.useRef(false);
 
   useEffect(() => {
     fetchStudents();
@@ -58,32 +37,28 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
     try {
       setLoading(true);
       let fetchedStudents: Student[] = [];
-      try {
-        const teacherStr = localStorage.getItem('azilearn_teacher');
-        if (teacherStr) {
-          const teacher = JSON.parse(teacherStr);
-          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
-            p_teacher_id: teacher.id,
-            p_class_id: classId
-          });
-          if (!rpcError && rpcData) {
-            if (Array.isArray(rpcData)) {
-              fetchedStudents = rpcData;
-            } else if (typeof rpcData === 'object') {
-              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
-              if (innerArray) {
-                fetchedStudents = innerArray as any[];
-              } else if ((rpcData as any).id) {
-                fetchedStudents = [rpcData];
-              }
+      
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      if (teacherStr) {
+        const teacher = JSON.parse(teacherStr);
+        const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
+          p_teacher_id: teacher.id,
+          p_class_id: classId
+        });
+        
+        if (!rpcError && rpcData) {
+          if (Array.isArray(rpcData)) {
+            fetchedStudents = rpcData;
+          } else if (typeof rpcData === 'object') {
+            const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
+            if (innerArray) {
+              fetchedStudents = innerArray as any[];
+            } else if ((rpcData as any).id) {
+              fetchedStudents = [rpcData];
             }
           }
         }
-      } catch (rpcErr) {
-        console.warn("RPC fetch failed, using fallback:", rpcErr);
       }
-
-      // Fallback removed to prevent RLS query blocks
 
       const sorted = [...fetchedStudents].sort((a, b) => {
         return (a.parent_code || '').localeCompare(b.parent_code || '');
@@ -91,477 +66,50 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
 
       setStudents(sorted);
     } catch (err: any) {
-      showToast("Error loading students", "error");
+      showToast("Error loading student roster", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddStudent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newStudentName.trim() || !grade) return;
-
-    try {
-      setAdding(true);
-      
-      let parent_code = newStudentCode.trim();
-
-      // Get school students to check for duplicates
-      let schoolStudents: any[] = [];
-      try {
-        const teacherStr = localStorage.getItem('azilearn_teacher');
-        if (teacherStr) {
-          const teacher = JSON.parse(teacherStr);
-          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
-            p_teacher_id: teacher.id
-          });
-          if (!rpcError && rpcData) {
-            if (Array.isArray(rpcData)) {
-              schoolStudents = rpcData;
-            } else if (typeof rpcData === 'object') {
-              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
-              if (innerArray) {
-                schoolStudents = innerArray as any[];
-              } else if ((rpcData as any).id) {
-                schoolStudents = [rpcData];
-              }
-            }
-          }
-        }
-      } catch (rpcErr) {
-        console.warn("RPC schoolStudents fetch failed:", rpcErr);
-      }
-
-      if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: rpcRes } = await supabase.rpc('get_school_grade_students_for_indexing', {
-          p_school_name: schoolName,
-          p_grade: grade
-        });
-        schoolStudents = rpcRes?.success ? rpcRes.students : [];
-      }
-
-      // Check if student with this name already exists in this school/grade
-      const existingStudent = (schoolStudents || []).find(s => s.name.toLowerCase() === newStudentName.trim().toLowerCase());
-      
-      if (existingStudent) {
-        parent_code = existingStudent.parent_code;
-        showToast(`Student ${newStudentName} already exists with Index #${parent_code}. Re-using it.`, "info");
-      } else if (!parent_code) {
-        let nextIndex = 1;
-        if (schoolStudents && schoolStudents.length > 0) {
-          const indices = schoolStudents
-            .map(s => parseInt(s.parent_code))
-            .filter(n => !isNaN(n));
-          if (indices.length > 0) {
-            nextIndex = Math.max(...indices) + 1;
-          }
-        }
-        
-        parent_code = nextIndex.toString().padStart(4, '0');
-      }
-
-      const teacherStr = localStorage.getItem('azilearn_teacher');
-      const teacher = teacherStr ? JSON.parse(teacherStr) : null;
-      const teacherId = teacher?.id;
-      const schoolId = teacher?.school_id;
-
-      const { error } = await supabase.rpc('teacher_add_student', {
-        p_teacher_id: teacherId,
-        p_class_id: classId,
-        p_name: newStudentName.trim(),
-        p_grade: grade,
-        p_school_name: schoolName || null,
-        p_index_number: parent_code,
-        p_school_id: schoolId || null
-      });
-
-      if (error) throw error;
-
-      showToast(`Added ${newStudentName} with Code ${parent_code}`, "success");
-      setNewStudentName('');
-      setNewStudentCode('');
-      fetchStudents();
-      if (onUpdate) onUpdate();
-    } catch (err: any) {
-      showToast("Failed to add student. Code might be taken.", "error");
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const handleUpdateStudent = async (studentId: string) => {
-    if (!editName.trim() || !editCode.trim()) return;
-    try {
-      const teacherStr = localStorage.getItem('azilearn_teacher');
-      const teacher = teacherStr ? JSON.parse(teacherStr) : null;
-      const teacherId = teacher?.id;
-
-      const { error } = await supabase.rpc('teacher_update_student', {
-        p_teacher_id: teacherId,
-        p_student_id: studentId,
-        p_name: editName.trim(),
-        p_index_number: editCode.trim().padStart(4, '0'),
-        p_school_name: schoolName
-      });
-
-      if (error) throw error;
-      showToast("Student updated", "success");
-      setEditingId(null);
-      fetchStudents();
-      if (onUpdate) onUpdate();
-    } catch (err: any) {
-      showToast("Error updating student. Code might be taken.", "error");
-    }
-  };
-
-  const handleDelete = async (studentId: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to remove ${name}? This will delete all their submissions.`)) return;
-    
-    try {
-      const teacherStr = localStorage.getItem('azilearn_teacher');
-      const teacher = teacherStr ? JSON.parse(teacherStr) : null;
-      const teacherId = teacher?.id;
-
-      const { error } = await supabase.rpc('teacher_delete_student', {
-        p_teacher_id: teacherId,
-        p_student_id: studentId
-      });
-
-      if (error) throw error;
-      showToast("Student removed", "success");
-      fetchStudents();
-      if (onUpdate) onUpdate();
-    } catch (err: any) {
-      showToast("Error deleting student", "error");
-    }
-  };
-
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    s.parent_code?.includes(searchQuery)
-  );
-
-  const handleBulkAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bulkNames.trim() || !grade || !schoolName) return;
-
-    const lines = bulkNames
-      .split('\n')
-      .map(n => n.trim())
-      .filter(n => n.length > 0);
-
-    if (lines.length === 0) return;
-
-    try {
-      setAdding(true);
-      
-      let schoolStudents: any[] = [];
-      try {
-        const teacherStr = localStorage.getItem('azilearn_teacher');
-        if (teacherStr) {
-          const teacher = JSON.parse(teacherStr);
-          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
-            p_teacher_id: teacher.id
-          });
-          if (!rpcError && rpcData) {
-            if (Array.isArray(rpcData)) {
-              schoolStudents = rpcData;
-            } else if (typeof rpcData === 'object') {
-              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
-              if (innerArray) {
-                schoolStudents = innerArray as any[];
-              } else if ((rpcData as any).id) {
-                schoolStudents = [rpcData];
-              }
-            }
-          }
-        }
-      } catch (rpcErr) {
-        console.warn("RPC fetch error for bulk add:", rpcErr);
-      }
-
-      if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: rpcRes, error: fetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
-          p_school_name: schoolName,
-          p_grade: grade
-        });
-
-        if (fetchError) throw fetchError;
-        schoolStudents = rpcRes?.success ? rpcRes.students : [];
-      }
-
-      const existingCodes = new Set(
-        (schoolStudents || [])
-          .map(s => parseInt(s.parent_code))
-          .filter(n => !isNaN(n))
-      );
-
-      let currentCode = 1;
-      const newStudents = [];
-
-      for (const line of lines) {
-        let name = line;
-        let parent_code = '';
-
-        if (line.includes(',')) {
-          const parts = line.split(',');
-          name = parts[0].trim();
-          parent_code = parts[1].trim().replace(/\D/g, '').padStart(4, '0');
-        }
-
-        // Check if student with this name already exists in this school/grade
-        const existingStudent = (schoolStudents || []).find(s => s.name.toLowerCase() === name.toLowerCase());
-        
-        if (existingStudent) {
-          parent_code = existingStudent.parent_code;
-        } else if (!parent_code || existingCodes.has(parseInt(parent_code))) {
-          while (existingCodes.has(currentCode)) {
-            currentCode++;
-          }
-          parent_code = currentCode.toString().padStart(4, '0');
-          existingCodes.add(parseInt(parent_code));
-        } else {
-          existingCodes.add(parseInt(parent_code));
-        }
-        
-        newStudents.push({
-          name,
-          class_id: classId,
-          grade: grade,
-          parent_code: parent_code,
-          school_name: schoolName,
-          index_number: parent_code
-        });
-      }
-
-      const teacherStr = localStorage.getItem('azilearn_teacher');
-      const teacher = teacherStr ? JSON.parse(teacherStr) : null;
-      const teacherId = teacher?.id;
-      const schoolId = teacher?.school_id;
-
-      const rpcPromises = newStudents.map(student => 
-        supabase.rpc('teacher_add_student', {
-          p_teacher_id: teacherId,
-          p_class_id: classId,
-          p_name: student.name.trim(),
-          p_grade: grade,
-          p_school_name: schoolName || null,
-          p_index_number: student.parent_code,
-          p_school_id: schoolId || null
-        })
-      );
-
-      const rpcResults = await Promise.all(rpcPromises);
-      const firstError = rpcResults.find(res => res.error);
-      if (firstError) throw firstError.error;
-
-      showToast(`Successfully added ${newStudents.length} students`, "success");
-      setBulkNames('');
-      setShowBulkAdd(false);
-      fetchStudents();
-      if (onUpdate) onUpdate();
-    } catch (err: any) {
-      showToast("Failed to add students in bulk", "error");
-    } finally {
-      setAdding(false);
-    }
-  };
-  const handleAutoAssign = async (silent = false) => {
-    if (!grade || !schoolName || students.length === 0) return;
-    
-    const studentsWithoutCode = students.filter(s => !s.parent_code || s.parent_code === '----');
-    if (studentsWithoutCode.length === 0) {
-      if (!silent) showToast("All students already have index numbers", "info");
-      return;
-    }
-
-    try {
-      setAutoAssigning(true);
-      
-      let schoolStudents: any[] = [];
-      try {
-        const teacherStr = localStorage.getItem('azilearn_teacher');
-        if (teacherStr) {
-          const teacher = JSON.parse(teacherStr);
-          const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
-            p_teacher_id: teacher.id
-          });
-          if (!rpcError && rpcData) {
-            if (Array.isArray(rpcData)) {
-              schoolStudents = rpcData;
-            } else if (typeof rpcData === 'object') {
-              const innerArray = Object.values(rpcData).find(v => Array.isArray(v));
-              if (innerArray) {
-                schoolStudents = innerArray as any[];
-              } else if ((rpcData as any).id) {
-                schoolStudents = [rpcData];
-              }
-            }
-          }
-        }
-      } catch (rpcErr) {
-        console.warn("RPC auto assign school fetch failed:", rpcErr);
-      }
-
-      if (!schoolStudents || schoolStudents.length === 0) {
-        const { data: rpcRes, error: schoolFetchError } = await supabase.rpc('get_school_grade_students_for_indexing', {
-          p_school_name: schoolName,
-          p_grade: grade
-        });
-
-        if (schoolFetchError) throw schoolFetchError;
-        schoolStudents = rpcRes?.success ? rpcRes.students : [];
-      }
-
-      const existingCodes = new Set(
-        (schoolStudents || [])
-          .map(s => parseInt(s.parent_code))
-          .filter(n => !isNaN(n))
-      );
-
-      let currentCode = 1;
-      const updates = [];
-
-      for (const student of studentsWithoutCode) {
-        while (existingCodes.has(currentCode)) {
-          currentCode++;
-        }
-        const newCode = currentCode.toString().padStart(4, '0');
-        existingCodes.add(currentCode);
-        
-        const teacherStr = localStorage.getItem('azilearn_teacher');
-        const teacher = teacherStr ? JSON.parse(teacherStr) : null;
-        const teacherId = teacher?.id;
-
-        updates.push(
-          supabase.rpc('teacher_update_student', {
-            p_teacher_id: teacherId,
-            p_student_id: student.id,
-            p_name: student.name,
-            p_index_number: newCode,
-            p_school_name: schoolName
-          })
-        );
-      }
-
-      await Promise.all(updates);
-      if (!silent) showToast(`Automatically assigned ${updates.length} index numbers!`, "success");
-      fetchStudents();
-      if (onUpdate) onUpdate();
-    } catch (err: any) {
-      console.error(err);
-      if (!silent) showToast("Error auto-assigning codes", "error");
-    } finally {
-      setAutoAssigning(false);
-    }
-  };
-
-  // Removed automatic assignment trigger to respect manual control preference
+  const filteredStudents = students.filter(student => {
+    const q = searchQuery.toLowerCase();
+    return (
+      student.name.toLowerCase().includes(q) ||
+      (student.parent_code || '').includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6">
-      {/* Header Actions */}
+      {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="text-lg font-black tracking-tight">Class Roster</h3>
-          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Total: {students.length} students</p>
+          <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+            <Users size={18} className="text-brand-accent" />
+            Class Roster
+          </h3>
+          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">
+            Total Enrolled: {students.length} students
+          </p>
         </div>
         
-        <button 
-          onClick={handleAutoAssign}
-          disabled={autoAssigning || students.length === 0}
-          className="flex items-center gap-2 px-6 py-2.5 bg-brand-accent/10 border border-brand-accent/20 rounded-xl text-[10px] font-black uppercase tracking-widest text-brand-accent hover:bg-brand-accent hover:text-white transition-all disabled:opacity-50"
-        >
-          {autoAssigning ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />}
-          {autoAssigning ? 'Assigning...' : 'Auto-Assign Codes'}
-        </button>
-      </div>
-
-      {/* Bulk Add Section */}
-      <div className="bg-brand-surface border border-brand-border rounded-3xl overflow-hidden shadow-sm">
-        <button 
-          onClick={() => setShowBulkAdd(!showBulkAdd)}
-          className="w-full flex items-center justify-between p-6 hover:bg-brand-bg/30 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-brand-accent/10 rounded-xl text-brand-accent">
-              <ClipboardList size={20} />
-            </div>
-            <div className="text-left">
-              <h4 className="font-black text-sm tracking-tight">Bulk Add Students</h4>
-              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Add "Name, Index" (e.g. John Doe, 0001) - One per line</p>
-            </div>
-          </div>
-          {showBulkAdd ? <ChevronUp size={20} className="text-brand-muted" /> : <ChevronDown size={20} className="text-brand-muted" />}
-        </button>
-        
-        <AnimatePresence>
-          {showBulkAdd && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="px-6 pb-6"
-            >
-              <form onSubmit={handleBulkAdd} className="space-y-4">
-                <textarea 
-                  placeholder="Enter students (one per line)...&#10;John Kamau, 0001&#10;Sarah Wambui, 0002&#10;James Ochieng (auto-indexes)"
-                  rows={5}
-                  className="w-full bg-brand-bg border border-brand-border rounded-2xl p-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-sm resize-none"
-                  value={bulkNames}
-                  onChange={(e) => setBulkNames(e.target.value)}
-                />
-                <button 
-                  type="submit"
-                  disabled={adding || !bulkNames.trim()}
-                  className="w-full bg-brand-accent text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {adding ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
-                  Add {bulkNames.split('\n').filter(n => n.trim()).length || ''} Students with Codes
-                </button>
-              </form>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Search and Add Header */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted" size={18} />
-          <input 
-            type="text"
-            placeholder="Search name or index..."
-            className="w-full bg-brand-bg border border-brand-border rounded-2xl py-3 pl-12 pr-4 font-bold text-sm outline-none focus:border-brand-accent/50 transition-all"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="text-[9px] font-bold text-brand-muted bg-brand-surface border px-3 py-1.5 rounded-xl uppercase tracking-widest flex items-center gap-1.5">
+          <Info size={12} className="text-brand-muted" />
+          Roster is read-only for educators
         </div>
-        
-        <form onSubmit={handleAddStudent} className="flex gap-2">
-          <input 
-            type="text"
-            placeholder="Name..."
-            className="flex-[2] bg-brand-bg border border-brand-border rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:border-brand-accent/50 transition-all"
-            value={newStudentName}
-            onChange={(e) => setNewStudentName(e.target.value)}
-          />
-          <input 
-            type="text"
-            placeholder="Index (Optional)"
-            maxLength={4}
-            className="flex-1 bg-brand-bg border border-brand-border rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:border-brand-accent/50 transition-all text-center"
-            value={newStudentCode}
-            onChange={(e) => setNewStudentCode(e.target.value.replace(/\D/g, ''))}
-          />
-          <button 
-            type="submit"
-            disabled={adding || !newStudentName.trim()}
-            className="bg-brand-accent text-white p-3 rounded-2xl shadow-lg shadow-brand-accent/20 active:scale-95 transition-all disabled:opacity-50"
-          >
-            {adding ? <Loader2 className="animate-spin" size={20} /> : <UserPlus size={20} />}
-          </button>
-        </form>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted" size={18} />
+        <input 
+          type="text"
+          placeholder="Search students by name or index code..."
+          className="w-full bg-brand-bg border border-brand-border rounded-2xl py-3 pl-12 pr-4 font-bold text-sm outline-none focus:border-brand-accent/50 transition-all text-brand-text placeholder-brand-muted/40"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
       </div>
 
       {loading ? (
@@ -574,85 +122,33 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
           <table className="w-full text-left">
             <thead>
               <tr className="bg-brand-surface border-b border-brand-border font-black text-[9px] uppercase tracking-widest text-brand-muted">
-                <th className="px-6 py-4 w-16">Index</th>
-                <th className="px-6 py-4">Full Name</th>
-                <th className="px-6 py-4 text-right">Actions</th>
+                <th className="px-6 py-4 w-24">Index</th>
+                <th className="px-6 py-4">Full Student Name</th>
+                <th className="px-6 py-4 text-right">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-brand-border">
+            <tbody className="divide-y divide-brand-border font-medium text-xs">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center text-brand-muted font-bold">
-                    No students found matching "{searchQuery}"
+                  <td colSpan={3} className="px-6 py-12 text-center text-brand-muted font-bold uppercase tracking-wider">
+                    {searchQuery ? `No students matched "${searchQuery}"` : "Roster is currently empty."}
                   </td>
                 </tr>
               ) : (
                 filteredStudents.map((student) => (
-                  <tr key={student.id} className="hover:bg-brand-surface/50 transition-colors">
+                  <tr key={student.id} className="hover:bg-brand-surface/30 transition-colors">
                     <td className="px-6 py-4">
-                      {editingId === student.id ? (
-                        <input 
-                          type="text"
-                          value={editCode}
-                          maxLength={4}
-                          onChange={(e) => setEditCode(e.target.value.replace(/\D/g, ''))}
-                          className="w-16 bg-brand-bg border border-brand-accent rounded-lg px-2 py-1 font-black text-xs text-brand-accent text-center outline-none"
-                        />
-                      ) : (
-                        <span className="font-black text-brand-accent font-mono">{student.parent_code}</span>
-                      )}
+                      <span className="font-black text-brand-accent font-mono text-sm">
+                        {student.parent_code || 'N/A'}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
-                      {editingId === student.id ? (
-                        <input 
-                          type="text"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="w-full bg-brand-bg border border-brand-accent rounded-lg px-3 py-1 font-bold text-sm outline-none"
-                          autoFocus
-                        />
-                      ) : (
-                        <span className="font-bold text-sm">{student.name}</span>
-                      )}
+                      <span className="font-bold text-brand-text">{student.name}</span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        {editingId === student.id ? (
-                          <>
-                            <button 
-                              onClick={() => handleUpdateStudent(student.id)}
-                              className="p-2 bg-emerald-500/10 text-emerald-600 rounded-lg hover:bg-emerald-500/20"
-                            >
-                              <Check size={14} />
-                            </button>
-                            <button 
-                              onClick={() => setEditingId(null)}
-                              className="p-2 bg-red-500/10 text-red-600 rounded-lg hover:bg-red-500/20"
-                            >
-                              <X size={14} />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button 
-                              onClick={() => {
-                                setEditingId(student.id);
-                                setEditName(student.name);
-                                setEditCode(student.parent_code);
-                              }}
-                              className="p-2 text-brand-muted hover:text-brand-accent transition-colors"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button 
-                              onClick={() => handleDelete(student.id, student.name)}
-                              className="p-2 text-brand-muted hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </>
-                        )}
-                      </div>
+                      <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-500">
+                        Registered
+                      </span>
                     </td>
                   </tr>
                 ))
@@ -663,12 +159,12 @@ export const StudentManager: React.FC<StudentManagerProps> = ({ classId, grade, 
       )}
 
       {/* Helpful Hint */}
-      <div className="p-4 bg-[#FF6B2C]/5 rounded-2xl border border-[#FF6B2C]/10 flex items-start gap-4">
-        <Hash className="text-[#FF6B2C] shrink-0" size={18} />
+      <div className="p-4 bg-brand-surface border border-brand-border rounded-2xl flex items-start gap-4">
+        <Hash className="text-brand-accent shrink-0" size={18} />
         <div>
-          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#FF6B2C] mb-1">About Index Numbers</h4>
+          <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-text mb-1">Index Number Authentication</h4>
           <p className="text-[11px] font-medium text-brand-muted leading-relaxed">
-            Students use these 4-digit codes to access their results. Index numbers are assigned automatically per grade level and school.
+            Students use their unique registered 4-digit code to access and attempt assignments. If you notice a name or code missing, please request your school administrator to update the official register.
           </p>
         </div>
       </div>
