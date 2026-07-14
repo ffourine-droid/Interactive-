@@ -260,7 +260,13 @@ function AppContent() {
               className="max-w-4xl mx-auto min-h-screen"
             >
               <TeacherAssignmentCreator 
-                onBack={() => setCurrentPage('teacher-dashboard')} 
+                onBack={() => {
+                  if (selectedClassId) {
+                    setCurrentPage('teacher-class');
+                  } else {
+                    setCurrentPage('teacher-dashboard');
+                  }
+                }} 
                 preSelectedClassId={selectedClassId || undefined}
                 importCode={showImportOnCreator ? ' ' : undefined} // Passing a space triggers the expansion
                 initialData={currentPageProps?.importedWork}

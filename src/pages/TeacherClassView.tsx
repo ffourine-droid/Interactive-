@@ -189,15 +189,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       // Set the teacher_id session config inside Postgres before running queries/RPCs
       await setTeacherConfig(teacherId);
 
-      const isLocal = classId.startsWith('local_');
+      const isDynamic = classId === 'dynamic-class';
+      const isLocal = classId.startsWith('local_') || isDynamic;
 
       // 1. Fetch assignments, students, exams, teacher info, and class info in parallel
       const [assignmentsRes, studentsRes, teacherRes, examsRes, classRes] = await Promise.all([
-        supabase
-          .from('assignments')
-          .select('id, title, subject, questions, grade, due_date, class_id, expected_students, created_at, share_code, is_broadcast')
-          .eq('teacher_id', teacherId)
-          .order('created_at', { ascending: false }),
+        supabase.rpc('teacher_get_assignments', { p_teacher_id: teacherId }),
         isLocal ? Promise.resolve({ data: [], error: null }) : (async () => {
           try {
             const { data, error } = await supabase.rpc('teacher_get_class_students', {
@@ -245,17 +242,47 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       if (teacherRes.error) throw teacherRes.error;
       if (examsRes.error) throw examsRes.error;
 
-      let assignmentsData = assignmentsRes.data || [];
+      let assignmentsData: any[] = [];
+      if (assignmentsRes.data) {
+        if (assignmentsRes.data.success && Array.isArray(assignmentsRes.data.assignments)) {
+          assignmentsData = assignmentsRes.data.assignments;
+        } else if (Array.isArray(assignmentsRes.data)) {
+          assignmentsData = assignmentsRes.data;
+        } else if (typeof assignmentsRes.data === 'object') {
+          const innerArray = Object.values(assignmentsRes.data).find(v => Array.isArray(v));
+          if (innerArray) {
+            assignmentsData = innerArray as any[];
+          }
+        }
+      }
       let studentsData = studentsRes.data || [];
       let examsData = examsRes.data || [];
       let classData = classRes.data;
 
-      if (classId.startsWith('local_')) {
+      if (classId === 'dynamic-class') {
+        classData = { id: 'dynamic-class', name: 'Dynamic & One-time Classes', grade: 'All Grades' };
+        
+        let fetchedClasses: any[] = [];
+        try {
+          const { data: rpcData } = await supabase.rpc('teacher_get_classes', { p_teacher_id: teacherId });
+          if (rpcData && Array.isArray(rpcData)) {
+            fetchedClasses = rpcData;
+          }
+        } catch (e) {}
+
+        const classNames = fetchedClasses.map((c: any) => c.name?.toLowerCase() || c.class_name?.toLowerCase()).filter(Boolean);
+        assignmentsData = assignmentsData.filter((a: any) => 
+          !a.class_id && (!a.class_name || !classNames.includes(a.class_name.toLowerCase()))
+        );
+        examsData = [];
+      } else if (classId.startsWith('local_')) {
         // Load class info from local classes
         const localClassesRaw = localStorage.getItem(`local_classes_${teacherId}`);
+        let currentClassName = '';
         if (localClassesRaw) {
           const localClasses = JSON.parse(localClassesRaw);
           classData = localClasses.find((c: any) => c.id === classId) || null;
+          if (classData) currentClassName = classData.name || '';
         }
 
         // Load students from local students list
@@ -265,7 +292,10 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         }
 
         // Filter assignments & exams for this local class
-        assignmentsData = assignmentsData.filter((a: any) => a.class_id === classId);
+        assignmentsData = assignmentsData.filter((a: any) => 
+          a.class_id === classId || 
+          (a.class_name && currentClassName && a.class_name.toLowerCase() === currentClassName.toLowerCase())
+        );
         examsData = examsData.filter((e: any) => e.class_id === classId);
       }
       
@@ -734,7 +764,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             Assessments
           </h2>
           {(() => {
-            const classAssignments = assignments.filter(a => a.class_id === classId);
+            const classAssignments = assignments.filter(a => 
+              classId === 'dynamic-class' ? true : (
+                a.class_id === classId || 
+                (a.class_name && className && a.class_name.toLowerCase() === className.toLowerCase())
+              )
+            );
             if (classAssignments.length === 0) {
               return (
                 <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">
@@ -748,7 +783,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             
             // Use the class students as the base for status if assignment doesn't have its own list
             // User requested students to be stored in DB, so we prefer the class-level student list.
-            const studentList = students.length > 0 ? students.map(s => s.name) : assignment.expected_students;
+            const studentList = (students && students.length > 0) ? students.map(s => s.name) : (assignment.expected_students || []);
             
             const submissionPercentage = studentList.length > 0 
               ? Math.round((assignmentSubmissions.length / studentList.length) * 100) 

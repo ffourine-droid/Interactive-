@@ -17,11 +17,9 @@ import {
   Image as ImageIcon,
   Type,
   FileText,
-  Clock,
   Loader2,
   MessageCircle,
-  Download,
-  ClipboardList
+  Download
 } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -49,7 +47,6 @@ interface AssignmentForm {
   class_id: string;
   class_name: string;
   due_date: string;
-  expected_students: string; // Keep this for backward compatibility and manual entry
 }
 
 interface Class {
@@ -68,18 +65,13 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
   const [success, setSuccess] = useState<string | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [showBulkAdd, setShowBulkAdd] = useState(false);
-  const [bulkNames, setBulkNames] = useState('');
-  const [newStudentName, setNewStudentName] = useState('');
-  const [newStudentCode, setNewStudentCode] = useState('');
   const [form, setForm] = useState<AssignmentForm>({
     title: '',
     subject: '',
     grade: '',
     class_id: preSelectedClassId || '',
     class_name: '',
-    due_date: '',
-    expected_students: ''
+    due_date: ''
   });
   const [questions, setQuestions] = useState<Question[]>([
     { id: Math.random().toString(36).substr(2, 9), type: 'mcq', text: '', options: ['', '', '', ''], correct_option: 0 }
@@ -131,7 +123,6 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           title: data.title,
           subject: data.subject,
           grade: data.grade,
-          // We don't import class_id as it belongs to the teacher claiming it
         }));
         setQuestions(data.questions);
         showToast("Assignment data loaded successfully!", "success");
@@ -152,97 +143,52 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     const teacherId = JSON.parse(teacherData).id;
 
     try {
-      // Set the teacher_id session config inside Postgres before running queries/RPCs
+      setLoading(true);
       await setTeacherConfig(teacherId);
 
-      let fetchedClasses: any[] = [];
-      try {
-        const { data, error } = await supabase.rpc('teacher_get_classes', {
-          p_teacher_id: teacherId
-        });
-        if (!error && data) {
-          if (Array.isArray(data)) {
-            fetchedClasses = data;
-          } else if (typeof data === 'object') {
-            const innerArray = Object.values(data).find(v => Array.isArray(v));
-            if (innerArray) {
-              fetchedClasses = innerArray as any[];
-            } else if ((data as any).id) {
-              fetchedClasses = [data];
-            }
+      const { data, error } = await supabase.rpc('teacher_get_classes', {
+        p_teacher_id: teacherId
+      });
+
+      if (error) {
+        showToast("Failed to load classes: " + error.message, "error");
+        return;
+      }
+
+      let fetchedClasses: Class[] = [];
+      if (data) {
+        if (Array.isArray(data)) {
+          fetchedClasses = data;
+        } else if (typeof data === 'object') {
+          const innerArray = Object.values(data).find(v => Array.isArray(v));
+          if (innerArray) {
+            fetchedClasses = innerArray as Class[];
+          } else if ((data as any).id) {
+            fetchedClasses = [data as Class];
           }
         }
-      } catch (rpcErr) {
-        console.warn("RPC fetch failed, using fallback:", rpcErr);
       }
 
-      if (!fetchedClasses || fetchedClasses.length === 0) {
-        try {
-          const { data: subjectClasses, error: tsError } = await supabase
-            .from('teacher_subjects')
-            .select('class_id')
-            .eq('teacher_id', teacherId);
-
-          if (!tsError && subjectClasses && subjectClasses.length > 0) {
-            const classIds = subjectClasses.map((sc: any) => sc.class_id);
-            const { data: dbData, error: dbError } = await supabase
-              .from('classes')
-              .select('id, name, grade')
-              .in('id', classIds);
-            if (!dbError && dbData) {
-              fetchedClasses = dbData;
-            }
-          }
-        } catch (dbErr) {
-          console.error("Direct classes query fallback failed:", dbErr);
-        }
-      }
-
-      // Add local classes if any
-      try {
-        const localClassesRaw = localStorage.getItem(`local_classes_${teacherId}`);
-        if (localClassesRaw) {
-          const localClasses = JSON.parse(localClassesRaw);
-          fetchedClasses = [...fetchedClasses, ...localClasses];
-        }
-      } catch (localErr) {
-        console.error("Failed to parse local classes:", localErr);
-      }
-
-      let filteredClasses = fetchedClasses;
-      try {
-        const { data: subjectClasses, error: tsError } = await supabase
-          .from('teacher_subjects')
-          .select('class_id')
-          .eq('teacher_id', teacherId);
-
-        if (!tsError && subjectClasses && subjectClasses.length > 0) {
-          const classIds = subjectClasses.map((sc: any) => sc.class_id);
-          filteredClasses = fetchedClasses.filter((c: any) => c.is_local || classIds.includes(c.id));
-        } else if (!tsError && subjectClasses && subjectClasses.length === 0) {
-          filteredClasses = fetchedClasses.filter((c: any) => c.is_local);
-        }
-      } catch (tsErr) {
-        console.error("Failed to filter classes by teacher_subjects:", tsErr);
-      }
-
-      setClasses(filteredClasses);
+      setClasses(fetchedClasses);
 
       // If we have a pre-selected class, initialize its data
       if (preSelectedClassId) {
-        const cls = filteredClasses.find(c => c.id === preSelectedClassId);
+        const cls = fetchedClasses.find(c => c.id === preSelectedClassId);
         if (cls) {
           handleClassSelect(preSelectedClassId, cls.name);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching classes:', err);
+      showToast("Error loading classes: " + (err.message || err), "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleClassSelect = async (classId: string, className?: string) => {
-    if (!classId || classId === 'new') {
-      setForm(prev => ({ ...prev, class_id: classId, class_name: classId === 'new' ? '' : '', expected_students: '' }));
+    if (!classId) {
+      setForm(prev => ({ ...prev, class_id: '', class_name: '', expected_students: '' }));
       setStudents([]);
       return;
     }
@@ -253,7 +199,6 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       finalClassName = selectedClass?.name;
     }
 
-    // Always update the form state first so the UI reflects the selection
     setForm(prev => ({
       ...prev,
       class_id: classId,
@@ -261,11 +206,9 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     }));
 
     if (!finalClassName && classes.length === 0) {
-      // If classes are still loading, we'll wait for fetchClasses to handle the sync
       return;
     }
 
-    // Fetch students and class info
     try {
       setLoading(true);
       const selectedClass = classes.find(c => c.id === classId);
@@ -307,7 +250,6 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         const teacherStr = localStorage.getItem('azilearn_teacher');
         if (teacherStr) {
           const teacher = JSON.parse(teacherStr);
-          console.log("Selected class ID:", classId, "Teacher ID:", teacher.id);
           const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
             p_teacher_id: teacher.id,
             p_class_id: classId
@@ -318,7 +260,6 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
             showToast("Couldn't load students: " + rpcError.message, "error");
           } else if (rpcData && (rpcData.error || rpcData.success === false)) {
             const errMsg = rpcData.error || rpcData.message || "Unknown error";
-            console.error("RPC student response contains error:", errMsg);
             showToast("Couldn't load students: " + errMsg, "error");
           } else if (!rpcData) {
             showToast("Couldn't load students: Empty response from server", "error");
@@ -338,18 +279,10 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           }
         }
       } catch (rpcErr) {
-        console.warn("RPC fetch failed, using fallback:", rpcErr);
+        console.warn("RPC fetch failed:", rpcErr);
       }
 
-      // No direct fallback to avoid RLS restrictions
-
       setStudents(fetchedStudents);
-      
-      const studentNames = fetchedStudents.map(s => s.name).join(', ');
-      setForm(prev => ({
-        ...prev,
-        expected_students: studentNames
-      }));
     } catch (err) {
       console.error("Error in class select:", err);
       showToast("Error fetching student/class data", "error");
@@ -393,19 +326,6 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       showToast("Please fill in all assignment details (Title, Subject, Grade, Class and Date).", "error");
       return false;
     }
-    
-    // If it's a dynamic class (one-time), we strictly need students to track performance.
-    // If it's a linked class, we can use the class students later.
-    const isDynamic = !form.class_id || form.class_id === 'new';
-    if (isDynamic && !form.expected_students.trim()) {
-      showToast("For a one-time class, please provide at least one student name.", "error");
-      return false;
-    }
-    
-    if (!isDynamic && students.length === 0) {
-      showToast("Please add at least one student to this class first.", "error");
-      return false;
-    }
 
     for (const q of questions) {
       if (!q.text.trim()) {
@@ -427,12 +347,10 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
     const teacherData = localStorage.getItem('azilearn_teacher');
     let teacherId = '';
-    let parsedTeacher: any = null;
     
     if (teacherData) {
       try {
-        parsedTeacher = JSON.parse(teacherData);
-        teacherId = parsedTeacher.id;
+        teacherId = JSON.parse(teacherData).id;
       } catch (err) {}
     }
 
@@ -443,110 +361,34 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
     setLoading(true);
     try {
-      // 1. Self-healing check: verify teacher exists in DB
-      const { data: teacherCheck, error: checkErr } = await supabase
-        .from('teachers')
-        .select('id')
-        .eq('id', teacherId)
-        .maybeSingle();
+      const resolvedClassId = form.class_id ? form.class_id : null;
 
-      if (!teacherCheck || checkErr) {
-        console.warn("Teacher not found in DB during publish, performing self-healing insert.");
-        const tName = parsedTeacher?.name || 'AziLearn Teacher';
-        const tSchoolName = parsedTeacher?.school_name || 'AziLearn School';
-        const tSchoolId = parsedTeacher?.school_id || null;
-        const tPin = parsedTeacher?.pin || '1234';
+      const { data, error } = await supabase.rpc('teacher_create_assignment', {
+        p_teacher_id: teacherId,
+        p_title: form.title,
+        p_subject: form.subject,
+        p_grade: form.grade,
+        p_class_id: resolvedClassId,
+        p_class_name: form.class_name,
+        p_due_date: new Date(form.due_date).toISOString(),
+        p_questions: questions,
+        p_total_marks: 100,
+        p_passing_score: 50,
+        p_allow_late: false
+      });
 
-        const { error: insertTeacherErr } = await supabase
-          .from('teachers')
-          .insert({
-            id: teacherId,
-            name: tName,
-            school_name: tSchoolName,
-            school_id: tSchoolId,
-            pin: tPin
-          });
+      if (error) throw error;
 
-        if (insertTeacherErr) {
-          console.error("Self-healing teacher insert failed:", insertTeacherErr);
-        }
+      const response = data || {};
+      if (response.success === false) {
+        throw new Error(response.message || "Failed to publish assignment");
       }
 
-      // 2. Self-healing check: verify class exists if one is specified
-      let resolvedClassId = form.class_id && form.class_id !== 'new' ? form.class_id : null;
-      if (resolvedClassId) {
-        const { data: classCheck } = await supabase
-          .from('classes')
-          .select('id')
-          .eq('id', resolvedClassId)
-          .maybeSingle();
-
-        if (!classCheck) {
-          console.warn(`Class ${resolvedClassId} not found in DB during publish, falling back to class_id = null.`);
-          resolvedClassId = null;
-        }
-      }
-
-      const isDynamic = !resolvedClassId;
-      const studentList = isDynamic 
-        ? form.expected_students.split(',').map(s => s.trim()).filter(s => s !== '')
-        : students.map(s => s.name);
-
-      // Generate a share code for teachers too
-      const shareCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-      let insertResult;
-      const primaryPayload = {
-        teacher_id: teacherId,
-        class_id: resolvedClassId,
-        title: form.title,
-        subject: form.subject,
-        grade: form.grade,
-        class_name: form.class_name,
-        due_date: new Date(form.due_date).toISOString(),
-        questions: questions,
-        expected_students: studentList,
-        share_code: shareCode,
-        is_broadcast: false,
-        school_name: parsedTeacher?.school_name || null
-      };
-
-      const fallbackPayload = {
-        teacher_id: teacherId,
-        class_id: resolvedClassId,
-        title: form.title,
-        subject: form.subject,
-        grade: form.grade,
-        class_name: form.class_name,
-        due_date: new Date(form.due_date).toISOString(),
-        questions: questions,
-        expected_students: studentList,
-        share_code: shareCode
-      };
-
-      const { data: mainData, error: mainError } = await supabase
-        .from('assignments')
-        .insert([primaryPayload])
-        .select()
-        .single();
-
-      if (mainError) {
-        console.warn("Primary insert failed, trying fallback without custom columns:", mainError.message);
-        const { data: altData, error: altError } = await supabase
-          .from('assignments')
-          .insert([fallbackPayload])
-          .select()
-          .single();
-
-        if (altError) throw altError;
-        insertResult = altData;
-      } else {
-        insertResult = mainData;
-      }
-
-      if (insertResult) {
-        setSuccess(insertResult.share_code || shareCode);
+      if (response.success && response.share_code) {
+        setSuccess(response.share_code);
         showToast("Assignment published successfully!", "success");
+      } else {
+        throw new Error("Invalid response from server");
       }
     } catch (err: any) {
       console.error('Publish error:', err);
@@ -749,33 +591,10 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                     {classes.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
-                    <option value="new">+ Dynamic Class (One-time)</option>
                   </select>
                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted/40 pointer-events-none" size={18} />
                 </div>
               </div>
-
-              {form.class_id === 'new' && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="space-y-4"
-                >
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">Class Name</label>
-                    <div className="relative">
-                      <Layout className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
-                      <input 
-                        type="text"
-                        placeholder="e.g. Grade 7B"
-                        className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-6 outline-none focus:border-brand-accent/50 transition-all font-bold"
-                        value={form.class_name}
-                        onChange={e => setForm({...form, class_name: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </motion.div>
-              )}
 
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">Due Date</label>
@@ -792,10 +611,10 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">
-                  {form.class_id && form.class_id !== 'new' ? 'Linked Class Roll Call' : 'Student Roll Call'}
+                  Linked Class Roll Call
                 </label>
                 
-                {form.class_id && form.class_id !== 'new' ? (
+                {form.class_id ? (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 mb-2 p-2 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
                       <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
@@ -830,15 +649,9 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                     </div>
                   </div>
                 ) : (
-                  <div className="relative">
-                    <textarea 
-                      placeholder="e.g. John Kamau, 0001, Sarah Wambui, 0002"
-                      rows={3}
-                      className="w-full bg-brand-bg border border-brand-border rounded-2xl p-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-sm resize-none"
-                      value={form.expected_students}
-                      onChange={e => setForm({...form, expected_students: e.target.value})}
-                    />
-                    <p className="text-[10px] text-brand-muted/60 mt-1 ml-1 italic">Enter Name, Index pairs (comma separated) to track results.</p>
+                  <div className="p-4 bg-brand-bg/50 border border-brand-border border-dashed rounded-2xl text-center">
+                    <p className="text-xs text-brand-muted font-bold">Select a Class first</p>
+                    <p className="text-[10px] text-brand-muted/70 mt-1">Roll call is automatically synchronized.</p>
                   </div>
                 )}
               </div>
