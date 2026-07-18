@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from "../lib/supabase";
+import { useStudent } from "../contexts/StudentContext";
 
 const NAVY = "#0A1628";
 const ORANGE = "#F97316";
@@ -166,7 +167,18 @@ interface TakeAssignmentProps {
 }
 
 function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }: TakeAssignmentProps) {
-  const [studentName, setStudentName] = useState("");
+  const { currentStudent } = useStudent();
+  const [studentName, setStudentName] = useState(() => {
+    if (currentStudent?.name) return currentStudent.name;
+    try {
+      const studentStr = localStorage.getItem('azilearn_student');
+      if (studentStr) {
+        const parsed = JSON.parse(studentStr);
+        return parsed.name || "";
+      }
+    } catch {}
+    return "";
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -192,13 +204,33 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
       return id;
     };
 
-    setLoading(true);
-    const { data, error: rpcError } = await supabase.rpc("submit_school_assignment", {
+    const loggedInStudentId = (() => {
+      if (currentStudent?.student_id) return currentStudent.student_id;
+      try {
+        const studentStr = localStorage.getItem('azilearn_student');
+        if (studentStr) {
+          const parsed = JSON.parse(studentStr);
+          return parsed.id || null;
+        }
+      } catch {}
+      return null;
+    })();
+
+    const isRegisteredStudent = loggedInStudentId && loggedInStudentId.length === 36;
+
+    const rpcParams: any = {
       p_assignment_id: assignment.id,
       p_student_name: studentName.trim(),
       p_answers: answers,
       p_teacher_id: cleanTeacherId(assignment.teacher_id),
-    });
+    };
+
+    if (isRegisteredStudent) {
+      rpcParams.p_student_id = loggedInStudentId;
+    }
+
+    setLoading(true);
+    const { data, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParams);
     setLoading(false);
 
     if (rpcError) {

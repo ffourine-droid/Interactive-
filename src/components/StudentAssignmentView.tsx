@@ -308,13 +308,22 @@ export const StudentAssignmentView: React.FC<{
           return id;
         };
 
-        // Submit regular (non-broadcast) assignments via RPC to ensure teacher_id resolution and status alignment
-        const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', {
+        const activeStudentId = currentStudent?.student_id || studentId;
+        const isRegisteredStudent = activeStudentId && activeStudentId.length === 36;
+
+        const rpcParams: any = {
           p_assignment_id: assignment.id,
           p_student_name: studentName.trim(),
           p_answers: finalAnswers,
           p_teacher_id: cleanTeacherId(assignment.teacher_id),
-        });
+        };
+
+        if (isRegisteredStudent) {
+          rpcParams.p_student_id = activeStudentId;
+        }
+
+        // Submit regular (non-broadcast) assignments via RPC to ensure teacher_id resolution and status alignment
+        const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', rpcParams);
 
         if (submitError) throw submitError;
 

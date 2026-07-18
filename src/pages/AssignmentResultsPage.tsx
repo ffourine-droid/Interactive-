@@ -27,6 +27,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
   const [score, setScore] = useState<number | ''>('');
   const [saving, setSaving] = useState(false);
   const [savingReply, setSavingReply] = useState(false);
+  const [questionGrades, setQuestionGrades] = useState<Record<string, { score: number | '', comment: string }>>({});
 
   useEffect(() => {
     fetchData();
@@ -55,8 +56,26 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       setParentFeedback(selectedSubmission.parent_feedback || '');
       setTeacherReply(selectedSubmission.teacher_reply || '');
       setScore((selectedSubmission.score === null || isNaN(selectedSubmission.score)) ? '' : selectedSubmission.score);
+
+      const initialGrades: Record<string, { score: number | '', comment: string }> = {};
+      if (assignment && assignment.questions) {
+        assignment.questions.forEach((q: any) => {
+          if (q.type !== 'mcq') {
+            const gradingEntry = selectedSubmission.grading?.[q.id];
+            const existingScore = (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) 
+              ? gradingEntry.marks_awarded 
+              : '';
+            const existingComment = (gradingEntry && gradingEntry.comment) ? gradingEntry.comment : '';
+            initialGrades[q.id] = {
+              score: existingScore,
+              comment: existingComment
+            };
+          }
+        });
+      }
+      setQuestionGrades(initialGrades);
     }
-  }, [selectedSubmission]);
+  }, [selectedSubmission, assignment]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -120,15 +139,43 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
     if (!selectedSubmission) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('assignment_submissions')
-        .update({ 
-          teacher_comment: feedback,
-          score: score === '' ? null : Number(score),
-          status: 'graded',
-          teacher_reply: teacherReply
-        })
-        .eq('id', selectedSubmission.id);
+      const teacherData = localStorage.getItem('azilearn_teacher');
+      if (!teacherData) throw new Error("No teacher profile found");
+      const tData = JSON.parse(teacherData);
+      const teacherId = tData.id;
+
+      // 1. Call teacher_grade_question for each short_answer/photo question that has an entered score
+      const gradingPromises = [];
+      for (const q of assignment.questions) {
+        if (q.type !== 'mcq') {
+          const qg = questionGrades[q.id];
+          if (qg && qg.score !== '') {
+            gradingPromises.push(
+              supabase.rpc('teacher_grade_question', {
+                p_teacher_id: teacherId,
+                p_submission_id: selectedSubmission.id,
+                p_question_id: q.id.toString(),
+                p_marks_awarded: Number(qg.score),
+                p_comment: qg.comment || null
+              })
+            );
+          }
+        }
+      }
+
+      if (gradingPromises.length > 0) {
+        const results = await Promise.all(gradingPromises);
+        const failed = results.find(r => r.error);
+        if (failed) throw failed.error;
+      }
+
+      // 2. Call teacher_grade_submission with the overall final score and comment
+      const { error } = await supabase.rpc('teacher_grade_submission', {
+        p_teacher_id: teacherId,
+        p_submission_id: selectedSubmission.id,
+        p_score: runningTotal,
+        p_comment: feedback || null
+      });
 
       if (error) throw error;
       showToast('Marks and remarks updated!', 'success');
@@ -161,6 +208,30 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       setSavingReply(false);
     }
   };
+
+  const maxTotalMarks = assignment?.questions?.reduce((sum: number, q: any) => sum + (q.max_marks || q.marks || q.points || 10), 0) || 0;
+
+  const runningTotal = assignment?.questions?.reduce((sum: number, q: any) => {
+    if (q.type === 'mcq') {
+      const gradingEntry = selectedSubmission?.grading?.[q.id];
+      if (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) {
+        return sum + Number(gradingEntry.marks_awarded);
+      }
+      const answer = selectedSubmission?.answers?.[q.id];
+      const isCorrect = answer !== undefined && parseInt(answer) === q.correct_option;
+      return sum + (isCorrect ? (q.max_marks || q.marks || q.points || 10) : 0);
+    } else {
+      const scoreState = questionGrades[q.id]?.score;
+      const scoreNum = (scoreState !== undefined && scoreState !== '') ? Number(scoreState) : 0;
+      return sum + scoreNum;
+    }
+  }, 0) || 0;
+
+  const hasUngradedQuestions = assignment?.questions?.some((q: any) => {
+    if (q.type === 'mcq') return false;
+    const scoreState = questionGrades[q.id]?.score;
+    return scoreState === undefined || scoreState === '';
+  });
 
   const submittedCount = submissions.length;
   const pendingStudents = classStudents.filter(s => !submissions.some(sub => sub.student_name.toLowerCase() === s.name.toLowerCase()));
@@ -343,13 +414,8 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2 bg-brand-bg px-3 py-1.5 rounded-xl border border-brand-accent/10">
                     <span className="text-[10px] font-black text-brand-muted uppercase">Score:</span>
-                    <input 
-                      type="number"
-                      value={score}
-                      onChange={e => setScore(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-12 bg-transparent border-none text-center font-black text-sm text-brand-accent outline-none"
-                    />
-                    <span className="text-[10px] font-black text-brand-muted uppercase">%</span>
+                    <span className="font-black text-sm text-brand-accent">{runningTotal}</span>
+                    <span className="text-[10px] font-black text-brand-muted uppercase">/ {maxTotalMarks} Pts</span>
                   </div>
                   <button 
                     onClick={saveFeedback}
@@ -425,57 +491,171 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                     const qAnswer = submissionAnswers[q.id];
                     return (
                       <div key={idx} className="bg-white dark:bg-brand-card p-6 rounded-3xl border border-brand-accent/5 space-y-4 shadow-sm">
-                        <div className="flex items-start gap-4">
-                          <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0 mt-1">
-                            {idx + 1}
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-bold text-brand-text mb-4 text-lg">{q.text}</p>
-                            <div className="space-y-4">
-                              <div>
-                                <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest mb-2">Student's Answer</p>
-                                {q.type === 'photo' ? (
-                                  <div className="relative rounded-2xl overflow-hidden border-2 border-brand-accent/5 bg-brand-bg">
-                                    {qAnswer ? (
-                                      <img 
-                                        src={qAnswer} 
-                                        alt="Student work" 
-                                        className="w-full h-auto max-h-[400px] object-contain"
-                                        referrerPolicy="no-referrer"
-                                      />
-                                    ) : (
-                                      <p className="p-4 text-xs font-semibold text-brand-muted">No photo uploaded</p>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="p-4 rounded-2xl bg-brand-bg font-bold text-sm border-2 border-brand-accent/5">
-                                    {q.type === 'mcq' 
-                                      ? q.options?.[parseInt(qAnswer)] || 'No choice selected'
-                                      : qAnswer || 'N/A'
-                                    }
-                                  </div>
-                                )}
-                              </div>
-                              
-                              {q.type === 'mcq' && (
-                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-xl ${
-                                      parseInt(qAnswer) === q.correct_option ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
-                                    }`}>
-                                      {parseInt(qAnswer) === q.correct_option ? <Check size={20}/> : <XCircle size={20}/>}
-                                    </div>
-                                    <p className="text-xs font-bold text-brand-muted uppercase tracking-widest">
-                                      Correct Option: {q.options?.[q.correct_option] || 'Unknown'}
-                                    </p>
-                                 </div>
-                              )}
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-4">
+                            <div className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0 mt-1">
+                              {idx + 1}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-bold text-brand-text mb-2 text-lg">{q.text}</p>
                             </div>
                           </div>
+                          <span className="text-xs font-black text-brand-muted shrink-0 bg-brand-bg px-2.5 py-1 rounded-lg border border-brand-border/30 font-mono">
+                            {q.max_marks || q.marks || q.points || 10} Pts
+                          </span>
+                        </div>
+                        <div className="pl-12">
+                          <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest mb-2">Student's Answer</p>
+                          {q.type === 'photo' ? (
+                            <div className="relative rounded-2xl overflow-hidden border border-brand-border bg-brand-bg w-full max-w-sm">
+                              {qAnswer ? (
+                                <>
+                                  <img 
+                                    src={qAnswer} 
+                                    alt="Student work" 
+                                    className="w-full h-auto max-h-[400px] object-contain cursor-zoom-in"
+                                    onClick={() => window.open(qAnswer, '_blank')}
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  <p className="p-2 text-[10px] italic text-brand-muted border-t border-brand-border/50 bg-brand-surface text-center">Click image to expand</p>
+                                </>
+                              ) : (
+                                <p className="p-4 text-xs font-semibold text-brand-muted">No photo uploaded</p>
+                              )}
+                            </div>
+                          ) : q.type === 'mcq' ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(qAnswer) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
+                                  {q.options?.[parseInt(qAnswer)] || 'No choice selected'}
+                                </div>
+                                {parseInt(qAnswer) === q.correct_option ? (
+                                  <CheckCircle2 size={16} className="text-emerald-500" />
+                                ) : (
+                                  <XCircle size={16} className="text-red-500" />
+                                )}
+                              </div>
+                              <div className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-1">
+                                Auto-Graded: <span className="text-brand-accent">{selectedSubmission.grading?.[q.id]?.marks_awarded ?? (parseInt(qAnswer) === q.correct_option ? (q.max_marks || q.marks || q.points || 10) : 0)}</span> / {q.max_marks || q.marks || q.points || 10} marks
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="font-bold text-brand-text italic bg-brand-bg p-4 rounded-xl border border-brand-border/50">{qAnswer || 'No answer provided'}</p>
+                          )}
+
+                          {/* Grading controls for short_answer and photo questions */}
+                          {q.type !== 'mcq' && (
+                            <div className="mt-6 pt-4 border-t border-brand-border/30 space-y-4">
+                              <div className="flex flex-wrap items-center justify-between gap-4">
+                                {/* Quick Toggle Buttons */}
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setQuestionGrades(prev => ({
+                                        ...prev,
+                                        [q.id]: {
+                                          score: q.max_marks || q.marks || q.points || 10,
+                                          comment: prev[q.id]?.comment || ''
+                                        }
+                                      }));
+                                    }}
+                                    className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-all ${
+                                      Number(questionGrades[q.id]?.score) === (q.max_marks || q.marks || q.points || 10)
+                                        ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/15'
+                                        : 'bg-brand-surface border border-brand-border hover:bg-brand-bg text-brand-text'
+                                    }`}
+                                  >
+                                    <CheckCircle2 size={12} />
+                                    Correct
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setQuestionGrades(prev => ({
+                                        ...prev,
+                                        [q.id]: {
+                                          score: 0,
+                                          comment: prev[q.id]?.comment || ''
+                                        }
+                                      }));
+                                    }}
+                                    className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-all ${
+                                      questionGrades[q.id]?.score === 0
+                                        ? 'bg-red-500 text-white shadow-md shadow-red-500/15'
+                                        : 'bg-brand-surface border border-brand-border hover:bg-brand-bg text-brand-text'
+                                    }`}
+                                  >
+                                    <XCircle size={12} />
+                                    Incorrect
+                                  </button>
+                                </div>
+
+                                {/* Numeric Score Input */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Score:</span>
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max={q.max_marks || q.marks || q.points || 10}
+                                      value={questionGrades[q.id]?.score ?? ''}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        const maxVal = q.max_marks || q.marks || q.points || 10;
+                                        setQuestionGrades(prev => ({
+                                          ...prev,
+                                          [q.id]: {
+                                            score: val === '' ? '' : Math.min(Math.max(0, Number(val)), maxVal),
+                                            comment: prev[q.id]?.comment || ''
+                                          }
+                                        }));
+                                      }}
+                                      className="w-16 text-center bg-brand-surface border border-brand-accent/20 rounded-xl py-1.5 px-2 font-black text-brand-accent outline-none focus:ring-2 focus:ring-brand-accent/20 transition-all text-sm"
+                                      placeholder="--"
+                                    />
+                                    <span className="text-xs font-bold text-brand-muted">/ {q.max_marks || q.marks || q.points || 10}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Question Feedback Comment */}
+                              <div className="space-y-1">
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted">
+                                  Question Feedback (Optional)
+                                </label>
+                                <textarea
+                                  value={questionGrades[q.id]?.comment || ''}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setQuestionGrades(prev => ({
+                                      ...prev,
+                                      [q.id]: {
+                                        score: prev[q.id]?.score ?? '',
+                                        comment: val
+                                      }
+                                    }));
+                                  }}
+                                  placeholder="Add optional notes or correction comments for this question..."
+                                  className="w-full bg-brand-surface border border-brand-border/50 rounded-xl p-3 text-xs font-semibold text-brand-text outline-none focus:border-brand-accent transition-all min-h-[50px] resize-none"
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
                   })}
                 </div>
+
+                {hasUngradedQuestions && (
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/25 rounded-2xl flex items-center gap-3 text-amber-600 my-4">
+                    <Clock size={18} className="shrink-0 animate-pulse" />
+                    <div className="text-xs font-bold leading-normal">
+                      Some non-MCQ questions are still unscored. You can still finalize, and the overall score will only include completed marks.
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>

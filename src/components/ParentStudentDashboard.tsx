@@ -801,7 +801,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${submission.score !== null ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-600' : 'bg-brand-accent/5 border-brand-accent/10 text-brand-accent'}`}>
                                 {submission.score !== null ? <CheckCircle2 size={14} /> : <Hourglass size={14} className="animate-pulse" />}
                                 <span className="text-[10px] font-black uppercase tracking-widest">
-                                  {submission.score !== null ? `Submitted • ${submission.score}%` : 'Awaiting Grade'}
+                                  {submission.score !== null ? `Submitted • ${submission.score}%` : 'Submitted • Awaiting Grade'}
                                 </span>
                               </div>
                               <button 
@@ -817,6 +817,65 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {(submission.score === null || submission.status === 'pending') && submission.answers && Object.keys(submission.answers).length > 0 && (
+                                <div className="p-4 bg-brand-bg/40 border border-brand-border/40 rounded-2xl md:col-span-2 space-y-3">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <FileText size={14} className="text-brand-accent animate-pulse" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Submitted Answers Preview</span>
+                                  </div>
+                                  <div className="space-y-2.5">
+                                    {(() => {
+                                      const answersEntries = Object.entries(submission.answers);
+                                      if (assignment.questions && assignment.questions.length > 0) {
+                                        return assignment.questions.map((q: any, qIdx: number) => {
+                                          const qAnswer = submission.answers[q.id] !== undefined
+                                            ? submission.answers[q.id]
+                                            : (submission.answers[qIdx] !== undefined ? submission.answers[qIdx] : submission.answers[String(qIdx)]);
+                                          
+                                          if (qAnswer === undefined || qAnswer === null || qAnswer === '') return null;
+
+                                          let displayAnswer = "";
+                                          if (q.type === 'mcq') {
+                                            const ansIdx = parseInt(qAnswer);
+                                            displayAnswer = q.options?.[ansIdx] || qAnswer;
+                                          } else {
+                                            displayAnswer = qAnswer;
+                                          }
+
+                                          return (
+                                            <div key={q.id || qIdx} className="bg-brand-surface p-3 rounded-xl border border-brand-border/20 flex flex-col gap-1">
+                                              <div className="flex items-start gap-2">
+                                                <span className="text-[9px] font-black text-brand-accent bg-brand-accent/5 px-1.5 py-0.5 rounded">{qIdx + 1}</span>
+                                                <p className="text-xs font-bold text-brand-text leading-snug">{q.text}</p>
+                                              </div>
+                                              <div className="pl-6">
+                                                {q.type === 'photo' ? (
+                                                  <img 
+                                                    src={qAnswer} 
+                                                    alt="Submitted work" 
+                                                    className="rounded-lg border border-brand-border max-h-32 object-cover"
+                                                    referrerPolicy="no-referrer"
+                                                  />
+                                                ) : (
+                                                  <p className="text-xs font-medium text-brand-muted italic">"{displayAnswer}"</p>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        }).filter(Boolean);
+                                      }
+
+                                      return answersEntries.map(([key, val], idx) => (
+                                        <div key={key} className="bg-brand-surface p-3 rounded-xl border border-brand-border/20">
+                                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Question ID/Index: {key}</p>
+                                          <p className="text-xs font-bold text-brand-text italic">"{String(val)}"</p>
+                                        </div>
+                                      ));
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+
                               {submission.teacher_comment && (
                                 <div className="p-4 bg-brand-accent/5 border border-brand-accent/10 rounded-2xl">
                                   <div className="flex items-center gap-2 mb-2">
@@ -1211,14 +1270,19 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                       : (submissionAnswers[idx] !== undefined ? submissionAnswers[idx] : submissionAnswers[String(idx)]);
                     return (
                       <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
-                        <div className="flex items-start gap-4 mb-4">
-                          <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
-                          <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                          <div className="flex items-start gap-4">
+                            <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
+                            <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
+                          </div>
+                          <span className="text-xs font-black text-brand-muted shrink-0 bg-brand-bg px-2.5 py-1 rounded-lg border border-brand-border/30 font-mono">
+                            {q.max_marks || q.marks || q.points || 10} Pts
+                          </span>
                         </div>
                         <div className="pl-10">
                           {isSubmissionSubmitted ? (
                             <>
-                              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Submitted Answer</p>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Submitted Answer Detail</p>
                               {q.type === 'mcq' ? (
                                 <div className="flex items-center gap-2">
                                    <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(qAnswer) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
@@ -1246,6 +1310,46 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                               ) : (
                                 <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{qAnswer || 'No answer provided'}</p>
                               )}
+
+                              {(() => {
+                                const gradingEntry = selectedSubmission?.submission?.grading?.[q.id];
+                                const isMcq = q.type === 'mcq';
+                                
+                                let marksAwarded: number | null = null;
+                                if (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) {
+                                  marksAwarded = Number(gradingEntry.marks_awarded);
+                                } else if (isMcq) {
+                                  const isCorrect = parseInt(qAnswer) === q.correct_option;
+                                  marksAwarded = isCorrect ? (q.max_marks || q.marks || q.points || 10) : 0;
+                                }
+                                const comment = gradingEntry?.comment || '';
+
+                                return (
+                                  <div className="mt-4 pt-3 border-t border-brand-border/30 space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      {marksAwarded !== null ? (
+                                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest ${
+                                          marksAwarded > 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'
+                                        }`}>
+                                          <Star size={12} />
+                                          Score: {marksAwarded} / {q.max_marks || q.marks || q.points || 10} Pts
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest animate-pulse">
+                                          <Hourglass size={12} />
+                                          Awaiting Grading
+                                        </div>
+                                      )}
+                                    </div>
+                                    {comment && (
+                                      <div className="p-3 bg-brand-surface rounded-xl border border-brand-border/50 mt-2">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Teacher's Question Feedback</p>
+                                        <p className="text-xs font-bold text-brand-text italic">"{comment}"</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </>
                           ) : (
                             <>
