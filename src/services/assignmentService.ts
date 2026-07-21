@@ -84,26 +84,24 @@ export const assignmentService = {
     if (error) throw error;
     if (!data) throw new Error("Assignment not found.");
 
-    // Look for student in class using RPC
+    // Always ensure the student is registered/resolved via student_self_register to get a valid UUID
     let studentId = studentName;
-    if (data.class_id) {
-      if (typeof window !== 'undefined') {
-        let deviceId = localStorage.getItem('azilearn_device_id');
-        if (!deviceId) {
-          deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-          localStorage.setItem('azilearn_device_id', deviceId);
-        }
+    if (typeof window !== 'undefined') {
+      let deviceId = localStorage.getItem('azilearn_device_id');
+      if (!deviceId) {
+        deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('azilearn_device_id', deviceId);
+      }
 
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
-          p_name: studentName.trim(),
-          p_grade: data.grade || 'Grade 7',
-          p_device_id: deviceId,
-          p_class_id: data.class_id
-        });
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
+        p_name: studentName.trim(),
+        p_grade: data.grade || 'Grade 7',
+        p_device_id: deviceId,
+        p_class_id: data.class_id || null
+      });
 
-        if (!rpcErr && rpcRes) {
-          studentId = rpcRes.id || rpcRes.student_id || studentId;
-        }
+      if (!rpcErr && rpcRes) {
+        studentId = rpcRes.id || rpcRes.student_id || studentId;
       }
     }
 

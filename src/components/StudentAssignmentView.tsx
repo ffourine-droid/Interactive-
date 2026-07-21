@@ -279,8 +279,32 @@ export const StudentAssignmentView: React.FC<{
 
       // 3. Insert submission or submit via RPC
       if (assignment.is_broadcast) {
-        const activeStudentId = currentStudent?.student_id || studentId;
-        if (!activeStudentId) {
+        let activeStudentId = currentStudent?.student_id || studentId;
+        const isUuid = (id: any) => id && String(id).length === 36 && String(id).includes('-');
+
+        if (!isUuid(activeStudentId)) {
+          // Self-register to get a valid UUID
+          try {
+            let deviceId = localStorage.getItem('azilearn_device_id');
+            if (!deviceId) {
+              deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
+              localStorage.setItem('azilearn_device_id', deviceId);
+            }
+            const { data: rpcRes } = await supabase.rpc('student_self_register', {
+              p_name: studentName.trim(),
+              p_grade: assignment.grade || 'Grade 7',
+              p_device_id: deviceId,
+              p_class_id: null
+            });
+            if (rpcRes && (rpcRes.id || rpcRes.student_id)) {
+              activeStudentId = rpcRes.id || rpcRes.student_id;
+            }
+          } catch (err) {
+            console.warn("Failed to defensively register student on submit:", err);
+          }
+        }
+
+        if (!isUuid(activeStudentId)) {
           throw new Error("Student identification is required to submit a school-wide assignment.");
         }
         

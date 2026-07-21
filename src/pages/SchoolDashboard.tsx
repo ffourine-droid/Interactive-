@@ -114,96 +114,54 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
       // 1. Fetch teachers and nested classes
       let teachersData: any[] = [];
       try {
+        let fetchedTeachers: any[] = [];
         if (schoolId) {
+          // Try RPC first for school dashboard
+          const { data: rpcData, error: rpcError } = await supabase.rpc("school_get_teachers", {
+            p_school_id: schoolId,
+          });
+          if (!rpcError && rpcData?.success && rpcData?.teachers) {
+            fetchedTeachers = rpcData.teachers;
+          } else {
+            const { data, error } = await supabase
+              .from('teachers')
+              .select('id, name, email')
+              .eq('school_id', schoolId);
+            if (!error && data) {
+              fetchedTeachers = data;
+            }
+          }
+        }
+        
+        if (fetchedTeachers.length === 0) {
           const { data, error } = await supabase
             .from('teachers')
-            .select('id, name, email, classes(id, name, grade)')
-            .eq('school_id', schoolId);
-
-          if (!error && data) {
-            teachersData = data;
-          } else {
-            console.warn("First teachers query failed or returned empty, falling back:", error?.message);
-            const { data: fallbackData, error: fallbackError } = await supabase
-              .from('teachers')
-              .select('id, name, school_name')
-              .ilike('school_name', schoolName.trim());
-
-            if (!fallbackError && fallbackData) {
-              const teacherIds = fallbackData.map(t => t.id);
-              let clsData: any[] = [];
-              let tsData: any[] = [];
-              if (teacherIds.length > 0) {
-                const { data: mappingData, error: mappingError } = await supabase
-                  .from('teacher_subjects')
-                  .select('class_id, teacher_id')
-                  .in('teacher_id', teacherIds);
-                if (!mappingError && mappingData) {
-                  tsData = mappingData;
-                  const classIds = mappingData.map((x: any) => x.class_id).filter(Boolean);
-                  if (classIds.length > 0) {
-                    const { data: classesResult, error: clsError } = await supabase
-                      .from('classes')
-                      .select('id, name, grade')
-                      .in('id', classIds);
-                    if (!clsError && classesResult) {
-                      clsData = classesResult;
-                    }
-                  }
-                }
-              }
-              teachersData = fallbackData.map(t => {
-                const teacherClassIds = tsData
-                  .filter((x: any) => x.teacher_id === t.id)
-                  .map((x: any) => x.class_id);
-                const teacherClasses = clsData.filter((c: any) => teacherClassIds.includes(c.id));
-                return {
-                  ...t,
-                  classes: teacherClasses
-                };
-              });
-            }
-          }
-        } else {
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .from('teachers')
-            .select('id, name, school_name')
+            .select('id, name, email, school_name')
             .ilike('school_name', schoolName.trim());
-
-          if (!fallbackError && fallbackData) {
-            const teacherIds = fallbackData.map(t => t.id);
-            let clsData: any[] = [];
-            let tsData: any[] = [];
-            if (teacherIds.length > 0) {
-              const { data: mappingData, error: mappingError } = await supabase
-                .from('teacher_subjects')
-                .select('class_id, teacher_id')
-                .in('teacher_id', teacherIds);
-              if (!mappingError && mappingData) {
-                tsData = mappingData;
-                const classIds = mappingData.map((x: any) => x.class_id).filter(Boolean);
-                if (classIds.length > 0) {
-                  const { data: classesResult, error: clsError } = await supabase
-                    .from('classes')
-                    .select('id, name, grade')
-                    .in('id', classIds);
-                  if (!clsError && classesResult) {
-                    clsData = classesResult;
-                  }
-                }
-              }
-            }
-            teachersData = fallbackData.map(t => {
-              const teacherClassIds = tsData
-                .filter((x: any) => x.teacher_id === t.id)
-                .map((x: any) => x.class_id);
-              const teacherClasses = clsData.filter((c: any) => teacherClassIds.includes(c.id));
-              return {
-                ...t,
-                classes: teacherClasses
-              };
-            });
+          if (!error && data) {
+            fetchedTeachers = data;
           }
+        }
+
+        if (fetchedTeachers.length > 0) {
+          teachersData = await Promise.all(
+            fetchedTeachers.map(async (t) => {
+              try {
+                const { data, error } = await supabase.rpc('teacher_get_classes', {
+                  p_teacher_id: t.id
+                });
+                if (!error && data && data.success && data.classes) {
+                  return {
+                    ...t,
+                    classes: data.classes
+                  };
+                }
+              } catch (e) {
+                console.error("Error fetching classes for teacher:", t.id, e);
+              }
+              return { ...t, classes: [] };
+            })
+          );
         }
       } catch (teacherErr) {
         console.error("Error fetching teachers/classes:", teacherErr);
@@ -461,11 +419,43 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
         console.warn("Invalid due date format:", broadcastDueDate);
       }
 
-      // Helper to find teacher for a grade
-      const findTeacherForGrade = (g: string) => {
-        const matchedTeacher = teachers.find(t => 
-          t.classes && Array.isArray(t.classes) && t.classes.some((cls: any) => cls.grade === g)
+      // Helper to find teacher for a grade with extremely robust matching
+      const findTeacherForGrade = (g: string, subject?: string) => {
+        if (!g) return null;
+        const cleanG = g.trim().toLowerCase();
+        const digitsG = cleanG.match(/\d+/)?.[0];
+        const cleanS = subject ? subject.trim().toLowerCase() : null;
+
+        // Try to match both grade and subject first
+        let matchedTeacher = teachers.find(t => 
+          t.classes && Array.isArray(t.classes) && t.classes.some((cls: any) => {
+            if (!cls || !cls.grade) return false;
+            const cleanClsGrade = cls.grade.trim().toLowerCase();
+            const digitsCls = cleanClsGrade.match(/\d+/)?.[0];
+            const isGradeMatch = cleanClsGrade === cleanG || (digitsG && digitsCls && digitsG === digitsCls);
+            if (!isGradeMatch) return false;
+
+            if (cleanS) {
+              const hasSubj = cls.my_subjects && Array.isArray(cls.my_subjects) && cls.my_subjects.some((sub: any) => sub.trim().toLowerCase() === cleanS);
+              const hasSubjProp = cls.subject && typeof cls.subject === 'string' && cls.subject.trim().toLowerCase() === cleanS;
+              return hasSubj || hasSubjProp;
+            }
+            return true;
+          })
         );
+
+        // Fallback to grade-only match if no subject match was found
+        if (!matchedTeacher) {
+          matchedTeacher = teachers.find(t => 
+            t.classes && Array.isArray(t.classes) && t.classes.some((cls: any) => {
+              if (!cls || !cls.grade) return false;
+              const cleanClsGrade = cls.grade.trim().toLowerCase();
+              const digitsCls = cleanClsGrade.match(/\d+/)?.[0];
+              return cleanClsGrade === cleanG || (digitsG && digitsCls && digitsG === digitsCls);
+            })
+          );
+        }
+
         return matchedTeacher ? matchedTeacher.name : null;
       };
 
@@ -485,7 +475,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
       if (!error && data && data.success) {
         // Success using the RPC!
         const publishedList = gradeBlocks.map(block => {
-          const teacherName = findTeacherForGrade(block.grade);
+          const teacherName = findTeacherForGrade(block.grade, block.subject);
           return {
             grade: block.grade,
             subject: block.subject,
@@ -616,7 +606,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
             if (minimalError) throw minimalError;
           }
         }
-        const teacherName = findTeacherForGrade(block.grade);
+        const teacherName = findTeacherForGrade(block.grade, block.subject);
         publishedList.push({
           grade: block.grade,
           subject: block.subject,

@@ -230,15 +230,61 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
     }
 
     setLoading(true);
-    const { data, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParams);
-    setLoading(false);
+    let response: any = null;
 
-    if (rpcError) {
-      setError("Something went wrong submitting. Try again.");
-      return;
+    if (assignment.is_broadcast) {
+      let activeStudentId = loggedInStudentId;
+      if (!activeStudentId || activeStudentId.length !== 36) {
+        try {
+          let deviceId = localStorage.getItem('azilearn_device_id');
+          if (!deviceId) {
+            deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
+            localStorage.setItem('azilearn_device_id', deviceId);
+          }
+          const { data: rpcRes } = await supabase.rpc('student_self_register', {
+            p_name: studentName.trim(),
+            p_grade: assignment.grade || 'Grade 7',
+            p_device_id: deviceId,
+            p_class_id: null
+          });
+          if (rpcRes) {
+            activeStudentId = rpcRes.id || rpcRes.student_id;
+          }
+        } catch (err) {
+          console.warn("Failed to register on submit:", err);
+        }
+      }
+
+      if (!activeStudentId || activeStudentId.length !== 36) {
+        setLoading(false);
+        setError("Student identification is required to submit a school-wide assignment.");
+        return;
+      }
+
+      const { data: bRes, error: rpcError } = await supabase.rpc("submit_broadcast_assignment", {
+        p_student_id: activeStudentId,
+        p_assignment_id: assignment.id,
+        p_answers: answers
+      });
+
+      if (rpcError) {
+        setLoading(false);
+        setError("Something went wrong submitting broadcast. Try again.");
+        return;
+      }
+      response = bRes;
+    } else {
+      const { data: sRes, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParams);
+      if (rpcError) {
+        setLoading(false);
+        setError("Something went wrong submitting. Try again.");
+        return;
+      }
+      response = sRes;
     }
+
+    setLoading(false);
     
-    const response = data as any;
     if (!response || !response.success) {
       setError(response?.message || "Failed to submit assignment.");
       return;
