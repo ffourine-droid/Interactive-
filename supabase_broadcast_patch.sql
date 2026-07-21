@@ -11,10 +11,12 @@ ADD COLUMN IF NOT EXISTS school_id UUID;
 -- 2. Add is_broadcast and school_name columns to assignments table
 ALTER TABLE public.assignments 
 ADD COLUMN IF NOT EXISTS is_broadcast BOOLEAN DEFAULT FALSE,
-ADD COLUMN IF NOT EXISTS school_name TEXT;
+ADD COLUMN IF NOT EXISTS school_name TEXT,
+ADD COLUMN IF NOT EXISTS broadcast_id UUID;
 
 -- Create an index for faster school-wide broadcast lookup
 CREATE INDEX IF NOT EXISTS idx_assignments_is_broadcast_school ON public.assignments(is_broadcast, school_name);
+CREATE INDEX IF NOT EXISTS idx_assignments_broadcast_id ON public.assignments(broadcast_id);
 
 -- 2. CREATE SECURE BROADCAST RPC FUNCTION
 CREATE OR REPLACE FUNCTION public.create_assignment_broadcast(
@@ -33,6 +35,7 @@ DECLARE
     v_grades_created INTEGER := 0;
     v_teacher_id UUID;
     v_school_name TEXT;
+    v_broadcast_id UUID := gen_random_uuid();
 BEGIN
     -- Try to find the school name from any teacher linked to this school_id
     SELECT school_name INTO v_school_name
@@ -84,7 +87,8 @@ BEGIN
             questions,
             share_code,
             is_broadcast,
-            school_name
+            school_name,
+            broadcast_id
         ) VALUES (
             v_teacher_id,
             p_title,
@@ -95,7 +99,8 @@ BEGIN
             v_block.questions,
             v_random_code,
             TRUE,
-            v_school_name
+            v_school_name,
+            v_broadcast_id
         );
 
         v_grades_created := v_grades_created + 1;
@@ -104,6 +109,7 @@ BEGIN
     RETURN json_build_object(
         'success', true,
         'share_code', v_random_code,
+        'broadcast_id', v_broadcast_id,
         'grades_created', v_grades_created,
         'message', 'Holiday assignments broadcasted successfully!'
     );

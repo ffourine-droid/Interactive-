@@ -91,6 +91,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [exams, setExams] = useState<any[]>([]);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
+  const [teacherSubjects, setTeacherSubjects] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'groupwork' | 'materials' | 'broadcasts'>('assignments');
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedExamAttempt, setSelectedExamAttempt] = useState<any | null>(null);
@@ -323,6 +324,83 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           }
         }
       }
+
+      let tSubjectsList: any[] = [];
+      try {
+        const { data: tSubjects } = await supabase
+          .from('teacher_subjects')
+          .select('class_id, subject')
+          .eq('teacher_id', teacherId);
+        tSubjectsList = tSubjects || [];
+        setTeacherSubjects(tSubjectsList);
+      } catch (e) {
+        console.warn("Failed to load teacher_subjects in class view:", e);
+      }
+
+      // Defensive fallback: Fetch school-wide broadcast assignments for this school
+      try {
+        const teacherSchool = teacherRes.data?.school_name || 
+                              (examsRes.data && examsRes.data.length > 0 ? (examsRes.data[0] as any).school_name : null) || 
+                              (classRes.data as any)?.school_name;
+        
+        let actualSchoolName = teacherSchool;
+        if (!actualSchoolName) {
+          const { data: teacherProfile } = await supabase
+            .from('teachers')
+            .select('school_name')
+            .eq('id', teacherId)
+            .maybeSingle();
+          if (teacherProfile) {
+            actualSchoolName = teacherProfile.school_name;
+          }
+        }
+
+        if (actualSchoolName) {
+          // Fetch broadcast assignments for this school
+          const { data: broadcasts, error: bError } = await supabase
+            .from('assignments')
+            .select('*')
+            .eq('is_broadcast', true)
+            .eq('school_name', actualSchoolName);
+
+          if (!bError && broadcasts && broadcasts.length > 0) {
+            // Get all fetched classes for this teacher to verify taught mappings
+            let teacherClasses: any[] = [];
+            try {
+              const { data: cData } = await supabase.rpc('teacher_get_classes', { p_teacher_id: teacherId });
+              if (cData && Array.isArray(cData)) {
+                teacherClasses = cData;
+              }
+            } catch (e) {}
+
+            const taughtMappings = tSubjectsList.map(ts => {
+              const matchedClass = teacherClasses.find((c: any) => c.id === ts.class_id) || (classRes.data?.id === ts.class_id ? classRes.data : null);
+              return {
+                grade: matchedClass?.grade || '',
+                subject: ts.subject || ''
+              };
+            }).filter(m => m.grade);
+
+            // Filter broadcasts: teacher must teach the broadcast's grade & subject
+            const relevantBroadcasts = broadcasts.filter((b: any) => {
+              if (!b.grade || !b.subject) return false;
+              return taughtMappings.some(m => 
+                m.grade.trim().toLowerCase() === b.grade.trim().toLowerCase() && 
+                (m.subject.trim().toLowerCase() === b.subject.trim().toLowerCase() || m.subject.trim().toLowerCase() === 'general')
+              );
+            });
+
+            // Append with no duplicates
+            relevantBroadcasts.forEach((rb: any) => {
+              if (!assignmentsData.some((a: any) => a.id === rb.id)) {
+                assignmentsData.push(rb);
+              }
+            });
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn("Broadcast fallback retrieval in class view warning:", fallbackErr);
+      }
       let studentsData = studentsRes.data || [];
       let examsData = examsRes.data || [];
       let classData = classRes.data;
@@ -377,9 +455,14 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
       // 2. Fetch submissions, acknowledgements, and exam attempts only for these students/assignments/exams
       const examIds = examsData.map(e => e.id);
+      const assignmentIds = assignmentsData.map(a => a.id);
       
       const fetchSubmissionsAndAcks = [
-        supabase.from('assignment_submissions').select('*').eq('teacher_id', teacherId),
+        assignmentIds.length > 0 ? supabase
+          .from('assignment_submissions')
+          .select('*')
+          .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
+          : supabase.from('assignment_submissions').select('*').eq('teacher_id', teacherId),
         assignmentsData.length > 0 ? supabase
           .from('parent_acknowledgements')
           .select('assignment_id, student_id, acknowledged_at')
@@ -860,12 +943,18 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             Assessments
           </h2>
           {(() => {
-            const classAssignments = assignments.filter(a => 
-              classId === 'dynamic-class' ? true : (
-                a.class_id === classId || 
-                (a.class_name && className && a.class_name.toLowerCase() === className.toLowerCase())
-              )
-            );
+            const classAssignments = assignments.filter(a => {
+              if (classId === 'dynamic-class') return true;
+              if (a.class_id === classId) return true;
+              if (a.class_name && className && a.class_name.toLowerCase() === className.toLowerCase()) return true;
+              if (a.is_broadcast && a.grade && classGrade && a.grade.toLowerCase().trim() === classGrade.toLowerCase().trim()) {
+                return teacherSubjects.some(ts => 
+                  ts.class_id === classId && 
+                  (ts.subject?.toLowerCase().trim() === a.subject?.toLowerCase().trim() || ts.subject?.toLowerCase().trim() === 'general')
+                );
+              }
+              return false;
+            });
             if (classAssignments.length === 0) {
               return (
                 <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">

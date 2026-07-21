@@ -78,6 +78,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [classes, setClasses] = useState<Class[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [exams, setExams] = useState<any[]>([]);
+  const [teacherSubjects, setTeacherSubjects] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [newClassName, setNewClassName] = useState('');
@@ -751,6 +752,74 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           }
         }
       }
+
+      let tSubjectsList: any[] = [];
+      try {
+        const { data: tSubjects } = await supabase
+          .from('teacher_subjects')
+          .select('class_id, subject')
+          .eq('teacher_id', teacherId);
+        tSubjectsList = tSubjects || [];
+        setTeacherSubjects(tSubjectsList);
+      } catch (e) {
+        console.warn("Failed to load teacher_subjects:", e);
+      }
+
+      // Defensive fallback: Fetch school-wide broadcast assignments for this school
+      try {
+        const teacherSchool = (examsResponse.data && examsResponse.data.length > 0 ? (examsResponse.data[0] as any).school_name : null) || 
+                              (sortedClasses && sortedClasses.length > 0 ? sortedClasses[0].school_name : null);
+        
+        let actualSchoolName = teacherSchool;
+        if (!actualSchoolName) {
+          const { data: teacherProfile } = await supabase
+            .from('teachers')
+            .select('school_name')
+            .eq('id', teacherId)
+            .maybeSingle();
+          if (teacherProfile) {
+            actualSchoolName = teacherProfile.school_name;
+          }
+        }
+
+        if (actualSchoolName) {
+          // Fetch broadcast assignments for this school
+          const { data: broadcasts, error: bError } = await supabase
+            .from('assignments')
+            .select('*')
+            .eq('is_broadcast', true)
+            .eq('school_name', actualSchoolName);
+
+          if (!bError && broadcasts && broadcasts.length > 0) {
+            const taughtMappings = tSubjectsList.map(ts => {
+              const matchedClass = sortedClasses.find((c: any) => c.id === ts.class_id);
+              return {
+                grade: matchedClass?.grade || '',
+                subject: ts.subject || ''
+              };
+            }).filter(m => m.grade);
+
+            // Filter broadcasts: teacher must teach the broadcast's grade & subject
+            const relevantBroadcasts = broadcasts.filter((b: any) => {
+              if (!b.grade || !b.subject) return false;
+              return taughtMappings.some(m => 
+                m.grade.trim().toLowerCase() === b.grade.trim().toLowerCase() && 
+                (m.subject.trim().toLowerCase() === b.subject.trim().toLowerCase() || m.subject.trim().toLowerCase() === 'general')
+              );
+            });
+
+            // Append with no duplicates
+            relevantBroadcasts.forEach((rb: any) => {
+              if (!assignmentsData.some((a: any) => a.id === rb.id)) {
+                assignmentsData.push(rb);
+              }
+            });
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn("Broadcast fallback retrieval warning:", fallbackErr);
+      }
+
       setAssignments(assignmentsData);
       setExams(examsResponse.data || []);
     } catch (err: any) {
@@ -1351,6 +1420,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* Classes/Subjects Grid */}
             {(() => {
               const dynamicAssignments = assignments.filter(a => 
+                !a.is_broadcast &&
                 (!a.class_id && (!a.class_name || !classes.some(cls => cls.name?.toLowerCase() === a.class_name?.toLowerCase()))) &&
                 (!classes.some(cls => cls.id === a.class_id))
               );
@@ -1370,10 +1440,17 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   ) : (
                     <>
                       {classes.map((cls, index) => {
-                        const classAssignments = assignments.filter(a => 
-                          a.class_id === cls.id || 
-                          (a.class_name && cls.name && a.class_name.toLowerCase() === cls.name.toLowerCase())
-                        );
+                        const classAssignments = assignments.filter(a => {
+                          if (a.class_id === cls.id) return true;
+                          if (a.class_name && cls.name && a.class_name.toLowerCase() === cls.name.toLowerCase()) return true;
+                          if (a.is_broadcast && a.grade && cls.grade && a.grade.toLowerCase().trim() === cls.grade.toLowerCase().trim()) {
+                            return teacherSubjects.some(ts => 
+                              ts.class_id === cls.id && 
+                              (ts.subject?.toLowerCase().trim() === a.subject?.toLowerCase().trim() || ts.subject?.toLowerCase().trim() === 'general')
+                            );
+                          }
+                          return false;
+                        });
                         return (
                           <motion.div 
                             key={cls.id}

@@ -74,7 +74,14 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastDueDate, setBroadcastDueDate] = useState('');
   const [gradeBlocks, setGradeBlocks] = useState<GradeBlock[]>([]);
-  const [publishedCodes, setPublishedCodes] = useState<{ grade: string; subject?: string; code: string; teacherName?: string | null; hasWarning?: boolean }[]>([]);
+  const [publishedCodes, setPublishedCodes] = useState<{ 
+    grade: string; 
+    subject?: string; 
+    code: string; 
+    teacherName?: string | null; 
+    teacherNames?: string[]; 
+    hasWarning?: boolean 
+  }[]>([]);
 
   // Individual Grade block builder state
   const [blockGrade, setBlockGrade] = useState('');
@@ -474,17 +481,63 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
 
       if (!error && data && data.success) {
         // Success using the RPC!
-        const publishedList = gradeBlocks.map(block => {
-          const teacherName = findTeacherForGrade(block.grade, block.subject);
-          return {
-            grade: block.grade,
-            subject: block.subject,
-            code: data.share_code || 'N/A',
-            teacherName: teacherName,
-            hasWarning: !teacherName
-          };
-        });
-        setPublishedCodes(publishedList);
+        let routedRows: any[] = [];
+        let queryError: any = null;
+
+        if (data.broadcast_id) {
+          const { data: rows, error: rError } = await supabase
+            .from('assignments')
+            .select('grade, subject, class_id, teacher_id, target_teacher_name')
+            .eq('broadcast_id', data.broadcast_id);
+          if (rError) {
+            queryError = rError;
+          } else {
+            routedRows = rows || [];
+          }
+        }
+
+        if (queryError || !data.broadcast_id || routedRows.length === 0) {
+          // Fallback to manual local lookup
+          const publishedList = gradeBlocks.map(block => {
+            const teacherName = findTeacherForGrade(block.grade, block.subject);
+            return {
+              grade: block.grade,
+              subject: block.subject,
+              code: data.share_code || 'N/A',
+              teacherName: teacherName,
+              teacherNames: teacherName ? [teacherName] : [],
+              hasWarning: !teacherName
+            };
+          });
+          setPublishedCodes(publishedList);
+        } else {
+          // Group routed teachers by grade+subject (since one broadcast can cover multiple grade/subject entries)
+          const grouped = new Map<string, { teachers: string[]; code: string }>();
+
+          for (const row of routedRows) {
+            const key = `${row.grade}::${row.subject}`;
+            if (!grouped.has(key)) {
+              grouped.set(key, { teachers: [], code: data.share_code || 'N/A' });
+            }
+            if (row.target_teacher_name && !grouped.get(key)!.teachers.includes(row.target_teacher_name)) {
+              grouped.get(key)!.teachers.push(row.target_teacher_name);
+            }
+          }
+
+          const newPublishedCodes = Array.from(grouped.entries()).map(([key, val]) => {
+            const [grade, subject] = key.split('::');
+            return {
+              grade,
+              subject,
+              code: val.code,
+              teacherNames: val.teachers,
+              hasWarning: val.teachers.length === 0,
+            };
+          });
+
+          setPublishedCodes(newPublishedCodes);
+        }
+
         setCreationStep('success');
         showToast(`Broadcast holiday assignments published successfully! (${data.grades_created} grades created)`, "success");
         fetchDashboardData();
@@ -550,7 +603,14 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
         }
       }
 
-      const publishedList: { grade: string; subject?: string; code: string; teacherName?: string | null; hasWarning?: boolean }[] = [];
+      const publishedList: { 
+        grade: string; 
+        subject?: string; 
+        code: string; 
+        teacherName?: string | null; 
+        teacherNames?: string[]; 
+        hasWarning?: boolean 
+      }[] = [];
 
       for (const block of gradeBlocks) {
         // Generate code e.g. AC8102
@@ -612,6 +672,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
           subject: block.subject,
           code: randomCode,
           teacherName: teacherName,
+          teacherNames: teacherName ? [teacherName] : [],
           hasWarning: !teacherName
         });
       }
@@ -1222,7 +1283,16 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
                         </div>
                       ) : (
                         <div className="text-[10px] text-emerald-500 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg inline-block">
-                          ✅ Routed to: <span className="underline">{c.teacherName}</span>
+                          {c.teacherNames && c.teacherNames.length > 0 ? (
+                            <>
+                              ✅ Routed to {c.teacherNames.length} teacher{c.teacherNames.length !== 1 ? 's' : ''}:{' '}
+                              <span className="underline">{c.teacherNames.join(', ')}</span>
+                            </>
+                          ) : (
+                            <>
+                              ✅ Routed to: <span className="underline">{c.teacherName}</span>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
