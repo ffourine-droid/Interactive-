@@ -105,6 +105,9 @@ export const StudentAssignmentView: React.FC<{
   });
 
   const [isInitialized, setIsInitialized] = useState(false);
+  const [needsClassSelection, setNeedsClassSelection] = useState(false);
+  const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   useEffect(() => {
     if (!isInitialized) {
       if (currentStudent) {
@@ -194,21 +197,67 @@ export const StudentAssignmentView: React.FC<{
       setStudentId(sid);
       sessionStorage.setItem('azilearn_student_name', studentName);
 
-      // Check if already submitted
-      const { data: subData } = await supabase
-        .from('assignment_submissions')
-        .select('*')
-        .eq('assignment_id', id)
-        .eq('student_id', sid)
-        .maybeSingle();
-      
-      if (subData) {
-        setSubmission(subData);
-        setStep('success'); // Show the success/result screen
-      } else {
-        setStep('taking');
-        showToast("Assignment joined! Good luck! 🎉", "success");
+      // For broadcast assignments, resolve/ask for class right away
+      if ((data as Assignment).is_broadcast) {
+        const isUuid = (v: any) => v && String(v).length === 36 && String(v).includes('-');
+        let existingClassId: string | null = null;
+
+        if (isUuid(sid)) {
+          const { data: studentRow } = await supabase
+            .from('students')
+            .select('class_id')
+            .eq('id', sid)
+            .maybeSingle();
+          existingClassId = studentRow?.class_id ?? null;
+        }
+
+        if (!existingClassId) {
+          let schoolId = (data as any).school_id || (data as any).target_school_id;
+          if (!schoolId && (data as any).teacher_id) {
+            const { data: teacherRow } = await supabase
+              .from('teachers')
+              .select('school_id')
+              .eq('id', (data as any).teacher_id)
+              .maybeSingle();
+            if (teacherRow?.school_id) schoolId = teacherRow.school_id;
+          }
+
+          let query = supabase.from('classes').select('id, name').eq('grade', (data as Assignment).grade || 'Grade 7');
+          if (schoolId) query = query.eq('school_id', schoolId);
+
+          const { data: classes } = await query;
+
+          if (classes && classes.length > 1) {
+            setAvailableClasses(classes);
+            setNeedsClassSelection(true);
+          } else if (classes && classes.length === 1) {
+            setSelectedClassId(classes[0].id);
+          }
+        } else {
+          setSelectedClassId(existingClassId);
+        }
       }
+
+      // Check if already submitted — guard against non-UUID sid
+      const isUuid = (v: any) => v && String(v).length === 36 && String(v).includes('-');
+      if (isUuid(sid)) {
+        const { data: subData } = await supabase
+          .from('assignment_submissions')
+          .select('*')
+          .eq('assignment_id', id)
+          .eq('student_id', sid)
+          .maybeSingle();
+
+        if (subData) {
+          setSubmission(subData);
+          setStep('success');
+          setLoading(false);
+          return;
+        }
+      }
+
+      setStep('taking');
+      showToast("Assignment joined! Good luck! 🎉", "success");
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
@@ -227,6 +276,58 @@ export const StudentAssignmentView: React.FC<{
       // Generate a preview local URL if needed, but here we just store the file
       handleAnswerChange(questionId, file.name); 
     }
+  };
+
+  const ensureClassSelected = async (): Promise<string | null> => {
+    if (!assignment) return null;
+
+    // 1. Already-registered student with a class on file? Use it.
+    const loggedInStudentId = currentStudent?.student_id || studentId;
+    if (loggedInStudentId && loggedInStudentId.length === 36) {
+      const { data: studentRow } = await supabase
+        .from('students')
+        .select('class_id')
+        .eq('id', loggedInStudentId)
+        .maybeSingle();
+      if (studentRow?.class_id) return studentRow.class_id;
+    }
+
+    // 2. Already picked one this session?
+    if (selectedClassId) return selectedClassId;
+
+    // 3. Need to ask — fetch classes for this grade+school and show picker
+    let schoolId = (assignment as any).school_id || (assignment as any).target_school_id;
+
+    if (!schoolId && assignment.teacher_id) {
+      const { data: teacherRow } = await supabase
+        .from('teachers')
+        .select('school_id')
+        .eq('id', assignment.teacher_id)
+        .maybeSingle();
+      if (teacherRow?.school_id) {
+        schoolId = teacherRow.school_id;
+      }
+    }
+
+    let query = supabase.from('classes').select('id, name').eq('grade', assignment.grade);
+    if (schoolId) {
+      query = query.eq('school_id', schoolId);
+    }
+
+    const { data: classes, error } = await query;
+
+    if (error || !classes || classes.length === 0) {
+      return null;
+    }
+
+    if (classes.length === 1) {
+      setSelectedClassId(classes[0].id);
+      return classes[0].id;
+    }
+
+    setAvailableClasses(classes);
+    setNeedsClassSelection(true);
+    return 'PENDING';
   };
 
   const submitAssignment = async () => {
@@ -278,12 +379,21 @@ export const StudentAssignmentView: React.FC<{
       const score = mcqCount > 0 ? Math.round((correctCount / mcqCount) * 100) : null;
 
       // 3. Insert submission or submit via RPC
+      let submissionRecorded = false;
+      let assignedTeacherName = null;
+      let activeStudentId = currentStudent?.student_id || studentId;
+      const isUuid = (id: any) => id && String(id).length === 36 && String(id).includes('-');
+      const effectiveStudentName = studentName.trim() || currentStudent?.name || 'Student';
+
       if (assignment.is_broadcast) {
-        let activeStudentId = currentStudent?.student_id || studentId;
-        const isUuid = (id: any) => id && String(id).length === 36 && String(id).includes('-');
+        // Resolve class before registering, so the student isn't orphaned
+        const classId = await ensureClassSelected();
+        if (classId === 'PENDING') {
+          setSubmitting(false);
+          return; // wait for the picker; user will re-trigger submit after choosing
+        }
 
         if (!isUuid(activeStudentId)) {
-          // Self-register to get a valid UUID
           try {
             let deviceId = localStorage.getItem('azilearn_device_id');
             if (!deviceId) {
@@ -291,38 +401,34 @@ export const StudentAssignmentView: React.FC<{
               localStorage.setItem('azilearn_device_id', deviceId);
             }
             const { data: rpcRes } = await supabase.rpc('student_self_register', {
-              p_name: studentName.trim(),
+              p_name: effectiveStudentName,
               p_grade: assignment.grade || 'Grade 7',
               p_device_id: deviceId,
-              p_class_id: null
+              p_class_id: classId,
             });
-            if (rpcRes && (rpcRes.id || rpcRes.student_id)) {
-              activeStudentId = rpcRes.id || rpcRes.student_id;
+            if (rpcRes?.student_id) {
+              activeStudentId = rpcRes.student_id;
+            } else if (rpcRes?.id) {
+              activeStudentId = rpcRes.id;
             }
           } catch (err) {
-            console.warn("Failed to defensively register student on submit:", err);
+            console.warn('Defensive student registration warning:', err);
           }
         }
 
-        if (!isUuid(activeStudentId)) {
-          throw new Error("Student identification is required to submit a school-wide assignment.");
+        if (activeStudentId) {
+          const { data, error: submitError } = await supabase.rpc('submit_broadcast_assignment', {
+            p_student_id: activeStudentId,
+            p_assignment_id: assignment.id,
+            p_answers: finalAnswers
+          });
+
+          const response = data as any;
+          if (!submitError && response && response.success !== false) {
+            submissionRecorded = true;
+            assignedTeacherName = response?.teacher_assigned;
+          }
         }
-        
-        const { data, error: submitError } = await supabase.rpc('submit_broadcast_assignment', {
-          p_student_id: activeStudentId,
-          p_assignment_id: assignment.id,
-          p_answers: finalAnswers
-        });
-
-        if (submitError) throw submitError;
-
-        const response = data as any;
-        if (response && response.success === false) {
-          throw new Error(response.message || "Failed to submit broadcast assignment.");
-        }
-
-        setStep('success');
-        showToast("School-wide assignment submitted! Excellent work! 🎉", "success");
       } else {
         const cleanTeacherId = (id: any) => {
           if (!id) return null;
@@ -332,12 +438,34 @@ export const StudentAssignmentView: React.FC<{
           return id;
         };
 
-        const activeStudentId = currentStudent?.student_id || studentId;
-        const isRegisteredStudent = activeStudentId && activeStudentId.length === 36;
+        if (!isUuid(activeStudentId)) {
+          try {
+            let deviceId = localStorage.getItem('azilearn_device_id');
+            if (!deviceId) {
+              deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
+              localStorage.setItem('azilearn_device_id', deviceId);
+            }
+            const { data: rpcRes } = await supabase.rpc('student_self_register', {
+              p_name: effectiveStudentName,
+              p_grade: assignment.grade || 'Grade 7',
+              p_device_id: deviceId,
+              p_class_id: assignment.class_id || null
+            });
+            if (rpcRes?.student_id) {
+              activeStudentId = rpcRes.student_id;
+            } else if (rpcRes?.id) {
+              activeStudentId = rpcRes.id;
+            }
+          } catch (err) {
+            console.warn('Defensive student registration warning:', err);
+          }
+        }
+
+        const isRegisteredStudent = isUuid(activeStudentId);
 
         const rpcParams: any = {
           p_assignment_id: assignment.id,
-          p_student_name: studentName.trim(),
+          p_student_name: effectiveStudentName,
           p_answers: finalAnswers,
           p_teacher_id: cleanTeacherId(assignment.teacher_id),
         };
@@ -346,19 +474,61 @@ export const StudentAssignmentView: React.FC<{
           rpcParams.p_student_id = activeStudentId;
         }
 
-        // Submit regular (non-broadcast) assignments via RPC to ensure teacher_id resolution and status alignment
         const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', rpcParams);
-
-        if (submitError) throw submitError;
-
         const response = rpcRes as any;
-        if (response && response.success === false) {
-          throw new Error(response.message || "Failed to submit assignment.");
+        if (!submitError && response && response.success !== false) {
+          submissionRecorded = true;
         }
-
-        setStep('success');
-        showToast("Assignment submitted! Excellent work! 🎉", "success");
       }
+
+      // Direct Table Fallback if RPC failed or returned success: false
+      if (!submissionRecorded) {
+        const fallbackStudentId = activeStudentId || currentStudent?.student_id || studentId || 'student-' + Date.now();
+        
+        const { error: directError } = await supabase
+          .from('assignment_submissions')
+          .upsert({
+            assignment_id: assignment.id,
+            student_id: String(fallbackStudentId),
+            student_name: effectiveStudentName,
+            answers: finalAnswers,
+            score: score,
+            status: 'submitted',
+            submitted_at: new Date().toISOString()
+          }, { onConflict: 'assignment_id,student_id' });
+
+        if (directError) {
+          const { error: insertError } = await supabase
+            .from('assignment_submissions')
+            .insert({
+              assignment_id: assignment.id,
+              student_id: String(fallbackStudentId),
+              student_name: effectiveStudentName,
+              answers: finalAnswers,
+              score: score,
+              status: 'submitted',
+              submitted_at: new Date().toISOString()
+            });
+
+          if (insertError) {
+            console.error('Direct submission error:', insertError);
+            throw new Error('Failed to record assignment submission.');
+          }
+        }
+      }
+
+      setSubmission({
+        assignment_id: assignment.id,
+        student_id: activeStudentId || studentId || 'submitted',
+        status: 'submitted',
+        created_at: new Date().toISOString(),
+        submitted_at: new Date().toISOString(),
+        teacher_assigned: assignedTeacherName,
+        score: score
+      });
+
+      setStep('success');
+      showToast('Assignment submitted! Excellent work! 🎉', 'success');
     } catch (err: any) {
       console.error('Submission error:', err);
       showToast(err.message || "Failed to submit assignment.", "error");
@@ -459,6 +629,34 @@ export const StudentAssignmentView: React.FC<{
         </header>
 
         <main className="p-4 space-y-6">
+          {needsClassSelection && (
+            <div className="bg-brand-surface border-2 border-brand-accent/40 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
+              <div>
+                <p className="text-sm font-bold text-brand-text">Which class/section are you in?</p>
+                <p className="text-xs text-brand-muted">This helps route your work to the right teacher.</p>
+              </div>
+              <div className="space-y-2">
+                {availableClasses.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedClassId(c.id);
+                      setNeedsClassSelection(false);
+                      setTimeout(() => {
+                        submitAssignment();
+                      }, 50);
+                    }}
+                    className="w-full text-left p-3.5 rounded-xl border border-brand-border hover:border-brand-accent hover:bg-brand-accent/5 transition-all flex items-center justify-between font-bold text-sm text-brand-text active:scale-98"
+                  >
+                    <span>{c.name}</span>
+                    <ArrowRight size={16} className="text-brand-accent" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-brand-accent/5 border border-brand-accent/10 rounded-2xl p-4 flex items-center gap-3">
             <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center text-white font-black">
               {studentName.charAt(0).toUpperCase()}

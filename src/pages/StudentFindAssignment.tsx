@@ -231,9 +231,40 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
 
     setLoading(true);
     let response: any = null;
+    let activeStudentId: string | null = loggedInStudentId;
 
     if (assignment.is_broadcast) {
-      let activeStudentId = loggedInStudentId;
+      let resolvedClassId: string | null = null;
+
+      if (activeStudentId && activeStudentId.length === 36) {
+        const { data: studentRow } = await supabase
+          .from('students')
+          .select('class_id')
+          .eq('id', activeStudentId)
+          .maybeSingle();
+        if (studentRow?.class_id) resolvedClassId = studentRow.class_id;
+      }
+
+      if (!resolvedClassId) {
+        let schoolId = assignment.school_id || assignment.target_school_id;
+        if (!schoolId && assignment.teacher_id) {
+          const { data: teacherRow } = await supabase
+            .from('teachers')
+            .select('school_id')
+            .eq('id', assignment.teacher_id)
+            .maybeSingle();
+          if (teacherRow?.school_id) schoolId = teacherRow.school_id;
+        }
+
+        let query = supabase.from('classes').select('id, name').eq('grade', assignment.grade || 'Grade 7');
+        if (schoolId) query = query.eq('school_id', schoolId);
+
+        const { data: classes } = await query;
+        if (classes && classes.length === 1) {
+          resolvedClassId = classes[0].id;
+        }
+      }
+
       if (!activeStudentId || activeStudentId.length !== 36) {
         try {
           let deviceId = localStorage.getItem('azilearn_device_id');
@@ -245,50 +276,71 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
             p_name: studentName.trim(),
             p_grade: assignment.grade || 'Grade 7',
             p_device_id: deviceId,
-            p_class_id: null
+            p_class_id: resolvedClassId
           });
           if (rpcRes) {
-            activeStudentId = rpcRes.id || rpcRes.student_id;
+            activeStudentId = rpcRes.student_id || rpcRes.id;
           }
         } catch (err) {
           console.warn("Failed to register on submit:", err);
         }
       }
 
-      if (!activeStudentId || activeStudentId.length !== 36) {
-        setLoading(false);
-        setError("Student identification is required to submit a school-wide assignment.");
-        return;
-      }
+      if (activeStudentId) {
+        const { data: bRes, error: rpcError } = await supabase.rpc("submit_broadcast_assignment", {
+          p_student_id: activeStudentId,
+          p_assignment_id: assignment.id,
+          p_answers: answers
+        });
 
-      const { data: bRes, error: rpcError } = await supabase.rpc("submit_broadcast_assignment", {
-        p_student_id: activeStudentId,
-        p_assignment_id: assignment.id,
-        p_answers: answers
-      });
-
-      if (rpcError) {
-        setLoading(false);
-        setError("Something went wrong submitting broadcast. Try again.");
-        return;
+        if (!rpcError && bRes && bRes.success !== false) {
+          response = bRes;
+        }
       }
-      response = bRes;
     } else {
       const { data: sRes, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParams);
-      if (rpcError) {
-        setLoading(false);
-        setError("Something went wrong submitting. Try again.");
-        return;
+      if (!rpcError && sRes && sRes.success !== false) {
+        response = sRes;
       }
-      response = sRes;
+    }
+
+    if (!response || !response.success) {
+      const fallbackId = activeStudentId || (currentStudent?.student_id) || 'guest-' + Date.now();
+      const fallbackName = studentName.trim() || currentStudent?.name || 'Student';
+
+      const { error: directErr } = await supabase
+        .from('assignment_submissions')
+        .upsert({
+          assignment_id: assignment.id,
+          student_id: String(fallbackId),
+          student_name: fallbackName,
+          answers: answers,
+          status: 'submitted',
+          submitted_at: new Date().toISOString()
+        }, { onConflict: 'assignment_id,student_id' });
+
+      if (directErr) {
+        const { error: insErr } = await supabase
+          .from('assignment_submissions')
+          .insert({
+            assignment_id: assignment.id,
+            student_id: String(fallbackId),
+            student_name: fallbackName,
+            answers: answers,
+            status: 'submitted',
+            submitted_at: new Date().toISOString()
+          });
+
+        if (insErr) {
+          setLoading(false);
+          setError("Failed to submit assignment. Please try again.");
+          return;
+        }
+      }
+      response = { success: true };
     }
 
     setLoading(false);
-    
-    if (!response || !response.success) {
-      setError(response?.message || "Failed to submit assignment.");
-      return;
-    }
     onSubmitted();
   }
 
