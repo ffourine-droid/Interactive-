@@ -234,7 +234,22 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
   });
 
   const submittedCount = submissions.length;
-  const pendingStudents = classStudents.filter(s => !submissions.some(sub => sub.student_name.toLowerCase() === s.name.toLowerCase()));
+  const pendingStudents = classStudents.filter(s =>
+    !submissions.some(sub => {
+      if (sub.student_id && s.id && sub.student_id === s.id) return true;
+      if (sub.student_name && s.name) {
+        const sName = sub.student_name.trim().toLowerCase();
+        const stName = s.name.trim().toLowerCase();
+        if (sName === stName) {
+          if (sub.student_id && classStudents.some(other => other.id === sub.student_id && other.id !== s.id)) {
+            return false;
+          }
+          return true;
+        }
+      }
+      return false;
+    })
+  );
   const gradedCount = submissions.filter(s => s.status === 'graded').length;
 
   if (loading || !assignment) {

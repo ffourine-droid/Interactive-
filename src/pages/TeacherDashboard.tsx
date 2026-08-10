@@ -191,24 +191,38 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
       if (!gotData) {
         // Run robust client-side query fallback
-        // 1. Get assignments for this teacher
-        const { data: assignments, error: assignmentsError } = await supabase
-          .from('assignments')
-          .select('id, title, subject, grade, questions')
+        // 1. Get assignments for this teacher and their classes
+        const { data: classesData } = await supabase
+          .from('classes')
+          .select('id')
           .eq('teacher_id', teacherId);
+
+        const classIds = (classesData || []).map(c => c.id);
+
+        let assignQuery = supabase
+          .from('assignments')
+          .select('id, title, subject, grade, questions, teacher_id, class_id');
+
+        if (classIds.length > 0) {
+          assignQuery = assignQuery.or(`teacher_id.eq.${teacherId},class_id.in.(${classIds.join(',')})`);
+        } else {
+          assignQuery = assignQuery.eq('teacher_id', teacherId);
+        }
+
+        const { data: assignments, error: assignmentsError } = await assignQuery;
 
         if (assignmentsError) throw assignmentsError;
 
         if (assignments && assignments.length > 0) {
           const assignmentIds = assignments.map(a => a.id);
 
-          // 2. Fetch pending submissions across assignment_submissions
+          // 2. Fetch pending/submitted assignments across assignment_submissions
           let rawSubmissions: any[] = [];
           const { data: subsData, error: subsError } = await supabase
             .from('assignment_submissions')
             .select('*')
-            .in('assignment_id', assignmentIds)
-            .eq('status', 'pending');
+            .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
+            .in('status', ['submitted', 'pending']);
 
           if (!subsError && subsData) {
             rawSubmissions = subsData;
@@ -217,10 +231,9 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             const { data: subsData2, error: subsError2 } = await supabase
               .from('submissions')
               .select('*')
-              .in('assignment_id', assignmentIds)
-              .eq('status', 'pending');
-            if (subsError2) throw subsError2;
-            if (subsData2) rawSubmissions = subsData2;
+              .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
+              .in('status', ['submitted', 'pending']);
+            if (!subsError2 && subsData2) rawSubmissions = subsData2;
           }
 
           // 3. Format into structure expected by UI

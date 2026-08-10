@@ -368,23 +368,46 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
       }
 
       if (!activeStudentId || activeStudentId.length !== 36) {
-        try {
-          let deviceId = localStorage.getItem('azilearn_device_id');
-          if (!deviceId) {
-            deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-            localStorage.setItem('azilearn_device_id', deviceId);
+        if (resolvedClassId && studentName.trim()) {
+          try {
+            const { data: rosterStudents } = await supabase
+              .from('students')
+              .select('id, name')
+              .eq('class_id', resolvedClassId);
+
+            if (rosterStudents && rosterStudents.length > 0) {
+              const trimmedName = studentName.trim().toLowerCase();
+              const matchedStudent = rosterStudents.find(
+                s => s.name && s.name.trim().toLowerCase() === trimmedName
+              );
+              if (matchedStudent?.id) {
+                activeStudentId = matchedStudent.id;
+              }
+            }
+          } catch (lookupErr) {
+            console.warn('Roster lookup warning:', lookupErr);
           }
-          const { data: rpcRes } = await supabase.rpc('student_self_register', {
-            p_name: studentName.trim(),
-            p_grade: assignment.grade || 'Grade 7',
-            p_device_id: deviceId,
-            p_class_id: resolvedClassId
-          });
-          if (rpcRes) {
-            activeStudentId = rpcRes.student_id || rpcRes.id;
+        }
+
+        if (!activeStudentId || activeStudentId.length !== 36) {
+          try {
+            let deviceId = localStorage.getItem('azilearn_device_id');
+            if (!deviceId) {
+              deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
+              localStorage.setItem('azilearn_device_id', deviceId);
+            }
+            const { data: rpcRes } = await supabase.rpc('student_self_register', {
+              p_name: studentName.trim(),
+              p_grade: assignment.grade || 'Grade 7',
+              p_device_id: deviceId,
+              p_class_id: resolvedClassId
+            });
+            if (rpcRes) {
+              activeStudentId = rpcRes.student_id || rpcRes.id;
+            }
+          } catch (err) {
+            console.warn("Failed to register on submit:", err);
           }
-        } catch (err) {
-          console.warn("Failed to register on submit:", err);
         }
       }
 
@@ -406,6 +429,16 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
       }
     }
 
+    if (response && response.success && assignment.teacher_id && activeStudentId) {
+      supabase
+        .from('assignment_submissions')
+        .update({ teacher_id: assignment.teacher_id })
+        .eq('assignment_id', assignment.id)
+        .eq('student_id', String(activeStudentId))
+        .then(() => {})
+        .catch(() => {});
+    }
+
     if (!response || !response.success) {
       const fallbackId = activeStudentId || (currentStudent?.student_id) || 'guest-' + Date.now();
       const fallbackName = studentName.trim() || currentStudent?.name || 'Student';
@@ -414,6 +447,7 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
         .from('assignment_submissions')
         .upsert({
           assignment_id: assignment.id,
+          teacher_id: assignment.teacher_id || null,
           student_id: String(fallbackId),
           student_name: fallbackName,
           answers: answers,
@@ -426,6 +460,7 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
           .from('assignment_submissions')
           .insert({
             assignment_id: assignment.id,
+            teacher_id: assignment.teacher_id || null,
             student_id: String(fallbackId),
             student_name: fallbackName,
             answers: answers,

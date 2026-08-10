@@ -459,22 +459,51 @@ export const StudentAssignmentView: React.FC<{
 
       const score = mcqCount > 0 ? Math.round((correctCount / mcqCount) * 100) : null;
 
-      // 3. Insert submission or submit via RPC
-      let submissionRecorded = false;
-      let assignedTeacherName = null;
-      let activeStudentId = currentStudent?.student_id || studentId;
-      const isUuid = (id: any) => id && String(id).length === 36 && String(id).includes('-');
-      const effectiveStudentName = studentName.trim() || currentStudent?.name || 'Student';
+    // 3. Insert submission or submit via RPC
+    let submissionRecorded = false;
+    let assignedTeacherName = null;
+    let activeStudentId = currentStudent?.student_id || studentId;
+    const isUuid = (id: any) => id && String(id).length === 36 && String(id).includes('-');
+    const effectiveStudentName = studentName.trim() || currentStudent?.name || 'Student';
 
-      if (assignment.is_broadcast) {
-        // Resolve class before registering, so the student isn't orphaned
-        const classId = await ensureClassSelected();
-        if (classId === 'PENDING') {
-          setSubmitting(false);
-          return; // wait for the picker; user will re-trigger submit after choosing
+    // Look up an existing roster student by class + name before ever creating
+    // a new one. This prevents submitting "as" an existing student (e.g. "One
+    // south") from silently creating a duplicate guest student instead of
+    // reusing the real record.
+    const findRosterStudentId = async (classId: string | null) => {
+      if (!classId || !effectiveStudentName) return null;
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('id')
+          .eq('class_id', classId)
+          .ilike('name', effectiveStudentName.trim())
+          .limit(1)
+          .maybeSingle();
+        if (error) {
+          console.warn('Roster lookup warning:', error);
+          return null;
         }
+        return data?.id || null;
+      } catch (err) {
+        console.warn('Roster lookup warning:', err);
+        return null;
+      }
+    };
 
-        if (!isUuid(activeStudentId)) {
+    if (assignment.is_broadcast) {
+      // Resolve class before registering, so the student isn't orphaned
+      const classId = await ensureClassSelected();
+      if (classId === 'PENDING') {
+        setSubmitting(false);
+        return; // wait for the picker; user will re-trigger submit after choosing
+      }
+
+      if (!isUuid(activeStudentId)) {
+        const rosterMatchId = await findRosterStudentId(classId);
+        if (rosterMatchId) {
+          activeStudentId = rosterMatchId;
+        } else {
           try {
             let deviceId = localStorage.getItem('azilearn_device_id');
             if (!deviceId) {
@@ -496,30 +525,35 @@ export const StudentAssignmentView: React.FC<{
             console.warn('Defensive student registration warning:', err);
           }
         }
+      }
 
-        if (activeStudentId) {
-          const { data, error: submitError } = await supabase.rpc('submit_broadcast_assignment', {
-            p_student_id: activeStudentId,
-            p_assignment_id: assignment.id,
-            p_answers: finalAnswers
-          });
+      if (activeStudentId) {
+        const { data, error: submitError } = await supabase.rpc('submit_broadcast_assignment', {
+          p_student_id: activeStudentId,
+          p_assignment_id: assignment.id,
+          p_answers: finalAnswers
+        });
 
-          const response = data as any;
-          if (!submitError && response && response.success !== false) {
-            submissionRecorded = true;
-            assignedTeacherName = response?.teacher_assigned;
-          }
+        const response = data as any;
+        if (!submitError && response && response.success !== false) {
+          submissionRecorded = true;
+          assignedTeacherName = response?.teacher_assigned;
         }
-      } else {
-        const cleanTeacherId = (id: any) => {
-          if (!id) return null;
-          const str = String(id).trim().toLowerCase();
-          if (str === 'null' || str === 'undefined' || str === '') return null;
-          if (str.length !== 36) return null;
-          return id;
-        };
+      }
+    } else {
+      const cleanTeacherId = (id: any) => {
+        if (!id) return null;
+        const str = String(id).trim().toLowerCase();
+        if (str === 'null' || str === 'undefined' || str === '') return null;
+        if (str.length !== 36) return null;
+        return id;
+      };
 
-        if (!isUuid(activeStudentId)) {
+      if (!isUuid(activeStudentId)) {
+        const rosterMatchId = await findRosterStudentId(assignment.class_id || null);
+        if (rosterMatchId) {
+          activeStudentId = rosterMatchId;
+        } else {
           try {
             let deviceId = localStorage.getItem('azilearn_device_id');
             if (!deviceId) {
@@ -541,26 +575,38 @@ export const StudentAssignmentView: React.FC<{
             console.warn('Defensive student registration warning:', err);
           }
         }
-
-        const isRegisteredStudent = isUuid(activeStudentId);
-
-        const rpcParams: any = {
-          p_assignment_id: assignment.id,
-          p_student_name: effectiveStudentName,
-          p_answers: finalAnswers,
-          p_teacher_id: cleanTeacherId(assignment.teacher_id),
-        };
-
-        if (isRegisteredStudent) {
-          rpcParams.p_student_id = activeStudentId;
-        }
-
-        const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', rpcParams);
-        const response = rpcRes as any;
-        if (!submitError && response && response.success !== false) {
-          submissionRecorded = true;
-        }
       }
+
+      const isRegisteredStudent = isUuid(activeStudentId);
+
+      const rpcParams: any = {
+        p_assignment_id: assignment.id,
+        p_student_name: effectiveStudentName,
+        p_answers: finalAnswers,
+        p_teacher_id: cleanTeacherId(assignment.teacher_id),
+      };
+
+      if (isRegisteredStudent) {
+        rpcParams.p_student_id = activeStudentId;
+      }
+
+      const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', rpcParams);
+      const response = rpcRes as any;
+      if (!submitError && response && response.success !== false) {
+        submissionRecorded = true;
+      }
+    }
+
+    // Post-submission patch to ensure teacher_id is set on the row
+    if (submissionRecorded && assignment.teacher_id && activeStudentId) {
+      supabase
+        .from('assignment_submissions')
+        .update({ teacher_id: assignment.teacher_id })
+        .eq('assignment_id', assignment.id)
+        .eq('student_id', String(activeStudentId))
+        .then(() => {})
+        .catch(() => {});
+    }
 
       // Direct Table Fallback if RPC failed or returned success: false
       if (!submissionRecorded) {
@@ -570,6 +616,7 @@ export const StudentAssignmentView: React.FC<{
           .from('assignment_submissions')
           .upsert({
             assignment_id: assignment.id,
+            teacher_id: assignment.teacher_id || null,
             student_id: String(fallbackStudentId),
             student_name: effectiveStudentName,
             answers: finalAnswers,
@@ -583,6 +630,7 @@ export const StudentAssignmentView: React.FC<{
             .from('assignment_submissions')
             .insert({
               assignment_id: assignment.id,
+              teacher_id: assignment.teacher_id || null,
               student_id: String(fallbackStudentId),
               student_name: effectiveStudentName,
               answers: finalAnswers,

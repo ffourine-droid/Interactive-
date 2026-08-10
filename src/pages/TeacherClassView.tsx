@@ -1051,7 +1051,20 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted mb-4 px-1">Student Status</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {students.map((student) => {
-                            const submission = assignmentSubmissions.find(s => s.student_name.toLowerCase() === student.name.toLowerCase());
+                            const submission = assignmentSubmissions.find(s => {
+                              if (s.student_id && student.id && s.student_id === student.id) return true;
+                              if (s.student_name && student.name) {
+                                const sName = s.student_name.trim().toLowerCase();
+                                const stName = student.name.trim().toLowerCase();
+                                if (sName === stName) {
+                                  if (s.student_id && students.some(other => other.id === s.student_id && other.id !== student.id)) {
+                                    return false;
+                                  }
+                                  return true;
+                                }
+                              }
+                              return false;
+                            });
                             const ack = assignmentAcks.find(a => a.student_id === student.id);
                             const isMissing = !submission;
 
@@ -1279,9 +1292,9 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      {students.find(s => s.name === selectedSubmission.student_name)?.parent_code && (
+                      {students.find(s => (s.id && selectedSubmission.student_id && s.id === selectedSubmission.student_id) || s.name.trim().toLowerCase() === selectedSubmission.student_name?.trim().toLowerCase())?.parent_code && (
                         <span className="font-black text-brand-accent font-mono text-sm bg-brand-bg border border-brand-border px-2 py-1 rounded-lg">
-                          {students.find(s => s.name === selectedSubmission.student_name)?.parent_code}
+                          {students.find(s => (s.id && selectedSubmission.student_id && s.id === selectedSubmission.student_id) || s.name.trim().toLowerCase() === selectedSubmission.student_name?.trim().toLowerCase())?.parent_code}
                         </span>
                       )}
                       <h2 className="text-2xl font-black tracking-tight">{selectedSubmission.student_name}</h2>
