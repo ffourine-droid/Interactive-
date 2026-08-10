@@ -65,6 +65,8 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
   const [success, setSuccess] = useState<string | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [subjectLoading, setSubjectLoading] = useState(false);
   const [form, setForm] = useState<AssignmentForm>({
     title: '',
     subject: '',
@@ -188,8 +190,10 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
   const handleClassSelect = async (classId: string, className?: string) => {
     if (!classId) {
-      setForm(prev => ({ ...prev, class_id: '', class_name: '', expected_students: '' }));
+      setForm(prev => ({ ...prev, class_id: '', class_name: '', grade: '', subject: '' }));
       setStudents([]);
+      setAvailableSubjects([]);
+      setSubjectLoading(false);
       return;
     }
 
@@ -199,59 +203,98 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       finalClassName = selectedClass?.name;
     }
 
+    // Immediately reset grade and subject when class selection changes
     setForm(prev => ({
       ...prev,
       class_id: classId,
-      class_name: finalClassName || prev.class_name
+      class_name: finalClassName || prev.class_name,
+      grade: '',
+      subject: ''
     }));
-
-    if (!finalClassName && classes.length === 0) {
-      return;
-    }
+    setAvailableSubjects([]);
+    setSubjectLoading(true);
 
     try {
       setLoading(true);
+      const teacherStr = localStorage.getItem('azilearn_teacher');
+      const teacherId = teacherStr ? JSON.parse(teacherStr).id : null;
+
+      // 1. Resolve Grade for selected class
       const selectedClass = classes.find(c => c.id === classId);
       let grade = selectedClass?.grade;
 
-      if (!grade) {
-        const teacherData = localStorage.getItem('azilearn_teacher');
-        if (teacherData) {
-          const teacherId = JSON.parse(teacherData).id;
-          const { data: classData } = await supabase.rpc('teacher_get_classes', {
-            p_teacher_id: teacherId
-          });
-          let fetched: any[] = [];
-          if (classData) {
-            if (Array.isArray(classData)) {
-              fetched = classData;
-            } else if (typeof classData === 'object') {
-              const innerArray = Object.values(classData).find(v => Array.isArray(v));
-              if (innerArray) {
-                fetched = innerArray as any[];
-              } else if ((classData as any).id) {
-                fetched = [classData];
-              }
+      if (!grade && teacherId) {
+        const { data: classData } = await supabase.rpc('teacher_get_classes', {
+          p_teacher_id: teacherId
+        });
+        let fetched: any[] = [];
+        if (classData) {
+          if (Array.isArray(classData)) {
+            fetched = classData;
+          } else if (typeof classData === 'object') {
+            const innerArray = Object.values(classData).find(v => Array.isArray(v));
+            if (innerArray) {
+              fetched = innerArray as any[];
+            } else if ((classData as any).id) {
+              fetched = [classData];
             }
           }
-          const cls = fetched.find((c: any) => c.id === classId);
-          if (cls?.grade) {
-            grade = cls.grade;
-          }
+        }
+        const cls = fetched.find((c: any) => c.id === classId);
+        if (cls?.grade) {
+          grade = cls.grade;
         }
       }
 
-      if (grade) {
-        setForm(prev => ({ ...prev, grade: grade }));
+      if (!grade) {
+        const { data: dbCls } = await supabase
+          .from('classes')
+          .select('grade')
+          .eq('id', classId)
+          .maybeSingle();
+        if (dbCls?.grade) {
+          grade = dbCls.grade;
+        }
       }
 
+      // 2. Query subjects via RPC teacher_get_class_subjects for this teacher_id AND class_id
+      let fetchedSubjects: string[] = [];
+      if (teacherId) {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('teacher_get_class_subjects', {
+          p_teacher_id: teacherId,
+          p_class_id: classId
+        });
+
+        if (!rpcErr && rpcRes && rpcRes.success && Array.isArray(rpcRes.subjects)) {
+          fetchedSubjects = Array.from(
+            new Set(
+              rpcRes.subjects
+                .map((s: any) => (typeof s === 'string' ? s.trim() : (s?.subject || '').trim()))
+                .filter((s: string): s is string => Boolean(s))
+            )
+          );
+        }
+      }
+
+      setAvailableSubjects(fetchedSubjects);
+
+      let autoSubject = '';
+      if (fetchedSubjects.length === 1) {
+        autoSubject = fetchedSubjects[0];
+      }
+
+      setForm(prev => ({
+        ...prev,
+        grade: grade || '',
+        subject: autoSubject
+      }));
+
+      // 3. Fetch students for roll call
       let fetchedStudents: any[] = [];
-      try {
-        const teacherStr = localStorage.getItem('azilearn_teacher');
-        if (teacherStr) {
-          const teacher = JSON.parse(teacherStr);
+      if (teacherId) {
+        try {
           const { data: rpcData, error: rpcError } = await supabase.rpc('teacher_get_class_students', {
-            p_teacher_id: teacher.id,
+            p_teacher_id: teacherId,
             p_class_id: classId
           });
           
@@ -277,9 +320,9 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
               }
             }
           }
+        } catch (rpcErr) {
+          console.warn("RPC fetch failed:", rpcErr);
         }
-      } catch (rpcErr) {
-        console.warn("RPC fetch failed:", rpcErr);
       }
 
       setStudents(fetchedStudents);
@@ -287,6 +330,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       console.error("Error in class select:", err);
       showToast("Error fetching student/class data", "error");
     } finally {
+      setSubjectLoading(false);
       setLoading(false);
     }
   };
@@ -322,8 +366,23 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
   };
 
   const validateForm = () => {
-    if (!form.title || !form.subject || !form.grade || !form.class_name || !form.due_date) {
-      showToast("Please fill in all assignment details (Title, Subject, Grade, Class and Date).", "error");
+    if (!form.title || !form.class_id || !form.due_date) {
+      showToast("Please fill in all assignment details (Title, Class, and Due Date).", "error");
+      return false;
+    }
+
+    if (!form.grade) {
+      showToast("Grade could not be determined for the selected class.", "error");
+      return false;
+    }
+
+    if (availableSubjects.length === 0 && !subjectLoading) {
+      showToast("You aren't assigned to teach any subject for this class — contact your school admin.", "error");
+      return false;
+    }
+
+    if (!form.subject) {
+      showToast("Please select a subject before publishing.", "error");
       return false;
     }
 
@@ -545,39 +604,6 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">Subject</label>
-                  <div className="relative">
-                    <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
-                    <select 
-                      className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-6 outline-none appearance-none focus:border-brand-accent/50 transition-all font-bold"
-                      value={form.subject}
-                      onChange={e => setForm({...form, subject: e.target.value})}
-                    >
-                      <option value="">Select</option>
-                      {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted/40 pointer-events-none" size={18} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">Grade</label>
-                  <div className="relative">
-                    <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
-                    <select 
-                      className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-6 outline-none appearance-none focus:border-brand-accent/50 transition-all font-bold"
-                      value={form.grade}
-                      onChange={e => setForm({...form, grade: e.target.value})}
-                    >
-                      <option value="">Select</option>
-                      {grades.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted/40 pointer-events-none" size={18} />
-                  </div>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">Select Class</label>
                 <div className="relative">
@@ -595,6 +621,63 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted/40 pointer-events-none" size={18} />
                 </div>
               </div>
+
+              {form.class_id && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in bg-brand-bg/40 p-4 rounded-2xl border border-brand-border/60">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">Grade</label>
+                    <div className="relative">
+                      <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
+                      <div className="w-full bg-brand-surface border border-brand-border rounded-2xl py-3.5 pl-12 pr-4 font-bold text-brand-text text-sm flex items-center min-h-[48px]">
+                        {form.grade || (subjectLoading ? 'Loading...' : 'Not specified')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">Subject</label>
+                    <div className="relative">
+                      {subjectLoading ? (
+                        <div className="w-full bg-brand-surface border border-brand-border rounded-2xl py-3.5 px-4 font-bold text-brand-muted text-xs flex items-center gap-2 min-h-[48px]">
+                          <Loader2 className="animate-spin text-brand-accent shrink-0" size={16} />
+                          <span>Loading subject...</span>
+                        </div>
+                      ) : availableSubjects.length === 0 ? (
+                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-600 dark:text-red-400 text-xs font-bold leading-snug">
+                          You aren't assigned to teach any subject for this class — contact your school admin.
+                        </div>
+                      ) : availableSubjects.length === 1 ? (
+                        <div className="relative">
+                          <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
+                          <div className="w-full bg-brand-surface border border-brand-border rounded-2xl py-3.5 pl-12 pr-4 font-bold text-brand-text text-sm flex items-center min-h-[48px]">
+                            {form.subject}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">Tap to select subject:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {availableSubjects.map(s => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setForm(prev => ({ ...prev, subject: s }))}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                                  form.subject === s
+                                    ? 'bg-brand-accent text-white shadow-md shadow-brand-accent/20 border border-brand-accent'
+                                    : 'bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent/40'
+                                }`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">Due Date</label>

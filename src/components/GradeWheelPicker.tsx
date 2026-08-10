@@ -334,21 +334,6 @@ export default function GradeWheelPicker({
         </span>
       </div>
       <div className="px-4 mt-2 space-y-2">
-        <div 
-          onClick={onExamsClick}
-          className="bg-brand-surface rounded-full px-3.5 py-2.5 flex items-center gap-3 shadow-sm border border-brand-border cursor-pointer active:scale-[0.98] transition-all"
-        >
-          <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-            <ClipboardList className="w-4 h-4 text-amber-500" strokeWidth={2} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-bold text-brand-text text-[13px]">KCSE Revision</div>
-            <div className="text-brand-muted text-[11px] truncate">National Assessment · Secondary</div>
-          </div>
-          <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-            <ChevronRight className="w-3.5 h-3.5 text-brand-muted" />
-          </div>
-        </div>
 
         <div 
           onClick={onCommunityClick}

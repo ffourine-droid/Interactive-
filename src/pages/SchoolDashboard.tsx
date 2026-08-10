@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { CANONICAL_SUBJECTS } from '../types';
 import SchoolTeachersList from '../components/SchoolTeachersList';
 import { SchoolClassesManager } from '../components/SchoolClassesManager';
 
@@ -98,7 +99,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
   ]);
 
   const gradesList = ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
-  const subjectsList = ['Mathematics', 'Science', 'English', 'Kiswahili', 'Social Studies'];
+  const subjectsList = CANONICAL_SUBJECTS;
 
   useEffect(() => {
     fetchDashboardData();

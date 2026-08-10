@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useStudent } from "../contexts/StudentContext";
+import { assignmentService } from "../services/assignmentService";
 
 const NAVY = "#0A1628";
 const ORANGE = "#F97316";
@@ -181,18 +182,119 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [skippedQuestions, setSkippedQuestions] = useState<Set<string>>(new Set());
+  const saveDebounceTimers = useRef<Record<string, any>>({});
 
-  function setAnswer(questionId: string, value: any) {
+  useEffect(() => {
+    async function loadDraft() {
+      const activeStudentId = currentStudent?.student_id || (() => {
+        try {
+          const studentStr = localStorage.getItem('azilearn_student');
+          if (studentStr) return JSON.parse(studentStr).id || null;
+        } catch {}
+        return null;
+      })();
+
+      if (activeStudentId && activeStudentId.length === 36 && assignment?.id) {
+        const draftRes = await assignmentService.getOrCreateDraft(activeStudentId, assignment.id);
+        if (draftRes) {
+          if (draftRes.already_submitted) {
+            onSubmitted();
+            return;
+          }
+          if (draftRes.submission_id || draftRes.id) {
+            setSubmissionId(draftRes.submission_id || draftRes.id);
+          }
+          if (draftRes.draft_answers && typeof draftRes.draft_answers === 'object') {
+            setAnswers(draftRes.draft_answers);
+          }
+          if (draftRes.skipped_questions) {
+            if (Array.isArray(draftRes.skipped_questions)) {
+              setSkippedQuestions(new Set(draftRes.skipped_questions));
+            } else if (typeof draftRes.skipped_questions === 'object') {
+              setSkippedQuestions(new Set(Object.keys(draftRes.skipped_questions)));
+            }
+          }
+        }
+      }
+    }
+    loadDraft();
+  }, [assignment?.id]);
+
+  const saveAnswerDraft = async (questionId: string, val: any) => {
+    const activeStudentId = currentStudent?.student_id || (() => {
+      try {
+        const studentStr = localStorage.getItem('azilearn_student');
+        if (studentStr) return JSON.parse(studentStr).id || null;
+      } catch {}
+      return null;
+    })();
+
+    if (!submissionId || !activeStudentId || activeStudentId.length !== 36) return;
+
+    await assignmentService.saveDraftAnswer(activeStudentId, submissionId, questionId, val);
+  };
+
+  function setAnswer(questionId: string, value: any, isText: boolean = false) {
     setAnswers((a) => ({ ...a, [questionId]: value }));
+
+    setSkippedQuestions(prev => {
+      if (prev.has(questionId)) {
+        const next = new Set(prev);
+        next.delete(questionId);
+        return next;
+      }
+      return prev;
+    });
+
+    if (isText) {
+      if (saveDebounceTimers.current[questionId]) {
+        clearTimeout(saveDebounceTimers.current[questionId]);
+      }
+      saveDebounceTimers.current[questionId] = setTimeout(() => {
+        saveAnswerDraft(questionId, value);
+      }, 500);
+    } else {
+      if (saveDebounceTimers.current[questionId]) {
+        clearTimeout(saveDebounceTimers.current[questionId]);
+      }
+      saveAnswerDraft(questionId, value);
+    }
   }
+
+  const handleSkipQuestion = async (qIndex: number, questionId: string) => {
+    setSkippedQuestions(prev => {
+      const next = new Set(prev);
+      next.add(questionId);
+      return next;
+    });
+
+    const activeStudentId = currentStudent?.student_id || (() => {
+      try {
+        const studentStr = localStorage.getItem('azilearn_student');
+        if (studentStr) return JSON.parse(studentStr).id || null;
+      } catch {}
+      return null;
+    })();
+
+    if (submissionId && activeStudentId && activeStudentId.length === 36) {
+      await assignmentService.skipQuestion(activeStudentId, submissionId, questionId);
+    }
+
+    const nextEl = document.getElementById(`sq-${qIndex + 1}`);
+    if (nextEl) {
+      nextEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
     const unanswered = (assignment.questions || []).filter((q: any) => !answers[q.id]);
-    if (unanswered.length > 0) {
-      setError(`Please answer all questions (${unanswered.length} left).`);
+    if (unanswered.length > 0 && unanswered.length === assignment.questions.length) {
+      setError(`Please answer at least one question.`);
       return;
     }
 
@@ -344,6 +446,11 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
     onSubmitted();
   }
 
+  const totalQuestions = assignment.questions?.length || 0;
+  const answeredCount = (assignment.questions || []).filter((q: any) => answers[q.id] !== undefined && answers[q.id] !== '' && !skippedQuestions.has(q.id)).length;
+  const skippedCount = (assignment.questions || []).filter((q: any) => skippedQuestions.has(q.id)).length;
+  const progressPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+
   return (
     <form onSubmit={handleSubmit} style={cardStyle as React.CSSProperties}>
       <button type="button" onClick={onBack} style={linkButtonStyle as React.CSSProperties}>
@@ -356,11 +463,31 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
         {assignment.due_date ? ` · Due ${new Date(assignment.due_date).toLocaleDateString()}` : ""}
       </p>
 
+      {/* Progress Bar */}
+      <div style={{ margin: "16px 0", padding: "12px", background: "#132338", borderRadius: 12, border: "1px solid #2A3B5C" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, color: "#94A3B8", marginBottom: 6 }}>
+          <span>{answeredCount}/{totalQuestions} answered {skippedCount > 0 ? `· ${skippedCount} skipped` : ''}</span>
+          <span style={{ color: ORANGE }}>{progressPercent}% complete</span>
+        </div>
+        <div style={{ width: "100%", height: 6, background: "#0A1628", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ width: `${progressPercent}%`, height: "100%", background: ORANGE, transition: "width 0.3s" }} />
+        </div>
+      </div>
+
       {(assignment.questions || []).map((q: any, i: number) => (
-        <QuestionField key={q.id} index={i} question={q} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
+        <div key={q.id} id={`sq-${i}`}>
+          <QuestionField 
+            index={i} 
+            question={q} 
+            value={answers[q.id]} 
+            isSkipped={skippedQuestions.has(q.id)}
+            onChange={(v, isText) => setAnswer(q.id, v, isText)} 
+            onSkip={() => handleSkipQuestion(i, q.id)}
+          />
+        </div>
       ))}
 
-      <label style={labelStyle as React.CSSProperties}>Your name</label>
+      <label style={{ ...labelStyle as React.CSSProperties, marginTop: 20 }}>Your name</label>
       <input
         value={studentName}
         onChange={(e) => setStudentName(e.target.value)}
@@ -383,17 +510,26 @@ interface QuestionFieldProps {
   index: number;
   question: any;
   value: any;
-  onChange: (val: any) => void;
+  isSkipped?: boolean;
+  onChange: (val: any, isText?: boolean) => void;
+  onSkip?: () => void;
 }
 
-function QuestionField({ index, question, value, onChange }: QuestionFieldProps) {
+function QuestionField({ index, question, value, isSkipped, onChange, onSkip }: QuestionFieldProps) {
   const isMcq = Array.isArray(question.options) && question.options.length > 0;
 
   return (
-    <div style={{ marginTop: 18 }}>
-      <p style={{ color: "#fff", fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-        {index + 1}. {question.text}
-      </p>
+    <div style={{ marginTop: 18, padding: 12, borderRadius: 12, background: isSkipped ? "#1E1B10" : "#0F1C2E", border: isSkipped ? "1px solid #D97706" : "1px solid #1E2D4A" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <p style={{ color: "#fff", fontSize: 14, fontWeight: 600, margin: 0 }}>
+          {index + 1}. {question.text}
+        </p>
+        {isSkipped && (
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#F59E0B", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 99, textTransform: "uppercase" }}>
+            Skipped
+          </span>
+        )}
+      </div>
 
       {isMcq ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -417,7 +553,7 @@ function QuestionField({ index, question, value, onChange }: QuestionFieldProps)
                 type="radio"
                 name={question.id}
                 checked={value === opt}
-                onChange={() => onChange(opt)}
+                onChange={() => onChange(opt, false)}
               />
               {opt}
             </label>
@@ -426,10 +562,31 @@ function QuestionField({ index, question, value, onChange }: QuestionFieldProps)
       ) : (
         <textarea
           value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value, true)}
           rows={3}
           style={{ ...(inputStyle as React.CSSProperties), resize: "vertical" }}
         />
+      )}
+
+      {onSkip && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+          <button
+            type="button"
+            onClick={onSkip}
+            style={{
+              background: isSkipped ? "rgba(245, 158, 11, 0.2)" : "rgba(255, 255, 255, 0.05)",
+              border: isSkipped ? "1px solid #D97706" : "1px solid #2A3B5C",
+              color: isSkipped ? "#F59E0B" : "#8C9BB5",
+              borderRadius: 6,
+              padding: "4px 10px",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {isSkipped ? "Skipped ✓" : "Skip question →"}
+          </button>
+        </div>
       )}
     </div>
   );

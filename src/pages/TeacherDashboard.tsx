@@ -5,6 +5,7 @@ import {
   Plus, 
   LogOut, 
   ChevronRight, 
+  ChevronDown,
   BookOpen,
   Calendar,
   Loader2,
@@ -29,7 +30,7 @@ import { TeacherCompetitionManager } from '../components/TeacherCompetitionManag
 import { QuestionRequestForm } from '../components/QuestionRequestForm';
 import { MaterialCard } from '../components/MaterialCard';
 import { SlidesViewer } from '../components/SlidesViewer';
-import { Experiment } from '../types';
+import { Experiment, CANONICAL_SUBJECTS } from '../types';
 import ModerationPage from './ModerationPage';
 import { SchoolSetupModal } from '../components/SchoolSetupModal';
 import LinkSchoolField from '../components/LinkSchoolField';
@@ -1363,21 +1364,47 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                               {/* Selected Join Form */}
                               {isCurrentlySelected && (
-                                <form onSubmit={handleJoinClass} className="mt-3 pt-3 border-t border-brand-border/40 space-y-2">
-                                  <div className="space-y-1">
-                                    <label className="text-[9px] font-black uppercase tracking-wider text-brand-accent">
+                                <form onSubmit={handleJoinClass} className="mt-3 pt-3 border-t border-brand-border/40 space-y-3">
+                                  <div className="space-y-2">
+                                    <label className="text-[9px] font-black uppercase tracking-wider text-brand-accent block">
                                       What subject will you teach this class?
                                     </label>
-                                    <input 
-                                      type="text"
-                                      placeholder="e.g. Mathematics, Science, English..."
-                                      className="w-full bg-brand-surface border border-brand-accent/50 rounded-xl p-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-brand-accent/20 text-brand-text"
-                                      value={enteredSubject}
-                                      onChange={(e) => setEnteredSubject(e.target.value)}
-                                      disabled={joiningClass}
-                                      required
-                                      autoFocus
-                                    />
+                                    
+                                    {/* Tappable Chip List */}
+                                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-brand-surface/40 border border-brand-border/50 rounded-xl">
+                                      {CANONICAL_SUBJECTS.map(sub => (
+                                        <button
+                                          key={sub}
+                                          type="button"
+                                          disabled={joiningClass}
+                                          onClick={() => setEnteredSubject(sub)}
+                                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+                                            enteredSubject === sub
+                                              ? 'bg-brand-accent text-white shadow-sm shadow-brand-accent/20 border border-brand-accent'
+                                              : 'bg-brand-surface text-brand-text border border-brand-border hover:border-brand-accent/40'
+                                          }`}
+                                        >
+                                          {sub}
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    {/* Dropdown fallback */}
+                                    <div className="relative">
+                                      <select 
+                                        className="w-full bg-brand-surface border border-brand-accent/50 rounded-xl p-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-brand-accent/20 text-brand-text appearance-none"
+                                        value={enteredSubject}
+                                        onChange={(e) => setEnteredSubject(e.target.value)}
+                                        disabled={joiningClass}
+                                        required
+                                      >
+                                        <option value="">-- Select or Tap Subject Above --</option>
+                                        {CANONICAL_SUBJECTS.map(sub => (
+                                          <option key={sub} value={sub}>{sub}</option>
+                                        ))}
+                                      </select>
+                                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted pointer-events-none" size={14} />
+                                    </div>
                                   </div>
                                   <div className="flex gap-2">
                                     <button

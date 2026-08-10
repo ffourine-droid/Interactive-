@@ -16,7 +16,8 @@ import {
   Trophy,
   Calendar,
   Filter,
-  School
+  School,
+  FastForward
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -51,7 +52,6 @@ export const StudentAssignmentView: React.FC<{
 }> = ({ onBack, onExamsClick, preSelectedAssignmentId }) => {
   const { currentStudent } = useStudent();
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
-  const [searchCode, setSearchCode] = useState('');
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchSchool, setSearchSchool] = useState(() => {
     if (currentStudent?.school_name) return currentStudent.school_name;
@@ -138,6 +138,9 @@ export const StudentAssignmentView: React.FC<{
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [files, setFiles] = useState<Record<string, File>>({});
   const [submission, setSubmission] = useState<any | null>(null);
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [skippedQuestions, setSkippedQuestions] = useState<Set<string>>(new Set());
+  const saveDebounceTimers = React.useRef<Record<string, any>>({});
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -157,7 +160,7 @@ export const StudentAssignmentView: React.FC<{
     setHasSearched(true);
     try {
       const sId = currentStudent?.student_id || studentId;
-      const hasSearchFilters = searchCode.trim() || searchTeacher.trim() || searchSchool.trim() || searchTitle.trim();
+      const hasSearchFilters = searchTeacher.trim() || searchSchool.trim() || searchTitle.trim();
       
       // If we have a logged-in student and NO search criteria are entered, use RPC to fetch their exact assignments
       if (sId && sId.length === 36 && !hasSearchFilters) { 
@@ -175,7 +178,7 @@ export const StudentAssignmentView: React.FC<{
       }
 
       // Explicit search or fallback with filters (including title)
-      const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool, searchCode, searchTitle);
+      const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool, searchTitle);
       setAssignments(data);
     } catch (err: any) {
       showToast(err.message, "error");
@@ -238,21 +241,44 @@ export const StudentAssignmentView: React.FC<{
         }
       }
 
-      // Check if already submitted — guard against non-UUID sid
+      // Check draft & submission via get_or_create_draft for registered students
       const isUuid = (v: any) => v && String(v).length === 36 && String(v).includes('-');
       if (isUuid(sid)) {
-        const { data: subData } = await supabase
-          .from('assignment_submissions')
-          .select('*')
-          .eq('assignment_id', id)
-          .eq('student_id', sid)
-          .maybeSingle();
+        const draftRes = await assignmentService.getOrCreateDraft(sid, id);
+        if (draftRes) {
+          if (draftRes.already_submitted) {
+            const { data: subData } = await supabase
+              .from('assignment_submissions')
+              .select('*')
+              .eq('assignment_id', id)
+              .eq('student_id', sid)
+              .maybeSingle();
 
-        if (subData) {
-          setSubmission(subData);
-          setStep('success');
-          setLoading(false);
-          return;
+            setSubmission(subData || {
+              assignment_id: id,
+              student_id: sid,
+              status: 'submitted',
+            });
+            setStep('success');
+            setLoading(false);
+            return;
+          }
+
+          if (draftRes.submission_id || draftRes.id) {
+            setSubmissionId(draftRes.submission_id || draftRes.id);
+          }
+
+          if (draftRes.draft_answers && typeof draftRes.draft_answers === 'object') {
+            setAnswers(draftRes.draft_answers);
+          }
+
+          if (draftRes.skipped_questions) {
+            if (Array.isArray(draftRes.skipped_questions)) {
+              setSkippedQuestions(new Set(draftRes.skipped_questions));
+            } else if (typeof draftRes.skipped_questions === 'object') {
+              setSkippedQuestions(new Set(Object.keys(draftRes.skipped_questions)));
+            }
+          }
         }
       }
 
@@ -265,16 +291,71 @@ export const StudentAssignmentView: React.FC<{
     }
   };
 
-  const handleAnswerChange = (questionId: string, val: any) => {
+  const saveAnswerDraft = async (questionId: string, val: any) => {
+    const activeStudentId = currentStudent?.student_id || studentId;
+    const isUuid = (v: any) => v && String(v).length === 36 && String(v).includes('-');
+
+    if (!submissionId || !activeStudentId || !isUuid(activeStudentId)) return;
+
+    await assignmentService.saveDraftAnswer(activeStudentId, submissionId, questionId, val);
+  };
+
+  const handleAnswerChange = (questionId: string, val: any, isText: boolean = false) => {
     setAnswers(prev => ({ ...prev, [questionId]: val }));
+
+    setSkippedQuestions(prev => {
+      if (prev.has(questionId)) {
+        const next = new Set(prev);
+        next.delete(questionId);
+        return next;
+      }
+      return prev;
+    });
+
+    if (isText) {
+      if (saveDebounceTimers.current[questionId]) {
+        clearTimeout(saveDebounceTimers.current[questionId]);
+      }
+      saveDebounceTimers.current[questionId] = setTimeout(() => {
+        saveAnswerDraft(questionId, val);
+      }, 500);
+    } else {
+      if (saveDebounceTimers.current[questionId]) {
+        clearTimeout(saveDebounceTimers.current[questionId]);
+      }
+      saveAnswerDraft(questionId, val);
+    }
+  };
+
+  const handleSkipQuestion = async (qIndex: number, questionId: string) => {
+    if (!assignment) return;
+
+    setSkippedQuestions(prev => {
+      const next = new Set(prev);
+      next.add(questionId);
+      return next;
+    });
+
+    const activeStudentId = currentStudent?.student_id || studentId;
+    const isUuid = (v: any) => v && String(v).length === 36 && String(v).includes('-');
+
+    if (submissionId && activeStudentId && isUuid(activeStudentId)) {
+      await assignmentService.skipQuestion(activeStudentId, submissionId, questionId);
+    }
+
+    showToast(`Question ${qIndex + 1} skipped`, "info");
+
+    const nextCard = document.getElementById(`q-${qIndex + 1}`);
+    if (nextCard) {
+      nextCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   };
 
   const handleFileChange = (questionId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setFiles(prev => ({ ...prev, [questionId]: file }));
-      // Generate a preview local URL if needed, but here we just store the file
-      handleAnswerChange(questionId, file.name); 
+      handleAnswerChange(questionId, file.name, false); 
     }
   };
 
@@ -610,9 +691,14 @@ export const StudentAssignmentView: React.FC<{
   }
 
   if (step === 'taking' && assignment) {
+    const totalQuestions = assignment.questions?.length || 0;
+    const answeredCount = assignment.questions?.filter(q => answers[q.id] !== undefined && answers[q.id] !== '' && !skippedQuestions.has(q.id)).length || 0;
+    const skippedCount = assignment.questions?.filter(q => skippedQuestions.has(q.id)).length || 0;
+    const progressPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+
     return (
       <div className="max-w-[420px] mx-auto pb-12">
-        <header className="sticky top-0 z-50 bg-brand-bg/80 backdrop-blur-xl border-b border-brand-border p-4 flex items-center justify-between">
+        <header className="sticky top-0 z-50 bg-brand-bg/90 backdrop-blur-xl border-b border-brand-border p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="p-2 hover:bg-brand-surface rounded-xl transition-colors">
               <ChevronLeft size={20} />
@@ -627,6 +713,29 @@ export const StudentAssignmentView: React.FC<{
             <span className="text-[10px] font-bold whitespace-nowrap">{getDueStatus(assignment.due_date)}</span>
           </div>
         </header>
+
+        {/* Progress Bar Header */}
+        <div className="bg-brand-surface/90 backdrop-blur-md border-b border-brand-border px-4 py-3 sticky top-[65px] z-40 shadow-sm">
+          <div className="max-w-[420px] mx-auto space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-brand-text">
+              <div className="flex items-center gap-2">
+                <span className="text-brand-accent font-black">{answeredCount}/{totalQuestions} answered</span>
+                {skippedCount > 0 && (
+                  <span className="text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider">
+                    · {skippedCount} skipped
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-black uppercase text-brand-muted tracking-widest">{progressPercent}% complete</span>
+            </div>
+            <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden border border-brand-border/40">
+              <div 
+                className="h-full bg-gradient-to-r from-brand-accent to-amber-500 transition-all duration-300 rounded-full"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        </div>
 
         <main className="p-4 space-y-6">
           {needsClassSelection && (
@@ -671,25 +780,47 @@ export const StudentAssignmentView: React.FC<{
             {assignment.questions.map((q, idx) => (
               <motion.div 
                 key={q.id}
+                id={`q-${idx}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className="bg-brand-surface border border-brand-border rounded-2xl p-4 shadow-sm"
+                transition={{ delay: idx * 0.05 }}
+                className={`bg-brand-surface border rounded-2xl p-4 shadow-sm transition-all ${
+                  skippedQuestions.has(q.id)
+                    ? 'border-amber-500/40 bg-amber-500/[0.02]'
+                    : answers[q.id] !== undefined && answers[q.id] !== ''
+                      ? 'border-emerald-500/30 bg-emerald-500/[0.01]'
+                      : 'border-brand-border'
+                }`}
               >
-                <div className="flex items-start gap-3 mb-3">
-                  <div className="w-7 h-7 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0">
-                    {idx + 1}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0">
+                      {idx + 1}
+                    </div>
+                    <h3 className="font-bold text-base leading-tight pt-0.5 text-brand-text">{q.text}</h3>
                   </div>
-                  <h3 className="font-bold text-base leading-tight pt-0.5 text-brand-text">{q.text}</h3>
+
+                  {/* Status Badges */}
+                  {skippedQuestions.has(q.id) ? (
+                    <span className="shrink-0 px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
+                      <FastForward size={12} />
+                      Skipped
+                    </span>
+                  ) : answers[q.id] !== undefined && answers[q.id] !== '' ? (
+                    <span className="shrink-0 px-2.5 py-1 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
+                      <CheckCircle2 size={12} />
+                      Answered
+                    </span>
+                  ) : null}
                 </div>
 
-                <div className="mt-3 pl-0 sm:pl-10">
+                <div className="mt-3 pl-0 sm:pl-10 space-y-3">
                   {q.type === 'mcq' && (
                     <div className="space-y-2">
                       {q.options.map((opt, optIdx) => (
                         <button
                           key={optIdx}
-                          onClick={() => handleAnswerChange(q.id, optIdx.toString())}
+                          onClick={() => handleAnswerChange(q.id, optIdx.toString(), false)}
                           className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between group ${
                             answers[q.id] === optIdx.toString()
                               ? 'bg-brand-accent border-brand-accent text-white'
@@ -712,7 +843,7 @@ export const StudentAssignmentView: React.FC<{
                       placeholder="Type your answer here..."
                       className="w-full bg-brand-bg border border-brand-border rounded-xl p-3.5 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold text-sm min-h-[90px] resize-none"
                       value={answers[q.id] || ''}
-                      onChange={e => handleAnswerChange(q.id, e.target.value)}
+                      onChange={e => handleAnswerChange(q.id, e.target.value, true)}
                     />
                   )}
 
@@ -761,6 +892,25 @@ export const StudentAssignmentView: React.FC<{
                       )}
                     </div>
                   )}
+
+                  {/* Question Skip Bar */}
+                  <div className="mt-3 pt-3 border-t border-brand-border/30 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">
+                      {skippedQuestions.has(q.id) ? 'Skipped for now' : answers[q.id] ? 'Draft saved' : 'Not answered yet'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSkipQuestion(idx, q.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 ${
+                        skippedQuestions.has(q.id)
+                          ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30'
+                          : 'bg-brand-bg hover:bg-brand-accent/10 text-brand-muted hover:text-brand-accent border border-brand-border'
+                      }`}
+                    >
+                      <FastForward size={14} />
+                      {skippedQuestions.has(q.id) ? 'Skipped' : 'Skip Question'}
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -823,25 +973,13 @@ export const StudentAssignmentView: React.FC<{
 
           <div className="space-y-4">
             <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-accent/50 group-focus-within:text-brand-accent transition-colors" size={18} />
-              <input 
-                type="text"
-                placeholder="Assignment Code (Optional)"
-                value={searchCode}
-                onChange={e => setSearchCode(e.target.value)}
-                className="w-full bg-white dark:bg-brand-card border border-brand-accent/20 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm placeholder:text-brand-muted/70"
-              />
-              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-accent tracking-widest transition-all rounded-md border border-brand-accent/30">Assignment Code</span>
-            </div>
-
-            <div className="relative group">
               <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
               <input 
                 type="text"
-                placeholder="Search by Assignment Name..."
+                placeholder="Assignment Name"
                 value={searchTitle}
                 onChange={e => setSearchTitle(e.target.value)}
-                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm placeholder:text-brand-muted/70"
+                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
               />
               <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">Assignment Name</span>
             </div>

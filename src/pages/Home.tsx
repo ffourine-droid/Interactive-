@@ -726,24 +726,6 @@ export default function Home({
                           <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted font-black">Quick Access</h2>
                         </div>
 
-                        {/* KCSE Revision Card */}
-                        <button
-                          onClick={(e) => { rippleEffect(e); handleClassSelect('KCSE'); }}
-                          className="relative overflow-hidden w-full bg-brand-surface border border-brand-border border-b-[4px] border-b-yellow-500/50 hover:border-yellow-500 rounded-2xl p-4 flex items-center justify-between transition-all shadow-sm group text-left real-press active:translate-y-[2px] cursor-pointer"
-                        >
-                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500" />
-                          <div className="flex items-center gap-3 pl-1">
-                            <div className="w-11 h-11 bg-yellow-500/10 rounded-xl flex items-center justify-center text-yellow-500 text-xl font-bold shrink-0">
-                              📋
-                            </div>
-                            <div>
-                              <h3 className="font-display text-xs font-black text-brand-text group-hover:text-yellow-500 transition-colors leading-tight">KCSE Revision</h3>
-                              <p className="text-[10px] font-semibold text-brand-muted mt-0.5 leading-snug">National Assessment · Secondary</p>
-                            </div>
-                          </div>
-                          <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0">›</span>
-                        </button>
-
                         {/* School Forum Card */}
                         <button
                           onClick={onCommunityClick}

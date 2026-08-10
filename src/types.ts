@@ -91,3 +91,26 @@ export interface AnswerLog {
   answered_at: string;
   is_overtime: boolean;
 }
+
+export const CANONICAL_SUBJECTS = [
+  'Mathematics',
+  'Science',
+  'Integrated Science',
+  'English',
+  'Kiswahili',
+  'Social Studies',
+  'Agriculture',
+  'Agriculture & Nutrition',
+  'CRE',
+  'IRE',
+  'Religious Education',
+  'Creative Arts & Sports',
+  'Pre-Technical Studies',
+  'Business Studies',
+  'History',
+  'Geography',
+  'Biology',
+  'Chemistry',
+  'Physics'
+];
+

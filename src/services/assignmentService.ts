@@ -1,29 +1,7 @@
 import { supabase } from '../lib/supabase';
 
 export const assignmentService = {
-  async searchAssignments(grade: string, teacherName?: string, schoolName?: string, code?: string, title?: string) {
-    // If a code is provided, try to find that specific assignment first (using share_code)
-    if (code?.trim()) {
-      const { data: codeAsgn, error: codeError } = await supabase
-        .from('assignments')
-        .select(`
-          *,
-          teacher:teacher_id (
-            name,
-            school_name
-          ),
-          class:class_id (
-            name
-          )
-        `)
-        .eq('share_code', code.trim().toUpperCase())
-        .maybeSingle();
-      
-      if (codeAsgn) return [codeAsgn];
-      // If code was provided but not found, return empty (don't fall back to grade search if code was intended)
-      return [];
-    }
-
+  async searchAssignments(grade: string, teacherName?: string, schoolName?: string, title?: string) {
     const { data, error } = await supabase
       .from('assignments')
       .select(`
@@ -106,5 +84,48 @@ export const assignmentService = {
     }
 
     return { assignment: data, studentId };
+  },
+
+  async getOrCreateDraft(studentId: string, assignmentId: string) {
+    const { data, error } = await supabase.rpc('get_or_create_draft', {
+      p_student_id: studentId,
+      p_assignment_id: assignmentId
+    });
+
+    if (error) {
+      console.warn('get_or_create_draft RPC notice:', error.message);
+      return null;
+    }
+
+    return typeof data === 'string' ? JSON.parse(data) : data;
+  },
+
+  async saveDraftAnswer(studentId: string, submissionId: string, questionId: string, answer: any) {
+    const { data, error } = await supabase.rpc('save_draft_answer', {
+      p_student_id: studentId,
+      p_submission_id: submissionId,
+      p_question_id: questionId,
+      p_answer: answer
+    });
+
+    if (error) {
+      console.warn('save_draft_answer RPC notice:', error.message);
+    }
+
+    return data;
+  },
+
+  async skipQuestion(studentId: string, submissionId: string, questionId: string) {
+    const { data, error } = await supabase.rpc('skip_question', {
+      p_student_id: studentId,
+      p_submission_id: submissionId,
+      p_question_id: questionId
+    });
+
+    if (error) {
+      console.warn('skip_question RPC notice:', error.message);
+    }
+
+    return data;
   }
 };
