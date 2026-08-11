@@ -178,9 +178,30 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       });
 
       if (error) throw error;
+
+      // Update local submissions state immediately so UI does not show stale cached data
+      const updatedGrading = { ...(selectedSubmission.grading || {}) };
+      Object.entries(questionGrades).forEach(([qId, qg]) => {
+        if (qg && qg.score !== '') {
+          updatedGrading[qId] = {
+            marks_awarded: Number(qg.score),
+            comment: qg.comment || null
+          };
+        }
+      });
+
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? {
+        ...s,
+        score: runningTotal,
+        status: 'graded',
+        teacher_comment: feedback || null,
+        teacher_reply: teacherReply || s.teacher_reply,
+        grading: updatedGrading
+      } : s));
+
       showToast('Marks and remarks updated!', 'success');
-      fetchData();
       setSelectedSubmission(null);
+      fetchData();
     } catch (err: any) {
       showToast(err.message, 'error');
     } finally {

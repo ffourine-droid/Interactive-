@@ -209,6 +209,26 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
       if (finalErr) throw finalErr;
       
+      // Update local submissions state immediately so UI does not show stale cached data
+      const updatedGrading = { ...(selectedSubmission.grading || {}) };
+      Object.entries(questionGrades).forEach(([qId, qg]) => {
+        if (qg && qg.score !== '') {
+          updatedGrading[qId] = {
+            marks_awarded: Number(qg.score),
+            comment: qg.comment || null
+          };
+        }
+      });
+
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? {
+        ...s,
+        score: runningTotal,
+        status: 'graded',
+        teacher_comment: feedbackInput || null,
+        teacher_reply: replyInput || (s as any).teacher_reply,
+        grading: updatedGrading
+      } : s));
+
       showToast("Submission graded successfully!", "success");
       setSelectedSubmission(null);
       fetchInitialData(); // Refresh the list
