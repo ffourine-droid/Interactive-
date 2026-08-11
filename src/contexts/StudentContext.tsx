@@ -193,6 +193,7 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.removeItem('azilearn_student');
     localStorage.removeItem('azilearn_student_profile');
     localStorage.removeItem('azilearn_arena_player');
+    localStorage.removeItem('azilearn_device_id');
     sessionStorage.removeItem('azilearn_student_name');
     setCurrentStudent(null);
     setIsIdentityModalOpen(true);
