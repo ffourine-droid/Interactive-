@@ -62,47 +62,16 @@ export const assignmentService = {
     if (error) throw error;
     if (!data) throw new Error("Assignment not found.");
 
-    // Resolve student ID: check class roster first, fallback to student_self_register
     let studentId = studentName;
-    if (typeof window !== 'undefined') {
-      let deviceId = localStorage.getItem('azilearn_device_id');
-      if (!deviceId) {
-        deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('azilearn_device_id', deviceId);
-      }
-
-      if (data.class_id && studentName.trim()) {
-        try {
-          const { data: rosterStudents } = await supabase
-            .from('students')
-            .select('id, name')
-            .eq('class_id', data.class_id);
-
-          if (rosterStudents && rosterStudents.length > 0) {
-            const trimmedName = studentName.trim().toLowerCase();
-            const matchedStudent = rosterStudents.find(
-              s => s.name && s.name.trim().toLowerCase() === trimmedName
-            );
-            if (matchedStudent?.id) {
-              studentId = matchedStudent.id;
-            }
-          }
-        } catch (lookupErr) {
-          console.warn('Roster lookup warning:', lookupErr);
+    if (typeof window !== 'undefined' && studentName.trim()) {
+      try {
+        const { resolveStudentIdentity } = await import('./studentIdentityService');
+        const res = await resolveStudentIdentity(studentName, data.class_id || null, data.grade || null);
+        if (res.status === 'EXACT_MATCH' && res.student) {
+          studentId = res.student.id;
         }
-      }
-
-      if (studentId === studentName) {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
-          p_name: studentName.trim(),
-          p_grade: data.grade || 'Grade 7',
-          p_device_id: deviceId,
-          p_class_id: data.class_id || null
-        });
-
-        if (!rpcErr && rpcRes) {
-          studentId = rpcRes.id || rpcRes.student_id || studentId;
-        }
+      } catch (lookupErr) {
+        console.warn('Roster lookup warning:', lookupErr);
       }
     }
 

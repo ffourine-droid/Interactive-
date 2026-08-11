@@ -44,49 +44,14 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { showToast } = useToast();
 
   const loadStudent = async () => {
-    const deviceId = getOrCreateDeviceId();
-    
-    try {
-      // 1. Try to fetch using get_student_by_device RPC
-      const { data, error } = await supabase.rpc('get_student_by_device', {
-        p_device_id: deviceId
-      });
-
-      if (!error && data && data.success) {
-        const studentObj: Student = {
-          student_id: data.student_id,
-          name: data.name,
-          grade: data.grade,
-          school_name: data.school_name,
-          class_id: data.class_id,
-          index_number: data.index_number,
-          total_xp: data.total_xp
-        };
-        setCurrentStudent(studentObj);
-        localStorage.setItem('azilearn_student', JSON.stringify({
-          id: studentObj.student_id,
-          name: studentObj.name,
-          grade: studentObj.grade,
-          class_id: studentObj.class_id,
-          school_name: studentObj.school_name
-        }));
-        setLoading(false);
-        return;
-      }
-    } catch (rpcErr) {
-      console.warn("RPC get_student_by_device failed or not found, trying query fallback...", rpcErr);
-    }
-
-    // Fallback removed to prevent RLS query blocks
-
-    // 3. Local Storage fallback for existing guest profile
+    // Check cached student profile in Local Storage
     const cached = localStorage.getItem('azilearn_student');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (parsed && parsed.id) {
+        if (parsed && (parsed.id || parsed.student_id)) {
           const studentObj: Student = {
-            student_id: parsed.id,
+            student_id: parsed.id || parsed.student_id,
             name: parsed.name,
             grade: parsed.grade || 'Grade 7',
             class_id: parsed.class_id || null,
@@ -95,18 +60,6 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
             total_xp: parsed.total_xp || 0
           };
           setCurrentStudent(studentObj);
-          
-          // Try to update their device_id in Supabase background to link the device using RPC
-          try {
-            await supabase.rpc('student_self_register', {
-              p_name: parsed.name,
-              p_grade: parsed.grade || 'Grade 7',
-              p_device_id: deviceId,
-              p_class_id: parsed.class_id || null
-            });
-          } catch (updateErr) {
-            console.warn("Could not bind device_id in background:", updateErr);
-          }
         } else {
           setIsIdentityModalOpen(true);
         }
@@ -123,58 +76,36 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     loadStudent();
   }, []);
 
-  const identifyStudent = useCallback(async (name: string, grade: string) => {
-    const deviceId = getOrCreateDeviceId();
-    
+  const identifyStudent = useCallback(async (name: string, grade: string, classId?: string | null) => {
+    // Rely on explicit roster lookup or guest registration elsewhere
+    let deviceId = localStorage.getItem('azilearn_device_id');
+    if (!deviceId) {
+      deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('azilearn_device_id', deviceId);
+    }
+
     const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
       p_name: name.trim(),
       p_grade: grade,
       p_device_id: deviceId,
-      p_class_id: null
+      p_class_id: classId || null
     });
 
     if (rpcErr) throw rpcErr;
 
-    let studentRecord: any = null;
-    if (rpcRes) {
-      if (rpcRes.id || rpcRes.student_id) {
-        studentRecord = {
-          id: rpcRes.id || rpcRes.student_id,
-          name: rpcRes.name,
-          grade: rpcRes.grade,
-          school_name: rpcRes.school_name,
-          class_id: rpcRes.class_id,
-          index_number: rpcRes.index_number,
-          total_xp: rpcRes.total_xp
-        };
-      } else if (rpcRes.success) {
-        const { data: devStudent } = await supabase.rpc('get_student_by_device', { p_device_id: deviceId });
-        if (devStudent && devStudent.success) {
-          studentRecord = {
-            id: devStudent.student_id,
-            name: devStudent.name,
-            grade: devStudent.grade,
-            school_name: devStudent.school_name,
-            class_id: devStudent.class_id,
-            index_number: devStudent.index_number,
-            total_xp: devStudent.total_xp
-          };
-        }
-      }
-    }
-
-    if (!studentRecord) {
+    const studentId = rpcRes?.id || rpcRes?.student_id;
+    if (!studentId) {
       throw new Error('Student record could not be resolved.');
     }
 
     const studentObj: Student = {
-      student_id: studentRecord.id,
-      name: studentRecord.name,
-      grade: studentRecord.grade || grade,
-      school_name: studentRecord.school_name || '',
-      class_id: studentRecord.class_id,
-      index_number: studentRecord.index_number || '',
-      total_xp: studentRecord.total_xp || 0
+      student_id: String(studentId),
+      name: rpcRes.name || name.trim(),
+      grade: rpcRes.grade || grade,
+      school_name: rpcRes.school_name || '',
+      class_id: rpcRes.class_id || classId || null,
+      index_number: rpcRes.index_number || '',
+      total_xp: rpcRes.total_xp || 0
     };
 
     setCurrentStudent(studentObj);
@@ -201,12 +132,17 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [showToast]);
 
   const refreshStudent = useCallback(async () => {
-    const deviceId = getOrCreateDeviceId();
+    if (!currentStudent?.student_id) return;
     try {
-      const { data } = await supabase.rpc('get_student_by_device', { p_device_id: deviceId });
-      if (data && data.success) {
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq('id', currentStudent.student_id)
+        .maybeSingle();
+
+      if (!error && data) {
         setCurrentStudent({
-          student_id: data.student_id,
+          student_id: data.id,
           name: data.name,
           grade: data.grade,
           school_name: data.school_name,
@@ -216,7 +152,7 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       }
     } catch {}
-  }, []);
+  }, [currentStudent?.student_id]);
 
   return (
     <StudentContext.Provider value={{

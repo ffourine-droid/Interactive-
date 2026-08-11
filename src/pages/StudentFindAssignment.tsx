@@ -368,45 +368,15 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
       }
 
       if (!activeStudentId || activeStudentId.length !== 36) {
-        if (resolvedClassId && studentName.trim()) {
+        if (studentName.trim()) {
           try {
-            const { data: rosterStudents } = await supabase
-              .from('students')
-              .select('id, name')
-              .eq('class_id', resolvedClassId);
-
-            if (rosterStudents && rosterStudents.length > 0) {
-              const trimmedName = studentName.trim().toLowerCase();
-              const matchedStudent = rosterStudents.find(
-                s => s.name && s.name.trim().toLowerCase() === trimmedName
-              );
-              if (matchedStudent?.id) {
-                activeStudentId = matchedStudent.id;
-              }
+            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+            const res = await resolveStudentIdentity(studentName.trim(), resolvedClassId, assignment.grade || 'Grade 7');
+            if (res.status === 'EXACT_MATCH' && res.student) {
+              activeStudentId = res.student.id;
             }
           } catch (lookupErr) {
             console.warn('Roster lookup warning:', lookupErr);
-          }
-        }
-
-        if (!activeStudentId || activeStudentId.length !== 36) {
-          try {
-            let deviceId = localStorage.getItem('azilearn_device_id');
-            if (!deviceId) {
-              deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-              localStorage.setItem('azilearn_device_id', deviceId);
-            }
-            const { data: rpcRes } = await supabase.rpc('student_self_register', {
-              p_name: studentName.trim(),
-              p_grade: assignment.grade || 'Grade 7',
-              p_device_id: deviceId,
-              p_class_id: resolvedClassId
-            });
-            if (rpcRes) {
-              activeStudentId = rpcRes.student_id || rpcRes.id;
-            }
-          } catch (err) {
-            console.warn("Failed to register on submit:", err);
           }
         }
       }

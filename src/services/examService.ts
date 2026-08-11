@@ -128,49 +128,14 @@ export const examService = {
     if (typeof window === 'undefined') {
       throw new Error('identifyStudent can only be run client-side');
     }
-    let deviceId = localStorage.getItem('azilearn_device_id');
-    if (!deviceId) {
-      deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('azilearn_device_id', deviceId);
+    const { resolveStudentIdentity, createNewGuestStudent } = await import('./studentIdentityService');
+    const res = await resolveStudentIdentity(name, null, grade);
+    if (res.status === 'EXACT_MATCH' && res.student) {
+      return res.student;
     }
-
-    const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
-      p_name: name.trim(),
-      p_grade: grade || 'Grade 7',
-      p_device_id: deviceId,
-      p_class_id: null
-    });
-
-    if (rpcErr) throw rpcErr;
-
-    if (rpcRes) {
-      if (rpcRes.id || rpcRes.student_id) {
-        return {
-          id: rpcRes.id || rpcRes.student_id,
-          name: rpcRes.name,
-          grade: rpcRes.grade,
-          school_name: rpcRes.school_name,
-          class_id: rpcRes.class_id,
-          index_number: rpcRes.index_number,
-          total_xp: rpcRes.total_xp
-        };
-      } else if (rpcRes.success) {
-        const { data: devStudent } = await supabase.rpc('get_student_by_device', { p_device_id: deviceId });
-        if (devStudent && devStudent.success) {
-          return {
-            id: devStudent.student_id,
-            name: devStudent.name,
-            grade: devStudent.grade,
-            school_name: devStudent.school_name,
-            class_id: devStudent.class_id,
-            index_number: devStudent.index_number,
-            total_xp: devStudent.total_xp
-          };
-        }
-      }
-    }
-
-    throw new Error('Student record could not be resolved.');
+    
+    // Explicit guest registration fallback
+    return await createNewGuestStudent(name, grade || 'Grade 7', null);
   },
 
   async startExamAttempt(examId: string, studentId: string) {

@@ -503,27 +503,6 @@ export const StudentAssignmentView: React.FC<{
         const rosterMatchId = await findRosterStudentId(classId);
         if (rosterMatchId) {
           activeStudentId = rosterMatchId;
-        } else {
-          try {
-            let deviceId = localStorage.getItem('azilearn_device_id');
-            if (!deviceId) {
-              deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-              localStorage.setItem('azilearn_device_id', deviceId);
-            }
-            const { data: rpcRes } = await supabase.rpc('student_self_register', {
-              p_name: effectiveStudentName,
-              p_grade: assignment.grade || 'Grade 7',
-              p_device_id: deviceId,
-              p_class_id: classId,
-            });
-            if (rpcRes?.student_id) {
-              activeStudentId = rpcRes.student_id;
-            } else if (rpcRes?.id) {
-              activeStudentId = rpcRes.id;
-            }
-          } catch (err) {
-            console.warn('Defensive student registration warning:', err);
-          }
         }
       }
 
@@ -553,27 +532,6 @@ export const StudentAssignmentView: React.FC<{
         const rosterMatchId = await findRosterStudentId(assignment.class_id || null);
         if (rosterMatchId) {
           activeStudentId = rosterMatchId;
-        } else {
-          try {
-            let deviceId = localStorage.getItem('azilearn_device_id');
-            if (!deviceId) {
-              deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-              localStorage.setItem('azilearn_device_id', deviceId);
-            }
-            const { data: rpcRes } = await supabase.rpc('student_self_register', {
-              p_name: effectiveStudentName,
-              p_grade: assignment.grade || 'Grade 7',
-              p_device_id: deviceId,
-              p_class_id: assignment.class_id || null
-            });
-            if (rpcRes?.student_id) {
-              activeStudentId = rpcRes.student_id;
-            } else if (rpcRes?.id) {
-              activeStudentId = rpcRes.id;
-            }
-          } catch (err) {
-            console.warn('Defensive student registration warning:', err);
-          }
         }
       }
 
