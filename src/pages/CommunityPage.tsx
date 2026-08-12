@@ -52,19 +52,10 @@ export default function CommunityPage({ onBack }: CommunityPageProps) {
   const [postsLoading, setPostsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  // 1. Resolve Student login info on startup
+  // Fetch Boards on mount
   useEffect(() => {
-    if (!currentStudent) {
-      setIsIdentityModalOpen(true);
-    }
-  }, [currentStudent]);
-
-  // 2. Fetch Boards when student information is resolved
-  useEffect(() => {
-    if (student) {
-      fetchBoards();
-    }
-  }, [student]);
+    fetchBoards();
+  }, []);
 
   // 3. Keep updating posts inside selected board
   useEffect(() => {

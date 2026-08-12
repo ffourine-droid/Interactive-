@@ -674,11 +674,6 @@ function AppContent() {
       <AnimatePresence mode="wait">
         {renderPage()}
       </AnimatePresence>
-      <StudentIdentityModal
-        isOpen={isIdentityModalOpen}
-        onClose={() => setIsIdentityModalOpen(false)}
-        onSuccess={() => {}}
-      />
     </div>
   );
 }

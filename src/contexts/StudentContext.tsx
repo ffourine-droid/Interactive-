@@ -60,14 +60,10 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
             total_xp: parsed.total_xp || 0
           };
           setCurrentStudent(studentObj);
-        } else {
-          setIsIdentityModalOpen(true);
         }
       } catch (e) {
-        setIsIdentityModalOpen(true);
+        console.warn('Failed to parse cached student profile:', e);
       }
-    } else {
-      setIsIdentityModalOpen(true);
     }
     setLoading(false);
   };
@@ -77,35 +73,22 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const identifyStudent = useCallback(async (name: string, grade: string, classId?: string | null) => {
-    // Rely on explicit roster lookup or guest registration elsewhere
-    let deviceId = localStorage.getItem('azilearn_device_id');
-    if (!deviceId) {
-      deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('azilearn_device_id', deviceId);
+    const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+    const res = await resolveStudentIdentity(name, classId || null, grade);
+
+    if (res.status !== 'EXACT_MATCH' || !res.student) {
+      throw new Error("We couldn't find your name on the roster. Ask your school admin to add you.");
     }
 
-    const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
-      p_name: name.trim(),
-      p_grade: grade,
-      p_device_id: deviceId,
-      p_class_id: classId || null
-    });
-
-    if (rpcErr) throw rpcErr;
-
-    const studentId = rpcRes?.id || rpcRes?.student_id;
-    if (!studentId) {
-      throw new Error('Student record could not be resolved.');
-    }
-
+    const s = res.student;
     const studentObj: Student = {
-      student_id: String(studentId),
-      name: rpcRes.name || name.trim(),
-      grade: rpcRes.grade || grade,
-      school_name: rpcRes.school_name || '',
-      class_id: rpcRes.class_id || classId || null,
-      index_number: rpcRes.index_number || '',
-      total_xp: rpcRes.total_xp || 0
+      student_id: String(s.id),
+      name: s.name,
+      grade: s.grade || grade,
+      school_name: s.school_name || '',
+      class_id: s.class_id || classId || null,
+      index_number: s.index_number || '',
+      total_xp: s.total_xp || 0
     };
 
     setCurrentStudent(studentObj);
@@ -127,7 +110,7 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.removeItem('azilearn_device_id');
     sessionStorage.removeItem('azilearn_student_name');
     setCurrentStudent(null);
-    setIsIdentityModalOpen(true);
+    setIsIdentityModalOpen(false);
     showToast('Logged out student portal 👋', 'success');
   }, [showToast]);
 

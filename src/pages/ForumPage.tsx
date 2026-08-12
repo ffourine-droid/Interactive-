@@ -96,14 +96,7 @@ export default function ForumPage({ onBack }: ForumPageProps) {
   // Press feedback helper
   const longPressRef = useRef<any>(null);
 
-  // 1. Open identity modal if not logged in
-  useEffect(() => {
-    if (!currentStudent) {
-      setIsIdentityModalOpen(true);
-    }
-  }, [currentStudent]);
-
-  // 2. Fetch all global boards on mount
+  // Fetch all global boards on mount
   useEffect(() => {
     fetchBoards();
   }, []);
