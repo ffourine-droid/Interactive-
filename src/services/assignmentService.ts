@@ -62,20 +62,20 @@ export const assignmentService = {
     if (error) throw error;
     if (!data) throw new Error("Assignment not found.");
 
-    let studentId = studentName;
-    if (typeof window !== 'undefined' && studentName.trim()) {
-      try {
-        const { resolveStudentIdentity } = await import('./studentIdentityService');
-        const res = await resolveStudentIdentity(studentName, data.class_id || null, data.grade || null);
-        if (res.status === 'EXACT_MATCH' && res.student) {
-          studentId = res.student.id;
-        }
-      } catch (lookupErr) {
-        console.warn('Roster lookup warning:', lookupErr);
-      }
+    // Students are added to the roster by the school admin — never self-registered.
+    // A student must resolve to an exact roster match here or they cannot proceed.
+    if (!studentName.trim()) {
+      throw new Error("Please enter your name.");
     }
 
-    return { assignment: data, studentId };
+    const { resolveStudentIdentity } = await import('./studentIdentityService');
+    const res = await resolveStudentIdentity(studentName, data.class_id || null, data.grade || null);
+
+    if (res.status !== 'EXACT_MATCH' || !res.student) {
+      throw new Error("We couldn't find your name on the class roster. Ask your school admin to add you, or check the spelling of your name.");
+    }
+
+    return { assignment: data, studentId: res.student.id };
   },
 
   async getOrCreateDraft(studentId: string, assignmentId: string) {

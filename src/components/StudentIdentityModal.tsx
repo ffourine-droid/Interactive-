@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, ArrowRight, X, Loader2, BookOpen, GraduationCap, AlertCircle, CheckCircle, UserPlus, Search } from 'lucide-react';
+import { User, ArrowRight, X, Loader2, BookOpen, GraduationCap, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from './Toast';
 import { useStudent } from '../contexts/StudentContext';
-import { resolveStudentIdentity, createNewGuestStudent, StudentRecord } from '../services/studentIdentityService';
+import { resolveStudentIdentity, StudentRecord } from '../services/studentIdentityService';
 
 interface StudentIdentityModalProps {
   isOpen: boolean;
@@ -26,8 +26,8 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
   const [name, setName] = useState('');
   const [selectedGrade, setSelectedGrade] = useState(grade);
   
-  // Modal sub-steps: 'INPUT' | 'NOT_FOUND_CONFIRM' | 'PICKER'
-  const [modalStep, setModalStep] = useState<'INPUT' | 'NOT_FOUND_CONFIRM' | 'PICKER'>('INPUT');
+  // Modal sub-steps: 'INPUT' | 'NOT_FOUND' | 'PICKER'
+  const [modalStep, setModalStep] = useState<'INPUT' | 'NOT_FOUND' | 'PICKER'>('INPUT');
   const [candidates, setCandidates] = useState<StudentRecord[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<StudentRecord | null>(null);
 
@@ -91,25 +91,11 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
         setSelectedCandidate(res.candidates[0]);
         setModalStep('PICKER');
       } else {
-        // 3. Not found on roster -> show explicit confirmation ("is this your first time here?")
-        setModalStep('NOT_FOUND_CONFIRM');
+        // 3. Not found on roster -> show error state
+        setModalStep('NOT_FOUND');
       }
     } catch (err: any) {
       showToast(err.message || 'Failed to check roster', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirmNewStudent = async () => {
-    setLoading(true);
-    try {
-      // "Yes, I'm new" -> explicit self registration
-      const newStudent = await createNewGuestStudent(name.trim(), selectedGrade || 'Grade 7', classId);
-      await handleApplyStudent(newStudent);
-      showToast('Welcome! Your guest profile has been created.', 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to create guest profile', 'error');
     } finally {
       setLoading(false);
     }
@@ -141,7 +127,7 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
 
             <div className="flex flex-col items-center text-center space-y-6">
               <div className="w-16 h-16 rounded-2xl bg-brand-accent/10 flex items-center justify-center text-brand-accent">
-                {modalStep === 'NOT_FOUND_CONFIRM' ? <UserPlus size={32} /> : <BookOpen size={32} />}
+                {modalStep === 'NOT_FOUND' ? <AlertCircle size={32} /> : <BookOpen size={32} />}
               </div>
 
               {/* STEP 1: INPUT NAME */}
@@ -202,8 +188,8 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
                 </>
               )}
 
-              {/* STEP 2: NOT FOUND CONFIRMATION */}
-              {modalStep === 'NOT_FOUND_CONFIRM' && (
+              {/* STEP 2: NOT FOUND */}
+              {modalStep === 'NOT_FOUND' && (
                 <div className="w-full space-y-6 text-center">
                   <div className="space-y-3">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 font-bold text-xs">
@@ -211,31 +197,20 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
                       <span>Name Not Found</span>
                     </div>
                     <h3 className="font-black text-xl text-brand-text">
-                      We couldn't find "<span className="text-brand-accent">{name.trim()}</span>" in this class roster.
+                      We couldn't find "<span className="text-brand-accent">{name.trim()}</span>" on the class roster.
                     </h3>
                     <p className="text-xs font-semibold text-brand-muted leading-relaxed">
-                      Is this your first time joining this class?
+                      Students are added to the roster by the school admin. Please check the spelling of your name or ask your school admin to add you.
                     </p>
                   </div>
 
                   <div className="space-y-3 pt-2">
-                    {/* Option 1: Yes, I'm new */}
-                    <button
-                      onClick={handleConfirmNewStudent}
-                      disabled={loading}
-                      className="w-full bg-brand-accent text-white py-4 rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-brand-accent/20 flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
-                    >
-                      {loading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
-                      Yes, I'm new (Create Guest Profile)
-                    </button>
-
-                    {/* Option 2: No, let me check my name */}
                     <button
                       onClick={() => setModalStep('INPUT')}
                       disabled={loading}
-                      className="w-full bg-brand-bg border border-brand-border text-brand-text py-4 rounded-2xl font-bold text-xs transition-all hover:bg-brand-border/40 active:scale-95 disabled:opacity-50"
+                      className="w-full bg-brand-accent text-white py-4 rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-brand-accent/20 flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
                     >
-                      No, let me check my name for typos
+                      Check my name again
                     </button>
                   </div>
                 </div>
@@ -285,11 +260,11 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
                     </button>
 
                     <button
-                      onClick={handleConfirmNewStudent}
+                      onClick={() => setModalStep('INPUT')}
                       disabled={loading}
                       className="w-full bg-brand-bg border border-brand-border text-brand-muted hover:text-brand-text py-3 rounded-2xl font-bold text-xs transition-all text-center"
                     >
-                      None of these — I'm a new student
+                      None of these — re-enter my name
                     </button>
                   </div>
                 </div>

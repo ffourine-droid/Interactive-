@@ -124,41 +124,7 @@ export async function resolveStudentIdentity(
   };
 }
 
-/**
- * Creates a new guest student explicitly when user confirms "Yes, I'm new".
- * Passes device_id ONLY as a reference field at creation time.
- */
-export async function createNewGuestStudent(
-  typedName: string,
-  grade: string = 'Grade 7',
-  classId?: string | null
-): Promise<StudentRecord> {
-  let deviceId = typeof window !== 'undefined' ? localStorage.getItem('azilearn_device_id') : null;
-  if (!deviceId) {
-    deviceId = 'dev-' + Math.random().toString(36).substring(2, 15);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('azilearn_device_id', deviceId);
-    }
-  }
-
-  const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_self_register', {
-    p_name: typedName.trim(),
-    p_grade: grade,
-    p_device_id: deviceId,
-    p_class_id: classId || null
-  });
-
-  if (rpcErr) throw rpcErr;
-
-  const studentId = rpcRes?.id || rpcRes?.student_id;
-  if (!studentId) {
-    throw new Error('Failed to create new guest student profile.');
-  }
-
-  return {
-    id: String(studentId),
-    name: typedName.trim(),
-    grade,
-    class_id: classId || null
-  };
-}
+// Self-registration has been permanently removed. Students are added to the
+// roster by the school admin; if a typed name doesn't match the roster, the
+// caller should show a "not found — ask your admin to add you" message
+// instead of creating a new student record.

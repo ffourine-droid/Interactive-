@@ -128,14 +128,14 @@ export const examService = {
     if (typeof window === 'undefined') {
       throw new Error('identifyStudent can only be run client-side');
     }
-    const { resolveStudentIdentity, createNewGuestStudent } = await import('./studentIdentityService');
+    const { resolveStudentIdentity } = await import('./studentIdentityService');
     const res = await resolveStudentIdentity(name, null, grade);
     if (res.status === 'EXACT_MATCH' && res.student) {
       return res.student;
     }
-    
-    // Explicit guest registration fallback
-    return await createNewGuestStudent(name, grade || 'Grade 7', null);
+
+    // Students are added to the roster by the school admin — never self-registered.
+    throw new Error("We couldn't find your name on the roster. Ask your school admin to add you.");
   },
 
   async startExamAttempt(examId: string, studentId: string) {

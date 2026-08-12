@@ -410,41 +410,16 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
     }
 
     if (!response || !response.success) {
-      const fallbackId = activeStudentId || (currentStudent?.student_id) || 'guest-' + Date.now();
-      const fallbackName = studentName.trim() || currentStudent?.name || 'Student';
-
-      const { error: directErr } = await supabase
-        .from('assignment_submissions')
-        .upsert({
-          assignment_id: assignment.id,
-          teacher_id: assignment.teacher_id || null,
-          student_id: String(fallbackId),
-          student_name: fallbackName,
-          answers: answers,
-          status: 'submitted',
-          submitted_at: new Date().toISOString()
-        }, { onConflict: 'assignment_id,student_id' });
-
-      if (directErr) {
-        const { error: insErr } = await supabase
-          .from('assignment_submissions')
-          .insert({
-            assignment_id: assignment.id,
-            teacher_id: assignment.teacher_id || null,
-            student_id: String(fallbackId),
-            student_name: fallbackName,
-            answers: answers,
-            status: 'submitted',
-            submitted_at: new Date().toISOString()
-          });
-
-        if (insErr) {
-          setLoading(false);
-          setError("Failed to submit assignment. Please try again.");
-          return;
-        }
-      }
-      response = { success: true };
+      // Students are added to the roster by the school admin — never self-registered.
+      // Without a real, roster-matched student_id we do not fabricate one or
+      // write a submission under a made-up guest identity.
+      setLoading(false);
+      setError(
+        activeStudentId
+          ? "Failed to submit assignment. Please try again."
+          : "We couldn't find your name on the roster. Ask your school admin to add you, then try again."
+      );
+      return;
     }
 
     setLoading(false);
