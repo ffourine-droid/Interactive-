@@ -36,20 +36,20 @@ export async function resolveStudentIdentity(
 
   try {
     if (classId) {
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('class_id', classId);
-      if (!error && data) {
-        roster = data;
+      const { data, error } = await supabase.rpc('student_lookup_roster', {
+        p_class_id: classId,
+        p_name_search: null
+      });
+      if (!error && data?.success) {
+        roster = data.students || [];
       }
     } else {
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .ilike('name', `%${nameTrimmed}%`);
-      if (!error && data) {
-        roster = data;
+      const { data, error } = await supabase.rpc('student_lookup_roster', {
+        p_class_id: null,
+        p_name_search: nameTrimmed
+      });
+      if (!error && data?.success) {
+        roster = data.students || [];
       }
     }
   } catch (err) {
