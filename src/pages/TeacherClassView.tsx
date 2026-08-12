@@ -21,6 +21,7 @@ import {
   School
 } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
+import { isTeacherLinkedToAssignment } from '../utils/teacherScoping';
 import { useToast } from '../components/Toast';
 import { ParentCodeTable } from '../components/ParentCodeTable';
 import { StudentManager } from '../components/StudentManager';
@@ -92,6 +93,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [exams, setExams] = useState<any[]>([]);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
   const [teacherSubjects, setTeacherSubjects] = useState<any[]>([]);
+  const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<'assignments' | 'students' | 'exams' | 'groupwork' | 'materials' | 'broadcasts'>('assignments');
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedExamAttempt, setSelectedExamAttempt] = useState<any | null>(null);
@@ -157,35 +159,21 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       const tData = JSON.parse(teacherData);
       const teacherId = tData.id;
 
-      // 1. Call teacher_grade_question for each short_answer/photo question that has an entered score
-      const gradingPromises = [];
-      for (const q of assignment.questions) {
-        if (q.type !== 'mcq') {
-          const qg = questionGrades[q.id];
-          if (qg && qg.score !== '') {
-            gradingPromises.push(
-              supabase.rpc('teacher_grade_question', {
-                p_teacher_id: teacherId,
-                p_submission_id: selectedSubmission.id,
-                p_question_id: q.id.toString(),
-                p_marks_awarded: Number(qg.score),
-                p_comment: qg.comment || null
-              })
-            );
-          }
+      // Build consolidated grading map
+      const updatedGrading = { ...(selectedSubmission.grading || {}) };
+      Object.entries(questionGrades).forEach(([qId, qg]: [string, any]) => {
+        if (qg && qg.score !== '') {
+          updatedGrading[qId] = {
+            marks_awarded: Number(qg.score),
+            comment: qg.comment || null
+          };
         }
-      }
-
-      if (gradingPromises.length > 0) {
-        const results = await Promise.all(gradingPromises);
-        const failed = results.find(r => r.error);
-        if (failed) throw failed.error;
-      }
+      });
 
       // Calculate running total of score
       const runningTotal = assignment.questions.reduce((sum: number, q: any) => {
         if (q.type === 'mcq') {
-          const gradingEntry = selectedSubmission.grading?.[q.id];
+          const gradingEntry = updatedGrading[q.id];
           if (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) {
             return sum + Number(gradingEntry.marks_awarded);
           }
@@ -199,39 +187,60 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         }
       }, 0);
 
-      // 2. Call teacher_grade_submission with the overall final score and comment
-      const { error: finalErr } = await supabase.rpc('teacher_grade_submission', {
-        p_teacher_id: teacherId,
-        p_submission_id: selectedSubmission.id,
-        p_score: runningTotal,
-        p_comment: feedbackInput || null
-      });
-
-      if (finalErr) throw finalErr;
-      
-      // Update local submissions state immediately so UI does not show stale cached data
-      const updatedGrading = { ...(selectedSubmission.grading || {}) };
-      Object.entries(questionGrades).forEach(([qId, qg]) => {
-        if (qg && qg.score !== '') {
-          updatedGrading[qId] = {
-            marks_awarded: Number(qg.score),
-            comment: qg.comment || null
-          };
-        }
-      });
-
-      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? {
-        ...s,
+      // Single atomic database update setting score, status, grading, graded_at, teacher_comment, teacher_reply, teacher_id
+      const updatePayload: any = {
         score: runningTotal,
         status: 'graded',
+        grading: updatedGrading,
+        graded_at: new Date().toISOString(),
         teacher_comment: feedbackInput || null,
-        teacher_reply: replyInput || (s as any).teacher_reply,
-        grading: updatedGrading
+        teacher_reply: replyInput || null,
+        teacher_id: teacherId
+      };
+
+      const { error: atomicErr } = await supabase
+        .from('assignment_submissions')
+        .update(updatePayload)
+        .eq('id', selectedSubmission.id);
+
+      if (atomicErr) throw atomicErr;
+
+      // Secondary RPC calls if supported by backend schema
+      try {
+        for (const q of assignment.questions) {
+          if (q.type !== 'mcq') {
+            const qg = questionGrades[q.id];
+            if (qg && qg.score !== '') {
+              await supabase.rpc('teacher_grade_question', {
+                p_teacher_id: teacherId,
+                p_submission_id: selectedSubmission.id,
+                p_question_id: q.id.toString(),
+                p_marks_awarded: Number(qg.score),
+                p_comment: qg.comment || null
+              });
+            }
+          }
+        }
+
+        await supabase.rpc('teacher_grade_submission', {
+          p_teacher_id: teacherId,
+          p_submission_id: selectedSubmission.id,
+          p_score: runningTotal,
+          p_comment: feedbackInput || null
+        });
+      } catch (rpcErr) {
+        console.warn("Secondary RPC grading notification warning:", rpcErr);
+      }
+
+      // Update local submissions state immediately
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? {
+        ...s,
+        ...updatePayload
       } : s));
 
       showToast("Submission graded successfully!", "success");
       setSelectedSubmission(null);
-      fetchInitialData(); // Refresh the list
+      await fetchInitialData(); // Refresh list fresh from DB
     } catch (err: any) {
       showToast("Error grading submission: " + err.message, "error");
     } finally {
@@ -239,18 +248,37 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     }
   };
 
-  const openSubmissionDetails = (submission: Submission) => {
-    setSelectedSubmission(submission);
-    setGradeInput((submission.score === null || isNaN(submission.score as number)) ? '' : submission.score.toString());
-    setFeedbackInput(submission.teacher_comment || '');
-    setReplyInput((submission as any).teacher_reply || '');
+  const openSubmissionDetails = async (submission: Submission) => {
+    let freshSub = submission;
+    try {
+      const { data: dbSub } = await supabase
+        .from('assignment_submissions')
+        .select('*')
+        .eq('id', submission.id)
+        .maybeSingle();
+      if (dbSub) {
+        freshSub = dbSub as Submission;
+      }
+    } catch (err) {
+      console.warn("Could not fetch fresh submission details:", err);
+    }
 
-    const assignment = assignments.find(a => a.id === submission.assignment_id);
+    const assignment = assignments.find(a => a.id === freshSub.assignment_id);
+    if (assignment && !isTeacherLinkedToAssignment(assignment, teacherSubjects, teacherClasses)) {
+      showToast("You do not teach the class/subject for this broadcast assignment.", "error");
+      return;
+    }
+
+    setSelectedSubmission(freshSub);
+    setGradeInput((freshSub.score === null || isNaN(freshSub.score as number)) ? '' : freshSub.score.toString());
+    setFeedbackInput(freshSub.teacher_comment || '');
+    setReplyInput((freshSub as any).teacher_reply || '');
+
     const initialGrades: Record<string, { score: number | '', comment: string }> = {};
     if (assignment && assignment.questions) {
       assignment.questions.forEach((q: any) => {
         if (q.type !== 'mcq') {
-          const gradingEntry = submission.grading?.[q.id];
+          const gradingEntry = freshSub.grading?.[q.id];
           const existingScore = (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) 
             ? gradingEntry.marks_awarded 
             : '';
@@ -376,12 +404,11 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         }
 
         if (actualSchoolName) {
-          // Fetch broadcast assignments for this school
+          // Fetch broadcast assignments for this school with flexible matching
           const { data: broadcasts, error: bError } = await supabase
             .from('assignments')
             .select('*')
-            .eq('is_broadcast', true)
-            .eq('school_name', actualSchoolName);
+            .or('is_broadcast.eq.true,class_name.eq.School Broadcast');
 
           if (!bError && broadcasts && broadcasts.length > 0) {
             // Get all fetched classes for this teacher to verify taught mappings
@@ -390,6 +417,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               const { data: cData } = await supabase.rpc('teacher_get_classes', { p_teacher_id: teacherId });
               if (cData && Array.isArray(cData)) {
                 teacherClasses = cData;
+                setTeacherClasses(cData);
               }
             } catch (e) {}
 
@@ -401,13 +429,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               };
             }).filter(m => m.grade);
 
-            // Filter broadcasts: teacher must teach the broadcast's grade & subject
+            // Filter broadcasts: teacher must teach the broadcast's grade & subject (via teacher_subjects)
             const relevantBroadcasts = broadcasts.filter((b: any) => {
-              if (!b.grade || !b.subject) return false;
-              return taughtMappings.some(m => 
-                m.grade.trim().toLowerCase() === b.grade.trim().toLowerCase() && 
-                (m.subject.trim().toLowerCase() === b.subject.trim().toLowerCase() || m.subject.trim().toLowerCase() === 'general')
-              );
+              if (actualSchoolName && b.school_name && b.school_name.trim().toLowerCase() !== actualSchoolName.trim().toLowerCase()) {
+                return false;
+              }
+              return isTeacherLinkedToAssignment(b, tSubjectsList, teacherClasses);
             });
 
             // Append with no duplicates
@@ -511,6 +538,22 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         } else if (Array.isArray(submissionsRes.data)) {
           fetchedSubmissions = submissionsRes.data;
         }
+      }
+
+      // Auto-patch teacher_id for broadcast submissions if unassigned
+      if (fetchedSubmissions.length > 0 && teacherId) {
+        fetchedSubmissions.forEach((sub: any) => {
+          if (!sub.teacher_id) {
+            const asgn = assignmentsData.find((a: any) => a.id === sub.assignment_id);
+            if (asgn?.is_broadcast || sub.is_broadcast) {
+              sub.teacher_id = teacherId;
+              supabase
+                .from('assignment_submissions')
+                .update({ teacher_id: teacherId })
+                .eq('id', sub.id);
+            }
+          }
+        });
       }
 
       setSubmissions(fetchedSubmissions);
@@ -826,9 +869,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               
               {(() => {
                 const broadcastSubs = submissions.filter(s => {
-                  if (s.is_broadcast) return true;
                   const asgn = assignments.find(a => a.id === s.assignment_id);
-                  return asgn?.is_broadcast === true;
+                  const isBroadcast = s.is_broadcast === true || asgn?.is_broadcast === true || asgn?.class_name === 'School Broadcast' || !asgn?.class_id;
+                  if (!isBroadcast) return false;
+                  // Exclude pending status; treat all other statuses (submitted, needs_grading, graded, returned, etc.) as submitted
+                  const status = (s.status || '').toLowerCase().trim();
+                  return status !== 'pending';
                 });
 
                 if (broadcastSubs.length === 0) {
@@ -846,6 +892,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                     {broadcastSubs.map((sub) => {
                       const asgn = assignments.find(a => a.id === sub.assignment_id);
                       const formattedDate = sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : 'N/A';
+                      const statusClean = (sub.status || '').toLowerCase().trim();
                       
                       return (
                         <div key={sub.id} className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-brand-bg/40 border border-brand-border/60 rounded-2xl hover:border-brand-accent/50 transition-all gap-4">
@@ -855,13 +902,21 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                               <span className="text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/15 flex items-center gap-1">
                                 📢 Broadcast
                               </span>
-                              {sub.status === 'graded' ? (
+                              {statusClean === 'graded' ? (
                                 <span className="text-[8px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/15">
                                   Graded
                                 </span>
+                              ) : statusClean === 'needs_grading' ? (
+                                <span className="text-[8px] font-black uppercase tracking-wider text-purple-600 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/15">
+                                  Needs Grading
+                                </span>
+                              ) : statusClean === 'returned' ? (
+                                <span className="text-[8px] font-black uppercase tracking-wider text-blue-600 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/15">
+                                  Returned
+                                </span>
                               ) : (
                                 <span className="text-[8px] font-black uppercase tracking-wider text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/15">
-                                  Pending
+                                  Submitted
                                 </span>
                               )}
                             </div>

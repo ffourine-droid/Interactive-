@@ -25,6 +25,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
+import { isTeacherLinkedToAssignment } from '../utils/teacherScoping';
 import { useToast } from '../components/Toast';
 import { TeacherCompetitionManager } from '../components/TeacherCompetitionManager';
 import { QuestionRequestForm } from '../components/QuestionRequestForm';
@@ -365,6 +366,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           .update({
             score: updatedScore,
             status: 'graded',
+            graded_at: new Date().toISOString(),
+            teacher_id: teacher?.id || sub.teacher_id,
             teacher_comment: enteredComment || sub.teacher_comment
           })
           .eq('id', submissionId);
@@ -797,29 +800,19 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         }
 
         if (actualSchoolName) {
-          // Fetch broadcast assignments for this school
+          // Fetch broadcast assignments with flexible matching
           const { data: broadcasts, error: bError } = await supabase
             .from('assignments')
             .select('*')
-            .eq('is_broadcast', true)
-            .eq('school_name', actualSchoolName);
+            .or('is_broadcast.eq.true,class_name.eq.School Broadcast');
 
           if (!bError && broadcasts && broadcasts.length > 0) {
-            const taughtMappings = tSubjectsList.map(ts => {
-              const matchedClass = sortedClasses.find((c: any) => c.id === ts.class_id);
-              return {
-                grade: matchedClass?.grade || '',
-                subject: ts.subject || ''
-              };
-            }).filter(m => m.grade);
-
-            // Filter broadcasts: teacher must teach the broadcast's grade & subject
+            // Filter broadcasts: teacher must teach the broadcast's grade & subject (via teacher_subjects)
             const relevantBroadcasts = broadcasts.filter((b: any) => {
-              if (!b.grade || !b.subject) return false;
-              return taughtMappings.some(m => 
-                m.grade.trim().toLowerCase() === b.grade.trim().toLowerCase() && 
-                (m.subject.trim().toLowerCase() === b.subject.trim().toLowerCase() || m.subject.trim().toLowerCase() === 'general')
-              );
+              if (actualSchoolName && b.school_name && b.school_name.trim().toLowerCase() !== actualSchoolName.trim().toLowerCase()) {
+                return false;
+              }
+              return isTeacherLinkedToAssignment(b, tSubjectsList, sortedClasses);
             });
 
             // Append with no duplicates

@@ -115,27 +115,23 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [showToast]);
 
   const refreshStudent = useCallback(async () => {
-    if (!currentStudent?.student_id) return;
+    if (!currentStudent?.name) return;
     try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('id', currentStudent.student_id)
-        .maybeSingle();
-
-      if (!error && data) {
+      const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+      const res = await resolveStudentIdentity(currentStudent.name, currentStudent.class_id, currentStudent.grade);
+      if (res.student) {
         setCurrentStudent({
-          student_id: data.id,
-          name: data.name,
-          grade: data.grade,
-          school_name: data.school_name,
-          class_id: data.class_id,
-          index_number: data.index_number,
-          total_xp: data.total_xp
+          student_id: res.student.id,
+          name: res.student.name,
+          grade: res.student.grade,
+          school_name: res.student.school_name,
+          class_id: res.student.class_id,
+          index_number: res.student.index_number,
+          total_xp: res.student.total_xp
         });
       }
     } catch {}
-  }, [currentStudent?.student_id]);
+  }, [currentStudent?.name, currentStudent?.class_id, currentStudent?.grade]);
 
   return (
     <StudentContext.Provider value={{

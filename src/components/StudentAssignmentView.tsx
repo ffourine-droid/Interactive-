@@ -205,13 +205,12 @@ export const StudentAssignmentView: React.FC<{
         const isUuid = (v: any) => v && String(v).length === 36 && String(v).includes('-');
         let existingClassId: string | null = null;
 
-        if (isUuid(sid)) {
-          const { data: studentRow } = await supabase
-            .from('students')
-            .select('class_id')
-            .eq('id', sid)
-            .maybeSingle();
-          existingClassId = studentRow?.class_id ?? null;
+        if (studentName) {
+          try {
+            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+            const res = await resolveStudentIdentity(studentName, null, (data as Assignment).grade);
+            if (res.student?.class_id) existingClassId = res.student.class_id;
+          } catch {}
         }
 
         if (!existingClassId) {
@@ -363,14 +362,14 @@ export const StudentAssignmentView: React.FC<{
     if (!assignment) return null;
 
     // 1. Already-registered student with a class on file? Use it.
-    const loggedInStudentId = currentStudent?.student_id || studentId;
-    if (loggedInStudentId && loggedInStudentId.length === 36) {
-      const { data: studentRow } = await supabase
-        .from('students')
-        .select('class_id')
-        .eq('id', loggedInStudentId)
-        .maybeSingle();
-      if (studentRow?.class_id) return studentRow.class_id;
+    if (currentStudent?.class_id) return currentStudent.class_id;
+    const effectiveName = studentName.trim() || currentStudent?.name;
+    if (effectiveName) {
+      try {
+        const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+        const res = await resolveStudentIdentity(effectiveName, null, assignment.grade);
+        if (res.student?.class_id) return res.student.class_id;
+      } catch {}
     }
 
     // 2. Already picked one this session?
@@ -471,24 +470,20 @@ export const StudentAssignmentView: React.FC<{
     // south") from silently creating a duplicate guest student instead of
     // reusing the real record.
     const findRosterStudentId = async (classId: string | null) => {
-      if (!classId || !effectiveStudentName) return null;
+      if (!effectiveStudentName) return null;
       try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('id')
-          .eq('class_id', classId)
-          .ilike('name', effectiveStudentName.trim())
-          .limit(1)
-          .maybeSingle();
-        if (error) {
-          console.warn('Roster lookup warning:', error);
-          return null;
+        const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+        const res = await resolveStudentIdentity(effectiveStudentName, classId, assignment?.grade || 'Grade 7');
+        if (res.status === 'EXACT_MATCH' && res.student) {
+          return res.student.id;
         }
-        return data?.id || null;
+        if (res.candidates && res.candidates.length > 0) {
+          return res.candidates[0].id;
+        }
       } catch (err) {
         console.warn('Roster lookup warning:', err);
-        return null;
       }
+      return null;
     };
 
     if (assignment.is_broadcast) {
@@ -506,7 +501,7 @@ export const StudentAssignmentView: React.FC<{
         }
       }
 
-      if (activeStudentId) {
+      if (activeStudentId && isUuid(activeStudentId)) {
         const { data, error: submitError } = await supabase.rpc('submit_broadcast_assignment', {
           p_student_id: activeStudentId,
           p_assignment_id: assignment.id,
@@ -517,6 +512,34 @@ export const StudentAssignmentView: React.FC<{
         if (!submitError && response && response.success !== false) {
           submissionRecorded = true;
           assignedTeacherName = response?.teacher_assigned;
+        }
+      }
+
+      // Fallback for broadcast assignment: submit via submit_school_assignment if submit_broadcast_assignment didn't record
+      if (!submissionRecorded) {
+        const cleanTeacherId = (id: any) => {
+          if (!id) return null;
+          const str = String(id).trim().toLowerCase();
+          if (str === 'null' || str === 'undefined' || str === '') return null;
+          if (str.length !== 36) return null;
+          return id;
+        };
+
+        const rpcParams: any = {
+          p_assignment_id: assignment.id,
+          p_student_name: effectiveStudentName,
+          p_answers: finalAnswers,
+          p_teacher_id: cleanTeacherId(assignment.teacher_id),
+        };
+
+        if (activeStudentId && isUuid(activeStudentId)) {
+          rpcParams.p_student_id = activeStudentId;
+        }
+
+        const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', rpcParams);
+        const response = rpcRes as any;
+        if (!submitError && response && response.success !== false) {
+          submissionRecorded = true;
         }
       }
     } else {
@@ -555,15 +578,45 @@ export const StudentAssignmentView: React.FC<{
       }
     }
 
-    // Post-submission patch to ensure teacher_id is set on the row
-    if (submissionRecorded && assignment.teacher_id && activeStudentId) {
-      supabase
-        .from('assignment_submissions')
-        .update({ teacher_id: assignment.teacher_id })
-        .eq('assignment_id', assignment.id)
-        .eq('student_id', String(activeStudentId))
-        .then(() => {})
-        .catch(() => {});
+    // Post-submission patch to ensure teacher_id and is_broadcast are set on the submission row
+    if (submissionRecorded) {
+      const applySubmissionTeacherId = async () => {
+        let tid = assignment.teacher_id && String(assignment.teacher_id).trim() !== 'null' ? assignment.teacher_id : null;
+        let cid = typeof selectedClassId === 'string' && selectedClassId !== 'PENDING' ? selectedClassId : null;
+
+        if (!cid && effectiveStudentName) {
+          try {
+            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+            const res = await resolveStudentIdentity(effectiveStudentName, null, assignment?.grade);
+            if (res.student?.class_id) cid = res.student.class_id;
+          } catch {}
+        }
+
+        if (cid && !tid) {
+          if (assignment.subject) {
+            const { data: ts } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).ilike('subject', assignment.subject.trim()).maybeSingle();
+            if (ts?.teacher_id) tid = ts.teacher_id;
+          }
+          if (!tid) {
+            const { data: tsAny } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).limit(1).maybeSingle();
+            if (tsAny?.teacher_id) tid = tsAny.teacher_id;
+          }
+          if (!tid) {
+            const { data: cl } = await supabase.from('classes').select('teacher_id').eq('id', cid).maybeSingle();
+            if (cl?.teacher_id) tid = cl.teacher_id;
+          }
+        }
+
+        const updatePayload: any = { is_broadcast: assignment.is_broadcast === true };
+        if (tid) updatePayload.teacher_id = tid;
+
+        if (activeStudentId && isUuid(activeStudentId)) {
+          await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_id', String(activeStudentId));
+        } else if (effectiveStudentName) {
+          await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_name', effectiveStudentName);
+        }
+      };
+      applySubmissionTeacherId().catch(() => {});
     }
 
       // Direct Table Fallback if RPC failed or returned success: false

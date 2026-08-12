@@ -334,17 +334,16 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
     setLoading(true);
     let response: any = null;
     let activeStudentId: string | null = loggedInStudentId;
+    let resolvedClassId: string | null = null;
 
     if (assignment.is_broadcast) {
-      let resolvedClassId: string | null = null;
 
-      if (activeStudentId && activeStudentId.length === 36) {
-        const { data: studentRow } = await supabase
-          .from('students')
-          .select('class_id')
-          .eq('id', activeStudentId)
-          .maybeSingle();
-        if (studentRow?.class_id) resolvedClassId = studentRow.class_id;
+      if (studentName.trim()) {
+        try {
+          const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+          const res = await resolveStudentIdentity(studentName.trim(), null, assignment.grade || 'Grade 7');
+          if (res.student?.class_id) resolvedClassId = res.student.class_id;
+        } catch {}
       }
 
       if (!resolvedClassId) {
@@ -374,6 +373,8 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
             const res = await resolveStudentIdentity(studentName.trim(), resolvedClassId, assignment.grade || 'Grade 7');
             if (res.status === 'EXACT_MATCH' && res.student) {
               activeStudentId = res.student.id;
+            } else if (res.candidates && res.candidates.length > 0) {
+              activeStudentId = res.candidates[0].id;
             }
           } catch (lookupErr) {
             console.warn('Roster lookup warning:', lookupErr);
@@ -381,7 +382,7 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
         }
       }
 
-      if (activeStudentId) {
+      if (activeStudentId && activeStudentId.length === 36) {
         const { data: bRes, error: rpcError } = await supabase.rpc("submit_broadcast_assignment", {
           p_student_id: activeStudentId,
           p_assignment_id: assignment.id,
@@ -392,6 +393,32 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
           response = bRes;
         }
       }
+
+      // Fallback: If broadcast submission RPC wasn't recorded, try submit_school_assignment RPC
+      if (!response || !response.success) {
+        const cleanTeacherId = (id: any) => {
+          if (!id) return null;
+          const str = String(id).trim().toLowerCase();
+          if (str === 'null' || str === 'undefined' || str === '') return null;
+          if (str.length !== 36) return null;
+          return id;
+        };
+
+        const rpcParamsBroadcast: any = {
+          p_assignment_id: assignment.id,
+          p_student_name: studentName.trim(),
+          p_answers: answers,
+          p_teacher_id: cleanTeacherId(assignment.teacher_id),
+        };
+        if (activeStudentId && activeStudentId.length === 36) {
+          rpcParamsBroadcast.p_student_id = activeStudentId;
+        }
+
+        const { data: sRes, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParamsBroadcast);
+        if (!rpcError && sRes && sRes.success !== false) {
+          response = sRes;
+        }
+      }
     } else {
       const { data: sRes, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParams);
       if (!rpcError && sRes && sRes.success !== false) {
@@ -399,14 +426,44 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
       }
     }
 
-    if (response && response.success && assignment.teacher_id && activeStudentId) {
-      supabase
-        .from('assignment_submissions')
-        .update({ teacher_id: assignment.teacher_id })
-        .eq('assignment_id', assignment.id)
-        .eq('student_id', String(activeStudentId))
-        .then(() => {})
-        .catch(() => {});
+    if (response && response.success) {
+      const applySubmissionTeacherId = async () => {
+        let tid = assignment.teacher_id && String(assignment.teacher_id).trim() !== 'null' ? assignment.teacher_id : null;
+        let cid = resolvedClassId;
+
+        if (!cid && studentName.trim()) {
+          try {
+            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+            const res = await resolveStudentIdentity(studentName.trim(), null, assignment.grade || 'Grade 7');
+            if (res.student?.class_id) cid = res.student.class_id;
+          } catch {}
+        }
+
+        if (cid && !tid) {
+          if (assignment.subject) {
+            const { data: ts } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).ilike('subject', assignment.subject.trim()).maybeSingle();
+            if (ts?.teacher_id) tid = ts.teacher_id;
+          }
+          if (!tid) {
+            const { data: tsAny } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).limit(1).maybeSingle();
+            if (tsAny?.teacher_id) tid = tsAny.teacher_id;
+          }
+          if (!tid) {
+            const { data: cl } = await supabase.from('classes').select('teacher_id').eq('id', cid).maybeSingle();
+            if (cl?.teacher_id) tid = cl.teacher_id;
+          }
+        }
+
+        const updatePayload: any = { is_broadcast: assignment.is_broadcast === true };
+        if (tid) updatePayload.teacher_id = tid;
+
+        if (activeStudentId && activeStudentId.length === 36) {
+          await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_id', String(activeStudentId));
+        } else if (studentName.trim()) {
+          await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_name', studentName.trim());
+        }
+      };
+      applySubmissionTeacherId().catch(() => {});
     }
 
     if (!response || !response.success) {

@@ -144,44 +144,9 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       const tData = JSON.parse(teacherData);
       const teacherId = tData.id;
 
-      // 1. Call teacher_grade_question for each short_answer/photo question that has an entered score
-      const gradingPromises = [];
-      for (const q of assignment.questions) {
-        if (q.type !== 'mcq') {
-          const qg = questionGrades[q.id];
-          if (qg && qg.score !== '') {
-            gradingPromises.push(
-              supabase.rpc('teacher_grade_question', {
-                p_teacher_id: teacherId,
-                p_submission_id: selectedSubmission.id,
-                p_question_id: q.id.toString(),
-                p_marks_awarded: Number(qg.score),
-                p_comment: qg.comment || null
-              })
-            );
-          }
-        }
-      }
-
-      if (gradingPromises.length > 0) {
-        const results = await Promise.all(gradingPromises);
-        const failed = results.find(r => r.error);
-        if (failed) throw failed.error;
-      }
-
-      // 2. Call teacher_grade_submission with the overall final score and comment
-      const { error } = await supabase.rpc('teacher_grade_submission', {
-        p_teacher_id: teacherId,
-        p_submission_id: selectedSubmission.id,
-        p_score: runningTotal,
-        p_comment: feedback || null
-      });
-
-      if (error) throw error;
-
-      // Update local submissions state immediately so UI does not show stale cached data
+      // 1. Calculate updated grading map
       const updatedGrading = { ...(selectedSubmission.grading || {}) };
-      Object.entries(questionGrades).forEach(([qId, qg]) => {
+      Object.entries(questionGrades).forEach(([qId, qg]: [string, any]) => {
         if (qg && qg.score !== '') {
           updatedGrading[qId] = {
             marks_awarded: Number(qg.score),
@@ -190,18 +155,60 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
         }
       });
 
-      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? {
-        ...s,
+      // 2. Perform atomic single update to assignment_submissions
+      const updatePayload: any = {
         score: runningTotal,
         status: 'graded',
+        grading: updatedGrading,
+        graded_at: new Date().toISOString(),
         teacher_comment: feedback || null,
-        teacher_reply: teacherReply || s.teacher_reply,
-        grading: updatedGrading
+        teacher_reply: teacherReply || null,
+        teacher_id: teacherId
+      };
+
+      const { error: updateErr } = await supabase
+        .from('assignment_submissions')
+        .update(updatePayload)
+        .eq('id', selectedSubmission.id);
+
+      if (updateErr) throw updateErr;
+
+      // 3. Secondary RPC calls
+      try {
+        for (const q of assignment.questions) {
+          if (q.type !== 'mcq') {
+            const qg = questionGrades[q.id];
+            if (qg && qg.score !== '') {
+              await supabase.rpc('teacher_grade_question', {
+                p_teacher_id: teacherId,
+                p_submission_id: selectedSubmission.id,
+                p_question_id: q.id.toString(),
+                p_marks_awarded: Number(qg.score),
+                p_comment: qg.comment || null
+              });
+            }
+          }
+        }
+
+        await supabase.rpc('teacher_grade_submission', {
+          p_teacher_id: teacherId,
+          p_submission_id: selectedSubmission.id,
+          p_score: runningTotal,
+          p_comment: feedback || null
+        });
+      } catch (rpcErr) {
+        console.warn('Secondary RPC grading call warning:', rpcErr);
+      }
+
+      // Update local submissions state immediately
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? {
+        ...s,
+        ...updatePayload
       } : s));
 
       showToast('Marks and remarks updated!', 'success');
       setSelectedSubmission(null);
-      fetchData();
+      await fetchData();
     } catch (err: any) {
       showToast(err.message, 'error');
     } finally {
@@ -231,6 +238,40 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
   };
 
   const maxTotalMarks = assignment?.questions?.reduce((sum: number, q: any) => sum + (q.max_marks || q.marks || q.points || 10), 0) || 0;
+
+  const openSubmission = async (sub: any) => {
+    let freshSub = sub;
+    try {
+      const { data: dbSub } = await supabase
+        .from('assignment_submissions')
+        .select('*')
+        .eq('id', sub.id)
+        .maybeSingle();
+      if (dbSub) freshSub = dbSub;
+    } catch (err) {
+      console.warn("Could not fetch fresh submission:", err);
+    }
+    setSelectedSubmission(freshSub);
+    setFeedback(freshSub.teacher_comment || '');
+    setTeacherReply(freshSub.teacher_reply || '');
+    
+    const initialGrades: Record<string, { score: number | '', comment: string }> = {};
+    if (assignment && assignment.questions) {
+      assignment.questions.forEach((q: any) => {
+        if (q.type !== 'mcq') {
+          const gradingEntry = freshSub.grading?.[q.id];
+          const existingScore = (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) 
+            ? gradingEntry.marks_awarded 
+            : '';
+          initialGrades[q.id] = {
+            score: existingScore,
+            comment: gradingEntry?.comment || ''
+          };
+        }
+      });
+    }
+    setQuestionGrades(initialGrades);
+  };
 
   const runningTotal = assignment?.questions?.reduce((sum: number, q: any) => {
     if (q.type === 'mcq') {
@@ -355,7 +396,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                             </td>
                             <td className="px-6 py-4">
                               <button 
-                                onClick={() => setSelectedSubmission(sub)}
+                                onClick={() => openSubmission(sub)}
                                 className="p-2 hover:bg-brand-accent/10 text-brand-accent rounded-xl transition-all"
                               >
                                 <ExternalLink size={18} />
