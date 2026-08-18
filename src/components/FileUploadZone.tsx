@@ -36,13 +36,13 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
         const filePath = `${folder}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-          .from('study-materials')
+          .from('materials')
           .upload(filePath, file);
 
         if (uploadError) throw uploadError;
 
         const { data } = supabase.storage
-          .from('study-materials')
+          .from('materials')
           .getPublicUrl(filePath);
 
         return data.publicUrl;

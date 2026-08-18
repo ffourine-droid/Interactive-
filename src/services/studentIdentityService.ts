@@ -46,7 +46,8 @@ export async function resolveStudentIdentity(
     } else {
       const { data, error } = await supabase.rpc('student_lookup_roster', {
         p_class_id: null,
-        p_name_search: nameTrimmed
+        p_name_search: nameTrimmed,
+        p_grade: grade || null
       });
       if (!error && data?.success) {
         roster = data.students || [];

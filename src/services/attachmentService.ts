@@ -221,7 +221,7 @@ export const attachmentService = {
       return true;
     } catch (e) {
       console.warn('Deletions failed from live DB:', e);
-      return true;
+      return false;
     }
   },
 
@@ -261,7 +261,7 @@ export const attachmentService = {
       return true;
     } catch (e) {
       console.warn(`Error clearing attachments for post ${postId}:`, e);
-      return true;
+      return false;
     }
   }
 };

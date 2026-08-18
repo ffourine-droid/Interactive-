@@ -39,15 +39,7 @@ export default function PlayerSetup({ onComplete }: PlayerSetupProps) {
         .maybeSingle();
 
       if (existing) {
-        // If it exists, we match it and reuse the existing player profile
-        const matchedPlayer = {
-          id: existing.id,
-          username: existing.username,
-          grade: `Grade ${existing.grade}`
-        };
-        localStorage.setItem('azilearn_player', JSON.stringify({ username: matchedPlayer.username, grade: matchedPlayer.grade, id: matchedPlayer.id }));
-        localStorage.setItem('azilearn_arena_player', JSON.stringify({ username: matchedPlayer.username, grade: existing.grade, id: matchedPlayer.id }));
-        onComplete(matchedPlayer);
+        setErrorMsg('This username is already taken. Please choose a different, unique username.');
         return;
       }
 

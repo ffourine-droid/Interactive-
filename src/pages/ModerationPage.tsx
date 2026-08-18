@@ -7,9 +7,48 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
-import { communityService, Board, Post, Flag, Warning } from '../services/communityService';
 import { NotificationBell } from '../components/NotificationBell';
 import { attachmentService } from '../services/attachmentService';
+
+interface Board {
+  id: string;
+  name: string;
+  subject?: string;
+  grade?: string;
+  is_global?: boolean;
+}
+
+interface Post {
+  id: string;
+  board_id?: string;
+  author_id: string;
+  author_name?: string;
+  author_role?: string;
+  title: string;
+  content: string;
+  tag?: string;
+  is_pinned?: boolean;
+  is_deleted?: boolean;
+  created_at: string;
+}
+
+interface Flag {
+  id: string;
+  post_id: string;
+  reason: string;
+  created_at: string;
+  post_title: string;
+  board_name: string;
+}
+
+interface Warning {
+  id: string;
+  student_id: string;
+  student_name: string;
+  reason: string;
+  created_at: string;
+  issued_by?: string;
+}
 
 interface ModerationPageProps {
   onBack?: () => void;
@@ -81,13 +120,19 @@ export default function ModerationPage({ onBack, embedMode = false }: Moderation
   const fetchBoards = async () => {
     setLoading(true);
     try {
-      const fetched = await communityService.getAllBoards();
-      setBoards(fetched || []);
-      if (fetched && fetched.length > 0) {
+      const { data, error } = await supabase.rpc('forum_get_all_boards');
+      if (error) throw error;
+      if (!data?.success) {
+        showToast(data?.message || 'Error loading boards', 'error');
+        return;
+      }
+      const fetched = data.boards || [];
+      setBoards(fetched);
+      if (fetched.length > 0) {
         setSelectedBoard(fetched[0]);
       }
-    } catch (e) {
-      showToast('Error loading boards', 'error');
+    } catch (e: any) {
+      showToast(e?.message || 'Error loading boards', 'error');
     } finally {
       setLoading(false);
     }
@@ -95,29 +140,46 @@ export default function ModerationPage({ onBack, embedMode = false }: Moderation
 
   const fetchPosts = async (boardId: string) => {
     try {
-      const data = await communityService.getPosts(boardId);
-      setPosts(data || []);
-    } catch (e) {
-      showToast('Error loading board feed', 'error');
+      const { data, error } = await supabase.rpc('forum_get_board_posts', {
+        p_board_id: boardId
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        showToast(data?.message || 'Error loading board feed', 'error');
+        return;
+      }
+      setPosts(data.posts || []);
+    } catch (e: any) {
+      showToast(e?.message || 'Error loading board feed', 'error');
     }
   };
 
   const fetchFlags = async () => {
     try {
-      const data = await communityService.getUnresolvedFlags();
-      setFlags(data || []);
-    } catch (e) {
-      console.warn('Error reading flags');
+      const { data, error } = await supabase.rpc('forum_get_unresolved_flags');
+      if (error) throw error;
+      if (!data?.success) {
+        console.warn('Error reading flags:', data?.message);
+        return;
+      }
+      setFlags(data.flags || []);
+    } catch (e: any) {
+      console.warn('Error reading flags:', e?.message || e);
     }
   };
 
   const fetchWarnings = async () => {
     if (!teacher) return;
     try {
-      const data = await communityService.getWarningsForTeacher(teacher.id);
-      setWarnings(data || []);
-    } catch (e) {
-      console.warn('Error reading warnings history');
+      const { data, error } = await supabase.rpc('forum_get_warnings');
+      if (error) throw error;
+      if (!data?.success) {
+        console.warn('Error reading warnings history:', data?.message);
+        return;
+      }
+      setWarnings(data.warnings || []);
+    } catch (e: any) {
+      console.warn('Error reading warnings history:', e?.message || e);
     }
   };
 
@@ -125,44 +187,57 @@ export default function ModerationPage({ onBack, embedMode = false }: Moderation
   const handlePinToggle = async (post: Post) => {
     try {
       const nextPinState = !post.is_pinned;
-      await communityService.pinPost(post.id, nextPinState);
+      const { data, error } = await supabase.rpc('forum_toggle_pin', {
+        p_post_id: post.id,
+        p_pinned: nextPinState
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        showToast(data?.message || 'Action failed', 'error');
+        return;
+      }
       
       // Update locally
       setPosts(prev => prev.map(p => p.id === post.id ? { ...p, is_pinned: nextPinState } : p));
       showToast(nextPinState ? 'Post pinned on community board! 📌' : 'Post unpinned successfully', 'success');
-      
-      // Auto-trigger notification for student post pinned in mock client
-      if (nextPinState) {
-        communityService.addLocalNotification(
-          post.author_id,
-          'post_pinned',
-          `Your post "${post.title.substring(0, 30)}" has been pinned by Teacher ${teacher?.name.split(' ').pop()}! 📌`
-        );
-      }
-    } catch (e) {
-      showToast('Action failed', 'error');
+    } catch (e: any) {
+      showToast(e?.message || 'Action failed', 'error');
     }
   };
 
   const handleDeletePost = async (postId: string) => {
     if (!confirm('Are you sure you want to remove this post from public boards?')) return;
     try {
-      await communityService.deletePost(postId);
+      const { data, error } = await supabase.rpc('forum_moderator_delete_post', {
+        p_post_id: postId
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        showToast(data?.message || 'Deletion failed', 'error');
+        return;
+      }
       await attachmentService.deleteAttachmentsForPost(postId);
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, is_deleted: true } : p));
       showToast('Post removed successfully and associated attachment files cleared! 🛡️', 'success');
-    } catch (e) {
-      showToast('Deletion failed', 'error');
+    } catch (e: any) {
+      showToast(e?.message || 'Deletion failed', 'error');
     }
   };
 
   const handleResolveFlag = async (flagId: string) => {
     try {
-      await communityService.resolveFlag(flagId);
+      const { data, error } = await supabase.rpc('forum_resolve_flag', {
+        p_flag_id: flagId
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        showToast(data?.message || 'Failed to resolve flag', 'error');
+        return;
+      }
       setFlags(prev => prev.filter(f => f.id !== flagId));
       showToast('Report marked as resolved successfully!', 'success');
-    } catch (e) {
-      showToast('Failed to resolve flag', 'error');
+    } catch (e: any) {
+      showToast(e?.message || 'Failed to resolve flag', 'error');
     }
   };
 
@@ -175,22 +250,25 @@ export default function ModerationPage({ onBack, embedMode = false }: Moderation
     if (!teacher || !warningTarget || !warningReason.trim()) return;
     setSubmitting(true);
     try {
-      await communityService.warnStudent(warningTarget.id, teacher.id, warningReason.trim());
+      const { data, error } = await supabase.rpc('forum_warn_student', {
+        p_student_id: warningTarget.id,
+        p_reason: warningReason.trim(),
+        p_issued_by: teacher.id
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        showToast(data?.message || 'Failed to issue warning', 'error');
+        return;
+      }
+
       showToast(`Official warning shared with student ${warningTarget.name}`, 'success');
-      
-      // Auto-trigger warnings notification inside mock local system
-      communityService.addLocalNotification(
-        warningTarget.id,
-        'warning_received',
-        `Official warning received: "${warningReason.trim()}"`
-      );
 
       setShowWarningModal(false);
       setWarningReason('');
       setWarningTarget(null);
       fetchWarnings();
-    } catch (e) {
-      showToast('Failed to write warning', 'error');
+    } catch (e: any) {
+      showToast(e?.message || 'Failed to issue warning', 'error');
     } finally {
       setSubmitting(false);
     }

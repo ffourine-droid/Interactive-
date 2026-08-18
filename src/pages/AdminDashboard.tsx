@@ -580,16 +580,46 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const fetchForumData = async () => {
     setLoading(true);
     try {
-      const [flags, warnings, posts] = await Promise.all([
-        forumService.getUnresolvedFlags(),
-        forumService.getWarnings(),
-        forumService.getFeed()
+      const [flagsRes, warningsRes, boardsRes] = await Promise.all([
+        supabase.rpc('forum_get_unresolved_flags'),
+        supabase.rpc('forum_get_warnings'),
+        supabase.rpc('forum_get_all_boards')
       ]);
-      setUnresolvedFlags(flags || []);
-      setWarningsList(warnings || []);
-      setForumPosts(posts || []);
+
+      if (flagsRes.error) throw flagsRes.error;
+      if (warningsRes.error) throw warningsRes.error;
+      if (boardsRes.error) throw boardsRes.error;
+
+      if (flagsRes.data && !flagsRes.data.success) {
+        throw new Error(flagsRes.data.message || 'Error loading flags');
+      }
+      if (warningsRes.data && !warningsRes.data.success) {
+        throw new Error(warningsRes.data.message || 'Error loading warnings');
+      }
+      if (boardsRes.data && !boardsRes.data.success) {
+        throw new Error(boardsRes.data.message || 'Error loading boards');
+      }
+
+      const flags = flagsRes.data?.flags || [];
+      const warnings = warningsRes.data?.warnings || [];
+      const boards = boardsRes.data?.boards || [];
+
+      const boardPostsPromises = boards.map(async (b: any) => {
+        const { data, error } = await supabase.rpc('forum_get_board_posts', {
+          p_board_id: b.id
+        });
+        if (error || !data?.success) return [];
+        return data.posts || [];
+      });
+
+      const boardPostsArrays = await Promise.all(boardPostsPromises);
+      const mergedPosts = boardPostsArrays.flat();
+
+      setUnresolvedFlags(flags);
+      setWarningsList(warnings);
+      setForumPosts(mergedPosts);
     } catch (err: any) {
-      showToast('Error loading forum moderation assets', 'error');
+      showToast(err?.message || 'Error loading forum moderation assets', 'error');
     } finally {
       setLoading(false);
     }
@@ -598,11 +628,18 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const handleResolveFlag = async (flagId: string) => {
     setFlagActionLoading(true);
     try {
-      await forumService.resolveFlag(flagId);
+      const { data, error } = await supabase.rpc('forum_resolve_flag', {
+        p_flag_id: flagId
+      });
+      if (error) throw error;
+      if (data && !data.success) {
+        showToast(data.message || 'Action failed', 'error');
+        return;
+      }
       showToast('Flag resolved successfully ✅', 'success');
       fetchForumData();
-    } catch (err) {
-      showToast('Action failed', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Action failed', 'error');
     } finally {
       setFlagActionLoading(false);
     }
@@ -611,13 +648,25 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const handleDeletePostFromFlag = async (flagId: string, postId: string) => {
     setFlagActionLoading(true);
     try {
-      await forumService.deletePost(postId);
-      await forumService.resolveFlag(flagId);
+      const delRes = await supabase.rpc('forum_moderator_delete_post', {
+        p_post_id: postId
+      });
+      if (delRes.error) throw delRes.error;
+      if (delRes.data && !delRes.data.success) {
+        showToast(delRes.data.message || 'Failed to purge post', 'error');
+        return;
+      }
+
+      const resolveRes = await supabase.rpc('forum_resolve_flag', {
+        p_flag_id: flagId
+      });
+      if (resolveRes.error) throw resolveRes.error;
+
       await attachmentService.deleteAttachmentsForPost(postId);
       showToast('Post removed and file storage purged 🗑️', 'success');
       fetchForumData();
-    } catch (err) {
-      showToast('Failed to purge post', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to purge post', 'error');
     } finally {
       setFlagActionLoading(false);
     }
@@ -636,18 +685,38 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
 
     setFlagActionLoading(true);
     try {
-      const prof = await forumService.getProfileByUsername(studentSearchUsername);
+      const cleanedHandle = studentSearchUsername.replace('@', '').trim();
+      const { data: prof, error: profError } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .ilike('username', cleanedHandle)
+        .maybeSingle();
+
+      if (profError) throw profError;
+
       if (!prof) {
         showToast(`Could not find profile for student @${studentSearchUsername.replace('@','')}`, 'error');
         return;
       }
-      await forumService.warnStudent(prof.id, 'admin-1', searchWarningText.trim());
+
+      const { data: warnData, error: warnError } = await supabase.rpc('forum_warn_student', {
+        p_student_id: prof.id,
+        p_reason: searchWarningText.trim(),
+        p_issued_by: null
+      });
+
+      if (warnError) throw warnError;
+      if (warnData && !warnData.success) {
+        showToast(warnData.message || 'Error issuing student warning', 'error');
+        return;
+      }
+
       showToast(`⚠️ warning issued to student @${prof.username}`, 'success');
       setStudentSearchUsername('');
       setSearchWarningText('');
       fetchForumData();
-    } catch (err) {
-      showToast('Error issuing student warning', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Error issuing student warning', 'error');
     } finally {
       setFlagActionLoading(false);
     }
@@ -656,11 +725,19 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const handleTogglePinInPosts = async (postId: string, pinStatus: boolean) => {
     setFlagActionLoading(true);
     try {
-      await forumService.togglePin(postId, !pinStatus);
+      const { data, error } = await supabase.rpc('forum_toggle_pin', {
+        p_post_id: postId,
+        p_pinned: !pinStatus
+      });
+      if (error) throw error;
+      if (data && !data.success) {
+        showToast(data.message || 'Action failed', 'error');
+        return;
+      }
       showToast(!pinStatus ? 'Post pinned on student boards! 📌' : 'Post unpinned', 'success');
       fetchForumData();
-    } catch (err) {
-      showToast('Action failed', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Action failed', 'error');
     } finally {
       setFlagActionLoading(false);
     }
@@ -669,12 +746,19 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const handleDeletePostInPosts = async (postId: string) => {
     setFlagActionLoading(true);
     try {
-      await forumService.deletePost(postId);
+      const { data, error } = await supabase.rpc('forum_moderator_delete_post', {
+        p_post_id: postId
+      });
+      if (error) throw error;
+      if (data && !data.success) {
+        showToast(data.message || 'Failed to remove post', 'error');
+        return;
+      }
       await attachmentService.deleteAttachmentsForPost(postId);
       showToast('Post removed and storage purged', 'success');
       fetchForumData();
-    } catch (err) {
-      showToast('Failed to remove post', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to remove post', 'error');
     } finally {
       setFlagActionLoading(false);
     }
