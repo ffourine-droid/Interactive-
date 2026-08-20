@@ -155,6 +155,7 @@ export const SchoolSetupModal: React.FC<SchoolSetupModalProps> = ({
     setSubmitting(true);
     try {
       const { data, error } = await supabase.rpc('teacher_create_school', {
+        p_teacher_id: teacherId,
         p_name: trimmedName,
         p_pin: pin,
         p_contact_name: contactName.trim() || null,
