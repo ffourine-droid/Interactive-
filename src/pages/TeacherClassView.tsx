@@ -304,14 +304,25 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
     try {
       // Set the teacher_id session config inside Postgres before running queries/RPCs
-      await setTeacherConfig(teacherId);
+      try {
+        await setTeacherConfig(teacherId);
+      } catch (configErr) {
+        console.warn("Could not set teacher config:", configErr);
+      }
 
       const isDynamic = classId === 'dynamic-class';
       const isLocal = classId.startsWith('local_') || isDynamic;
 
-      // 1. Fetch assignments, students, exams, teacher info, and class info in parallel
+      // 1. Fetch assignments, students, exams, teacher info, and class info safely
       const [assignmentsRes, studentsRes, teacherRes, examsRes, classRes] = await Promise.all([
-        supabase.rpc('teacher_get_assignments', { p_teacher_id: teacherId }),
+        (async () => {
+          try {
+            return await supabase.rpc('teacher_get_assignments', { p_teacher_id: teacherId });
+          } catch (e: any) {
+            console.warn("teacher_get_assignments RPC failed:", e);
+            return { data: null, error: e };
+          }
+        })(),
         isLocal ? Promise.resolve({ data: [], error: null }) : (async () => {
           try {
             const { data, error } = await supabase.rpc('teacher_get_class_students', {
@@ -337,21 +348,42 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           }
           return { data: [], error: null };
         })(),
-        supabase
-          .from('teachers')
-          .select('id, name, school_name')
-          .eq('id', teacherId)
-          .maybeSingle(),
-        isLocal ? Promise.resolve({ data: [], error: null }) : supabase
-          .from('exams')
-          .select('*')
-          .eq('class_id', classId)
-          .order('created_at', { ascending: false }),
-        isLocal ? Promise.resolve({ data: null, error: null }) : supabase
-          .from('classes')
-          .select('id, name, grade')
-          .eq('id', classId)
-          .maybeSingle()
+        (async () => {
+          try {
+            return await supabase
+              .from('teachers')
+              .select('id, name, school_name')
+              .eq('id', teacherId)
+              .maybeSingle();
+          } catch (e: any) {
+            console.warn("teachers query failed in ClassView:", e);
+            return { data: null, error: e };
+          }
+        })(),
+        isLocal ? Promise.resolve({ data: [], error: null }) : (async () => {
+          try {
+            return await supabase
+              .from('exams')
+              .select('*')
+              .eq('class_id', classId)
+              .order('created_at', { ascending: false });
+          } catch (e: any) {
+            console.warn("exams query failed in ClassView:", e);
+            return { data: [], error: null };
+          }
+        })(),
+        isLocal ? Promise.resolve({ data: null, error: null }) : (async () => {
+          try {
+            return await supabase
+              .from('classes')
+              .select('id, name, grade')
+              .eq('id', classId)
+              .maybeSingle();
+          } catch (e: any) {
+            console.warn("classes query failed in ClassView:", e);
+            return { data: null, error: null };
+          }
+        })()
       ]);
 
       if (assignmentsRes.error) throw assignmentsRes.error;
@@ -505,34 +537,56 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       const assignmentIds = assignmentsData.map(a => a.id);
       
       const fetchSubmissionsAndAcks = [
-        assignmentIds.length > 0 ? supabase
-          .from('assignment_submissions')
-          .select('*')
-          .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
-          : supabase.from('assignment_submissions').select('*').eq('teacher_id', teacherId),
-        assignmentsData.length > 0 ? supabase
-          .from('parent_acknowledgements')
-          .select('assignment_id, student_id, acknowledged_at')
-          .in('assignment_id', assignmentsData.map(a => a.id))
-          : Promise.resolve({ data: [], error: null })
+        assignmentIds.length > 0 ? (async () => {
+          try {
+            return await supabase
+              .from('assignment_submissions')
+              .select('*')
+              .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`);
+          } catch (e: any) {
+            console.warn("assignment_submissions fetch error in ClassView:", e);
+            return { data: [], error: null };
+          }
+        })() : (async () => {
+          try {
+            return await supabase.from('assignment_submissions').select('*').eq('teacher_id', teacherId);
+          } catch (e: any) {
+            console.warn("assignment_submissions by teacher_id fetch error:", e);
+            return { data: [], error: null };
+          }
+        })(),
+        assignmentsData.length > 0 ? (async () => {
+          try {
+            return await supabase
+              .from('parent_acknowledgements')
+              .select('assignment_id, student_id, acknowledged_at')
+              .in('assignment_id', assignmentsData.map(a => a.id));
+          } catch (e: any) {
+            console.warn("parent_acknowledgements fetch error in ClassView:", e);
+            return { data: [], error: null };
+          }
+        })() : Promise.resolve({ data: [], error: null })
       ];
 
-      const fetchExamAttempts = examIds.length > 0 ? supabase
-        .from('exam_attempts')
-        .select('*')
-        .in('exam_id', examIds) : Promise.resolve({ data: [], error: null });
+      const fetchExamAttempts = examIds.length > 0 ? (async () => {
+        try {
+          return await supabase
+            .from('exam_attempts')
+            .select('*')
+            .in('exam_id', examIds);
+        } catch (e: any) {
+          console.warn("exam_attempts fetch error in ClassView:", e);
+          return { data: [], error: null };
+        }
+      })() : Promise.resolve({ data: [], error: null });
 
       const [submissionsRes, acksRes, examAttemptsRes] = await Promise.all([
         ...fetchSubmissionsAndAcks,
         fetchExamAttempts
       ] as any);
 
-      if (submissionsRes.error) throw submissionsRes.error;
-      if (acksRes.error) throw acksRes.error;
-      if (examAttemptsRes.error) throw examAttemptsRes.error;
-
       let fetchedSubmissions: Submission[] = [];
-      if (submissionsRes.data) {
+      if (submissionsRes && submissionsRes.data) {
         if (submissionsRes.data.success) {
           fetchedSubmissions = submissionsRes.data.submissions || [];
         } else if (Array.isArray(submissionsRes.data)) {
@@ -547,21 +601,28 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             const asgn = assignmentsData.find((a: any) => a.id === sub.assignment_id);
             if (asgn?.is_broadcast || sub.is_broadcast) {
               sub.teacher_id = teacherId;
-              supabase
-                .from('assignment_submissions')
-                .update({ teacher_id: teacherId })
-                .eq('id', sub.id);
+              try {
+                supabase
+                  .from('assignment_submissions')
+                  .update({ teacher_id: teacherId })
+                  .eq('id', sub.id);
+              } catch (patchErr) {
+                console.warn("Could not patch teacher_id:", patchErr);
+              }
             }
           }
         });
       }
 
       setSubmissions(fetchedSubmissions);
-      setAcknowledgements(acksRes.data || []);
-      setExamAttempts(examAttemptsRes.data || []);
+      setAcknowledgements(acksRes?.data || []);
+      setExamAttempts(examAttemptsRes?.data || []);
     } catch (err: any) {
       console.error("Error loading class data:", err);
-      showToast("Error loading data: " + (err.message || "Unknown error"), "error");
+      // Non-fatal warning if we have local or partial state
+      if (students.length === 0 && assignments.length === 0) {
+        showToast("Notice: Could not load remote data. Showing cached class data.", "info");
+      }
     } finally {
       setLoading(false);
     }

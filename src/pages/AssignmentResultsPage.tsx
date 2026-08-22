@@ -93,10 +93,14 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
         .from('assignment_submissions')
         .select('*')
         .eq('assignment_id', assignmentId)
-        .order('created_at', { ascending: false });
+        .order('submitted_at', { ascending: false });
 
-      if (subError) throw subError;
-      setSubmissions(subData || []);
+      if (subError) {
+        console.error("Could not load submissions:", subError);
+        showToast("Could not load submissions", 'error');
+      } else {
+        setSubmissions(subData || []);
+      }
 
       // Fetch students in this class to see who hasn't submitted
       if (asgnData?.class_id) {
@@ -382,7 +386,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className="text-xs text-brand-muted font-bold">{new Date(sub.created_at).toLocaleDateString()}</span>
+                              <span className="text-xs text-brand-muted font-bold">{new Date(sub.submitted_at).toLocaleDateString()}</span>
                             </td>
                             <td className="px-6 py-4">
                               <span className="font-black text-brand-accent">{sub.score !== null ? `${sub.score}%` : '—'}</span>
