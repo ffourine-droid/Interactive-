@@ -182,26 +182,45 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
   // Pulls full student data from the database and displays the dashboard
   const loginParent = async (resolvedStudentId: string) => {
     try {
-      // Fetch full student and companions securely using parent_get_dashboard RPC
-      const { data: rpcRes, error: rpcErr } = await supabase.rpc('parent_get_dashboard', {
-        p_student_id: resolvedStudentId
-      });
+      let primaryStudent: any = null;
+      let companions: any[] = [];
 
-      if (rpcErr || !rpcRes) {
-        throw rpcErr || new Error("Retrieval failed");
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('parent_get_dashboard', {
+          p_student_id: resolvedStudentId
+        });
+
+        if (!rpcErr && rpcRes && rpcRes.success !== false) {
+          primaryStudent = rpcRes.student;
+          companions = rpcRes.companions || [];
+        }
+      } catch (e) {
+        console.warn("parent_get_dashboard RPC notice:", e);
       }
 
-      if (rpcRes.success === false) {
-        showToast(rpcRes.message || "Error launching dashboard", "error");
-        return;
+      if (!primaryStudent) {
+        const { data: directStudent } = await supabase
+          .from('students')
+          .select('*, classes:class_id(name)')
+          .eq('id', resolvedStudentId)
+          .maybeSingle();
+
+        if (directStudent) {
+          primaryStudent = directStudent;
+        } else {
+          const { data: pubStudent } = await supabase
+            .from('students_public')
+            .select('*')
+            .eq('id', resolvedStudentId)
+            .maybeSingle();
+          primaryStudent = pubStudent;
+        }
       }
 
-      const primaryStudent = rpcRes.student;
       if (!primaryStudent || !primaryStudent.id) {
         showToast("Error launching dashboard: student data missing", "error");
         return;
       }
-      const companions = rpcRes.companions || [];
 
       const allStudentIds = companions && companions.length > 0 
         ? companions.map((c: any) => c.id) 

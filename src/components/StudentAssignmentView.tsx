@@ -619,10 +619,22 @@ export const StudentAssignmentView: React.FC<{
       applySubmissionTeacherId().catch(() => {});
     }
 
-      // Direct Table Fallback if RPC failed or returned success: false
+      // Direct Table Fallback if RPC failed or returned success: false.
+      // We only ever write using a REAL roster-matched student id. If none
+      // is available, we must not fabricate one — that would silently
+      // orphan the submission from the parent portal (which matches on
+      // real student_id) even though the teacher's view is name-based
+      // and would still show it.
       if (!submissionRecorded) {
-        const fallbackStudentId = activeStudentId || currentStudent?.student_id || studentId || 'student-' + Date.now();
-        
+        const isUuidId = (id: any) => id && String(id).length === 36 && String(id).includes('-');
+        const fallbackStudentId = isUuidId(activeStudentId)
+          ? activeStudentId
+          : (isUuidId(currentStudent?.student_id) ? currentStudent?.student_id : (isUuidId(studentId) ? studentId : null));
+
+        if (!fallbackStudentId) {
+          throw new Error("We couldn't confirm your student record, so this submission wasn't saved. Please check your name matches the class roster exactly, then try again.");
+        }
+
         const { error: directError } = await supabase
           .from('assignment_submissions')
           .upsert({
@@ -659,7 +671,7 @@ export const StudentAssignmentView: React.FC<{
 
       setSubmission({
         assignment_id: assignment.id,
-        student_id: activeStudentId || studentId || 'submitted',
+        student_id: activeStudentId || studentId || undefined,
         status: 'submitted',
         created_at: new Date().toISOString(),
         submitted_at: new Date().toISOString(),

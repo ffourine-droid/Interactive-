@@ -57,6 +57,33 @@ export async function resolveStudentIdentity(
     console.warn('Roster lookup warning:', err);
   }
 
+  // Direct table lookup fallback if RPC returned no roster
+  if (roster.length === 0) {
+    try {
+      let q = supabase.from('students').select('id, name, grade, class_id, index_number, school_name');
+      if (classId) {
+        q = q.eq('class_id', classId);
+      }
+      if (grade) {
+        q = q.eq('grade', grade);
+      }
+      const { data: dbStudents, error: dbErr } = await q;
+      if (!dbErr && dbStudents && dbStudents.length > 0) {
+        roster = dbStudents;
+      } else {
+        let qPub = supabase.from('students_public').select('*');
+        if (classId) qPub = qPub.eq('class_id', classId);
+        if (grade) qPub = qPub.eq('grade', grade);
+        const { data: pubStudents } = await qPub;
+        if (pubStudents && pubStudents.length > 0) {
+          roster = pubStudents;
+        }
+      }
+    } catch (tblErr) {
+      console.warn('Direct students table lookup error:', tblErr);
+    }
+  }
+
   // Exact match filter (case-insensitive, trimmed)
   const exactMatches = roster.filter(
     s => s.name && s.name.trim().toLowerCase() === nameLower

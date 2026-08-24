@@ -196,6 +196,10 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   useEffect(() => {
     if (!student?.id) return;
 
+    const rawStudentIds = student.all_student_ids || (student.id ? [student.id] : []);
+    const studentIds = rawStudentIds.filter((id: any) => typeof id === 'string' && id.trim() !== '' && id !== 'undefined');
+    const studentNameLower = (student.name || '').trim().toLowerCase();
+
     const realtimeChannel = supabase
       .channel(`parent-dashboard-${student.id}`)
       .on('postgres_changes', {
@@ -204,7 +208,10 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         table: 'assignment_submissions'
       }, (payload) => {
         const sub = payload.new as any || payload.old as any;
-        if (sub?.student_id === student.id) {
+        if (
+          (sub?.student_id && studentIds.includes(sub.student_id)) ||
+          (sub?.student_name && sub.student_name.trim().toLowerCase() === studentNameLower)
+        ) {
           fetchData(true);
         }
       })
@@ -214,7 +221,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         table: 'exam_attempts'
       }, (payload) => {
         const att = payload.new as any || payload.old as any;
-        if (att?.student_id === student.id) {
+        if (att?.student_id && studentIds.includes(att.student_id)) {
           fetchData(true);
         }
       })
@@ -239,7 +246,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
         table: 'parent_acknowledgements'
       }, (payload) => {
         const ack = payload.new as any || payload.old as any;
-        if (ack?.student_id === student.id) {
+        if (ack?.student_id && studentIds.includes(ack.student_id)) {
           fetchData(true);
         }
       })
@@ -248,7 +255,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
     return () => {
       supabase.removeChannel(realtimeChannel);
     };
-  }, [student?.id]);
+  }, [student?.id, student?.all_student_ids?.join(','), student?.name]);
 
   useEffect(() => {
     if (student) {
@@ -459,6 +466,98 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
       }
 
       setExamAttempts(examAttemptsData);
+
+      // 5. Fetch assignment submissions directly to guarantee visibility even if RPC failed or returned partial data
+      try {
+        let directSubmissions: any[] = [];
+
+        // Query by student UUIDs
+        if (studentIds.length > 0) {
+          const { data: subById, error: errById } = await supabase
+            .from('assignment_submissions')
+            .select('*')
+            .in('student_id', studentIds);
+          if (!errById && subById) {
+            directSubmissions = [...directSubmissions, ...subById];
+          }
+        }
+
+        // Query by student name (for name-matched submissions)
+        const nameToMatch = (student.name || '').trim();
+        if (nameToMatch) {
+          const { data: subByName, error: errByName } = await supabase
+            .from('assignment_submissions')
+            .select('*')
+            .ilike('student_name', nameToMatch);
+          if (!errByName && subByName) {
+            directSubmissions = [...directSubmissions, ...subByName];
+          }
+        }
+
+        // Query fallback 'submissions' table if it exists
+        if (studentIds.length > 0) {
+          try {
+            const { data: legacySub } = await supabase
+              .from('submissions')
+              .select('*')
+              .in('student_id', studentIds);
+            if (legacySub) {
+              directSubmissions = [...directSubmissions, ...legacySub];
+            }
+          } catch {}
+        }
+
+        // Merge submissions safely
+        if (directSubmissions.length > 0) {
+          setSubmissions(prev => {
+            const subMap = new Map<string, any>();
+            // Start with previous state (e.g. populated by RPC)
+            (prev || []).forEach(s => {
+              if (s.assignment_id) subMap.set(s.assignment_id, s);
+            });
+            // Merge direct table rows
+            directSubmissions.forEach(s => {
+              if (s.assignment_id) {
+                const existing = subMap.get(s.assignment_id);
+                if (!existing) {
+                  subMap.set(s.assignment_id, s);
+                } else if (s.score !== null && existing.score === null) {
+                  subMap.set(s.assignment_id, { ...existing, ...s });
+                } else if (new Date(s.submitted_at).getTime() > new Date(existing.submitted_at || 0).getTime()) {
+                  subMap.set(s.assignment_id, { ...existing, ...s });
+                }
+              }
+            });
+            return Array.from(subMap.values());
+          });
+        }
+      } catch (subErr) {
+        console.warn("Direct assignment_submissions lookup warning:", subErr);
+      }
+
+      // Fetch acknowledgements directly
+      if (studentIds.length > 0) {
+        try {
+          const { data: directAcks } = await supabase
+            .from('parent_acknowledgements')
+            .select('*')
+            .in('student_id', studentIds);
+          if (directAcks && directAcks.length > 0) {
+            setAcknowledgements(prev => {
+              const ackMap = new Map<string, any>();
+              (prev || []).forEach(a => {
+                if (a.assignment_id) ackMap.set(a.assignment_id, a);
+              });
+              directAcks.forEach(a => {
+                if (a.assignment_id) ackMap.set(a.assignment_id, a);
+              });
+              return Array.from(ackMap.values());
+            });
+          }
+        } catch (ackErr) {
+          console.warn("Direct parent_acknowledgements lookup warning:", ackErr);
+        }
+      }
 
       // 6. Fetch student note sessions with error safety
       const usernamesToQuery = [

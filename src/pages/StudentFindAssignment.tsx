@@ -420,6 +420,26 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
         }
       }
     } else {
+      if (!activeStudentId || activeStudentId.length !== 36) {
+        if (studentName.trim()) {
+          try {
+            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+            const res = await resolveStudentIdentity(studentName.trim(), assignment.class_id || null, assignment.grade || 'Grade 7');
+            if (res.status === 'EXACT_MATCH' && res.student) {
+              activeStudentId = res.student.id;
+            } else if (res.candidates && res.candidates.length > 0) {
+              activeStudentId = res.candidates[0].id;
+            }
+          } catch (lookupErr) {
+            console.warn('Roster lookup warning:', lookupErr);
+          }
+        }
+      }
+
+      if (activeStudentId && activeStudentId.length === 36) {
+        rpcParams.p_student_id = activeStudentId;
+      }
+
       const { data: sRes, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParams);
       if (!rpcError && sRes && sRes.success !== false) {
         response = sRes;
