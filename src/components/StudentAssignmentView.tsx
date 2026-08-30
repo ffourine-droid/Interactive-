@@ -108,6 +108,7 @@ export const StudentAssignmentView: React.FC<{
   const [needsClassSelection, setNeedsClassSelection] = useState(false);
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [showSkipConfirmModal, setShowSkipConfirmModal] = useState(false);
   useEffect(() => {
     if (!isInitialized) {
       if (currentStudent) {
@@ -329,9 +330,26 @@ export const StudentAssignmentView: React.FC<{
   const handleSkipQuestion = async (qIndex: number, questionId: string) => {
     if (!assignment) return;
 
+    if (saveDebounceTimers.current[questionId]) {
+      clearTimeout(saveDebounceTimers.current[questionId]);
+    }
+
     setSkippedQuestions(prev => {
       const next = new Set(prev);
       next.add(questionId);
+      return next;
+    });
+
+    setAnswers(prev => {
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
+
+    setFiles(prev => {
+      if (!prev[questionId]) return prev;
+      const next = { ...prev };
+      delete next[questionId];
       return next;
     });
 
@@ -410,22 +428,37 @@ export const StudentAssignmentView: React.FC<{
     return 'PENDING';
   };
 
-  const submitAssignment = async () => {
+  const submitAssignment = async (forceSubmit: boolean = false) => {
     if (!assignment) return;
     
-    // Check if all questions are answered
-    const unanswered = assignment.questions.find(q => !answers[q.id] && !files[q.id]);
-    if (unanswered) {
-      showToast("Please answer all questions before submitting.", "info");
+    // Check skipped & untouched questions for non-blocking confirmation
+    const totalQuestions = assignment.questions?.length || 0;
+    const answeredCount = assignment.questions?.filter(q => 
+      !skippedQuestions.has(q.id) && 
+      ((answers[q.id] !== undefined && answers[q.id] !== '') || files[q.id])
+    ).length || 0;
+    const skippedCount = assignment.questions?.filter(q => skippedQuestions.has(q.id)).length || 0;
+    const untouchedCount = totalQuestions - answeredCount - skippedCount;
+
+    if (!forceSubmit && (skippedCount > 0 || untouchedCount > 0)) {
+      setShowSkipConfirmModal(true);
       return;
     }
 
+    setShowSkipConfirmModal(false);
     setSubmitting(true);
     try {
-      const finalAnswers: Record<string, any> = { ...answers };
+      // Build final answers payload excluding skipped questions
+      const finalAnswers: Record<string, any> = {};
+      for (const [qId, val] of Object.entries(answers)) {
+        if (!skippedQuestions.has(qId) && val !== undefined && val !== '') {
+          finalAnswers[qId] = val;
+        }
+      }
       
-      // 1. Upload photos if any
+      // 1. Upload photos if any (and not skipped)
       for (const qId of Object.keys(files)) {
+        if (skippedQuestions.has(qId)) continue;
         const file = files[qId];
         const fileExt = file.name.split('.').pop();
         const fileName = `${assignment.id}/${studentName.replace(/\s+/g, '_')}_${qId}_${Date.now()}.${fileExt}`;
@@ -443,14 +476,14 @@ export const StudentAssignmentView: React.FC<{
         finalAnswers[qId] = publicUrlData.publicUrl;
       }
 
-      // 2. Calculate score for MCQs
+      // 2. Calculate score for MCQs based on submitted answers
       let mcqCount = 0;
       let correctCount = 0;
       
       assignment.questions.forEach(q => {
-        if (q.type === 'mcq') {
+        if (q.type === 'mcq' && finalAnswers[q.id] !== undefined) {
           mcqCount++;
-          if (parseInt(answers[q.id]) === q.correct_option) {
+          if (parseInt(finalAnswers[q.id]) === q.correct_option) {
             correctCount++;
           }
         }
@@ -786,7 +819,7 @@ export const StudentAssignmentView: React.FC<{
         </header>
 
         {/* Progress Bar Header */}
-        <div className="bg-brand-surface/90 backdrop-blur-md border-b border-brand-border px-4 py-3 sticky top-[65px] z-40 shadow-sm">
+        <div className="bg-brand-surface/90 backdrop-blur-md border-b border-brand-border px-4 py-3 sticky top-[65px] z-40 shadow-sm space-y-2">
           <div className="max-w-[420px] mx-auto space-y-1.5">
             <div className="flex items-center justify-between text-xs font-bold text-brand-text">
               <div className="flex items-center gap-2">
@@ -804,6 +837,37 @@ export const StudentAssignmentView: React.FC<{
                 className="h-full bg-gradient-to-r from-brand-accent to-amber-500 transition-all duration-300 rounded-full"
                 style={{ width: `${progressPercent}%` }}
               />
+            </div>
+          </div>
+
+          {/* Question Quick Jump Bar */}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-brand-border/30">
+            <span className="text-[10px] font-black uppercase tracking-wider text-brand-muted shrink-0">Jump to:</span>
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar max-w-[320px]">
+              {assignment.questions.map((q, idx) => {
+                const isSkipped = skippedQuestions.has(q.id);
+                const isAnswered = !isSkipped && ((answers[q.id] !== undefined && answers[q.id] !== '') || files[q.id]);
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById(`q-${idx}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                    className={`w-7 h-7 rounded-lg text-xs font-black transition-all flex items-center justify-center shrink-0 active:scale-95 ${
+                      isSkipped
+                        ? 'bg-amber-500/15 text-amber-600 border border-amber-500/40 shadow-xs'
+                        : isAnswered
+                          ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-500/40 shadow-xs'
+                          : 'bg-brand-bg text-brand-muted border border-brand-border hover:border-brand-accent/40'
+                    }`}
+                    title={`Question ${idx + 1}: ${isSkipped ? 'Skipped' : isAnswered ? 'Answered' : 'Untouched'}`}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -848,147 +912,163 @@ export const StudentAssignmentView: React.FC<{
           </div>
 
           <div className="space-y-4">
-            {assignment.questions.map((q, idx) => (
-              <motion.div 
-                key={q.id}
-                id={`q-${idx}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className={`bg-brand-surface border rounded-2xl p-4 shadow-sm transition-all ${
-                  skippedQuestions.has(q.id)
-                    ? 'border-amber-500/40 bg-amber-500/[0.02]'
-                    : answers[q.id] !== undefined && answers[q.id] !== ''
-                      ? 'border-emerald-500/30 bg-emerald-500/[0.01]'
-                      : 'border-brand-border'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent font-black text-xs shrink-0">
-                      {idx + 1}
+            {assignment.questions.map((q, idx) => {
+              const isSkipped = skippedQuestions.has(q.id);
+              const isAnswered = !isSkipped && ((answers[q.id] !== undefined && answers[q.id] !== '') || files[q.id]);
+              
+              return (
+                <motion.div 
+                  key={q.id}
+                  id={`q-${idx}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className={`bg-brand-surface border rounded-2xl p-4 shadow-sm transition-all ${
+                    isSkipped
+                      ? 'border-amber-500/40 bg-amber-500/[0.02]'
+                      : isAnswered
+                        ? 'border-emerald-500/30 bg-emerald-500/[0.01]'
+                        : 'border-brand-border'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-7 h-7 rounded-lg border flex items-center justify-center font-black text-xs shrink-0 ${
+                        isSkipped
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-600'
+                          : isAnswered
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600'
+                            : 'bg-brand-bg border-brand-border text-brand-accent'
+                      }`}>
+                        {idx + 1}
+                      </div>
+                      <h3 className="font-bold text-base leading-tight pt-0.5 text-brand-text">{q.text}</h3>
                     </div>
-                    <h3 className="font-bold text-base leading-tight pt-0.5 text-brand-text">{q.text}</h3>
+
+                    {/* Status Badges */}
+                    {isSkipped ? (
+                      <span className="shrink-0 px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
+                        <FastForward size={12} />
+                        Skipped
+                      </span>
+                    ) : isAnswered ? (
+                      <span className="shrink-0 px-2.5 py-1 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
+                        <CheckCircle2 size={12} />
+                        Answered
+                      </span>
+                    ) : (
+                      <span className="shrink-0 px-2.5 py-1 bg-brand-bg text-brand-muted border border-brand-border text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
+                        <HelpCircle size={12} />
+                        Untouched
+                      </span>
+                    )}
                   </div>
 
-                  {/* Status Badges */}
-                  {skippedQuestions.has(q.id) ? (
-                    <span className="shrink-0 px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
-                      <FastForward size={12} />
-                      Skipped
-                    </span>
-                  ) : answers[q.id] !== undefined && answers[q.id] !== '' ? (
-                    <span className="shrink-0 px-2.5 py-1 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
-                      <CheckCircle2 size={12} />
-                      Answered
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mt-3 pl-0 sm:pl-10 space-y-3">
-                  {q.type === 'mcq' && (
-                    <div className="space-y-2">
-                      {q.options.map((opt, optIdx) => (
-                        <button
-                          key={optIdx}
-                          onClick={() => handleAnswerChange(q.id, optIdx.toString(), false)}
-                          className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between group ${
-                            answers[q.id] === optIdx.toString()
-                              ? 'bg-brand-accent border-brand-accent text-white'
-                              : 'bg-brand-bg border-brand-border hover:border-brand-accent/50 text-brand-text/80'
-                          }`}
-                        >
-                          <span className="font-bold text-sm">{opt}</span>
-                          <div className={`w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center ${
-                            answers[q.id] === optIdx.toString() ? 'border-white' : 'border-brand-border/40 group-hover:border-brand-accent/40'
-                          }`}>
-                            {answers[q.id] === optIdx.toString() && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {q.type === 'short_answer' && (
-                    <textarea 
-                      placeholder="Type your answer here..."
-                      className="w-full bg-brand-bg border border-brand-border rounded-xl p-3.5 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold text-sm min-h-[90px] resize-none"
-                      value={answers[q.id] || ''}
-                      onChange={e => handleAnswerChange(q.id, e.target.value, true)}
-                    />
-                  )}
-
-                  {q.type === 'photo' && (
-                    <div className="space-y-3">
-                      {files[q.id] ? (
-                        <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-emerald-500/10 rounded-lg">
-                              <Camera className="text-emerald-500" size={18} />
-                            </div>
-                            <div className="max-w-[150px]">
-                              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-500/40 leading-none mb-1">Uploaded</p>
-                              <p className="text-xs font-bold truncate">{files[q.id].name}</p>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={() => {
-                              const newFiles = { ...files };
-                              delete newFiles[q.id];
-                              setFiles(newFiles);
-                              const newAnswers = { ...answers };
-                              delete newAnswers[q.id];
-                              setAnswers(newAnswers);
-                            }}
-                            className="p-1.5 text-brand-muted hover:text-red-500 transition-colors"
+                  <div className="mt-3 pl-0 sm:pl-10 space-y-3">
+                    {q.type === 'mcq' && (
+                      <div className="space-y-2">
+                        {q.options.map((opt, optIdx) => (
+                          <button
+                            key={optIdx}
+                            onClick={() => handleAnswerChange(q.id, optIdx.toString(), false)}
+                            className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between group ${
+                              answers[q.id] === optIdx.toString()
+                                ? 'bg-brand-accent border-brand-accent text-white'
+                                : 'bg-brand-bg border-brand-border hover:border-brand-accent/50 text-brand-text/80'
+                            }`}
                           >
-                            <AlertCircle size={16} />
+                            <span className="font-bold text-sm">{opt}</span>
+                            <div className={`w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center ${
+                              answers[q.id] === optIdx.toString() ? 'border-white' : 'border-brand-border/40 group-hover:border-brand-accent/40'
+                            }`}>
+                              {answers[q.id] === optIdx.toString() && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                            </div>
                           </button>
-                        </div>
-                      ) : (
-                        <label className="w-full flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-brand-border rounded-2xl cursor-pointer hover:bg-brand-accent/5 hover:border-brand-accent/30 transition-all group">
-                          <Camera className="text-brand-muted group-hover:text-brand-accent transition-colors" size={24} />
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-brand-text">Capture Work</p>
-                            <p className="text-[9px] uppercase font-black tracking-widest text-brand-muted">Camera or Upload</p>
-                          </div>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            capture="environment" 
-                            className="hidden" 
-                            onChange={e => handleFileChange(q.id, e)}
-                          />
-                        </label>
-                      )}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
 
-                  {/* Question Skip Bar */}
-                  <div className="mt-3 pt-3 border-t border-brand-border/30 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">
-                      {skippedQuestions.has(q.id) ? 'Skipped for now' : answers[q.id] ? 'Draft saved' : 'Not answered yet'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleSkipQuestion(idx, q.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 ${
-                        skippedQuestions.has(q.id)
-                          ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30'
-                          : 'bg-brand-bg hover:bg-brand-accent/10 text-brand-muted hover:text-brand-accent border border-brand-border'
-                      }`}
-                    >
-                      <FastForward size={14} />
-                      {skippedQuestions.has(q.id) ? 'Skipped' : 'Skip Question'}
-                    </button>
+                    {q.type === 'short_answer' && (
+                      <textarea 
+                        placeholder="Type your answer here..."
+                        className="w-full bg-brand-bg border border-brand-border rounded-xl p-3.5 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold text-sm min-h-[90px] resize-none"
+                        value={answers[q.id] || ''}
+                        onChange={e => handleAnswerChange(q.id, e.target.value, true)}
+                      />
+                    )}
+
+                    {q.type === 'photo' && (
+                      <div className="space-y-3">
+                        {files[q.id] ? (
+                          <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-emerald-500/10 rounded-lg">
+                                <Camera className="text-emerald-500" size={18} />
+                              </div>
+                              <div className="max-w-[150px]">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-500/40 leading-none mb-1">Uploaded</p>
+                                <p className="text-xs font-bold truncate">{files[q.id].name}</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const newFiles = { ...files };
+                                delete newFiles[q.id];
+                                setFiles(newFiles);
+                                const newAnswers = { ...answers };
+                                delete newAnswers[q.id];
+                                setAnswers(newAnswers);
+                              }}
+                              className="p-1.5 text-brand-muted hover:text-red-500 transition-colors"
+                            >
+                              <AlertCircle size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="w-full flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-brand-border rounded-2xl cursor-pointer hover:bg-brand-accent/5 hover:border-brand-accent/30 transition-all group">
+                            <Camera className="text-brand-muted group-hover:text-brand-accent transition-colors" size={24} />
+                            <div className="text-center">
+                              <p className="text-xs font-bold text-brand-text">Capture Work</p>
+                              <p className="text-[9px] uppercase font-black tracking-widest text-brand-muted">Camera or Upload</p>
+                            </div>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              capture="environment" 
+                              className="hidden" 
+                              onChange={e => handleFileChange(q.id, e)}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Question Skip Bar */}
+                    <div className="mt-3 pt-3 border-t border-brand-border/30 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">
+                        {isSkipped ? 'Skipped for now' : isAnswered ? 'Draft saved' : 'Not answered yet'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleSkipQuestion(idx, q.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 ${
+                          isSkipped
+                            ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30'
+                            : 'bg-brand-bg hover:bg-brand-accent/10 text-brand-muted hover:text-brand-accent border border-brand-border'
+                        }`}
+                      >
+                        <FastForward size={14} />
+                        {isSkipped ? 'Skipped ✓' : 'Skip Question'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </div>
 
           <button 
-            onClick={submitAssignment}
+            onClick={() => submitAssignment(false)}
             disabled={submitting}
             className="w-full bg-brand-accent text-white py-3.5 rounded-xl font-bold uppercase tracking-wider shadow-lg shadow-brand-accent/10 hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
@@ -1005,6 +1085,72 @@ export const StudentAssignmentView: React.FC<{
             )}
           </button>
         </main>
+
+        {/* Non-blocking Submit Confirmation Modal */}
+        <AnimatePresence>
+          {showSkipConfirmModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-brand-surface border border-brand-border rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                    <AlertCircle size={22} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-brand-text">Submit Assignment?</h3>
+                    <p className="text-xs text-brand-muted">You have unanswered or skipped questions.</p>
+                  </div>
+                </div>
+
+                <div className="bg-brand-bg rounded-xl p-3 space-y-2 border border-brand-border/40 text-xs">
+                  <div className="flex justify-between items-center text-emerald-600 font-bold">
+                    <span>Answered:</span>
+                    <span>{answeredCount} / {totalQuestions}</span>
+                  </div>
+                  {skippedCount > 0 && (
+                    <div className="flex justify-between items-center text-amber-600 font-bold">
+                      <span>Skipped:</span>
+                      <span>{skippedCount}</span>
+                    </div>
+                  )}
+                  {totalQuestions - answeredCount - skippedCount > 0 && (
+                    <div className="flex justify-between items-center text-brand-muted font-bold">
+                      <span>Untouched:</span>
+                      <span>{totalQuestions - answeredCount - skippedCount}</span>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs text-brand-muted leading-relaxed">
+                  Your teacher will receive and grade all questions you answered. Skipped or untouched questions will be submitted as omitted.
+                </p>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSkipConfirmModal(false)}
+                    className="flex-1 py-2.5 px-4 rounded-xl border border-brand-border text-xs font-bold text-brand-text hover:bg-brand-bg transition-colors"
+                  >
+                    Review Questions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitAssignment(true)}
+                    disabled={submitting}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-brand-accent text-white text-xs font-bold shadow-md hover:opacity-95 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    {submitting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+                    Submit Anyway
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }

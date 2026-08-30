@@ -184,6 +184,7 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
   const [loading, setLoading] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [skippedQuestions, setSkippedQuestions] = useState<Set<string>>(new Set());
+  const [showSkipConfirmModal, setShowSkipConfirmModal] = useState(false);
   const saveDebounceTimers = useRef<Record<string, any>>({});
 
   useEffect(() => {
@@ -264,9 +265,19 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
   }
 
   const handleSkipQuestion = async (qIndex: number, questionId: string) => {
+    if (saveDebounceTimers.current[questionId]) {
+      clearTimeout(saveDebounceTimers.current[questionId]);
+    }
+
     setSkippedQuestions(prev => {
       const next = new Set(prev);
       next.add(questionId);
+      return next;
+    });
+
+    setAnswers(prev => {
+      const next = { ...prev };
+      delete next[questionId];
       return next;
     });
 
@@ -288,14 +299,35 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
     }
   };
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(e?: React.FormEvent, forceSubmit: boolean = false) {
+    if (e) e.preventDefault();
     setError("");
 
-    const unanswered = (assignment.questions || []).filter((q: any) => !answers[q.id]);
-    if (unanswered.length > 0 && unanswered.length === assignment.questions.length) {
-      setError(`Please answer at least one question.`);
+    if (!studentName.trim()) {
+      setError("Please enter your name.");
       return;
+    }
+
+    const totalQuestions = assignment.questions?.length || 0;
+    const answeredCount = assignment.questions?.filter((q: any) => 
+      !skippedQuestions.has(q.id) && answers[q.id] !== undefined && answers[q.id] !== ''
+    ).length || 0;
+    const skippedCount = assignment.questions?.filter((q: any) => skippedQuestions.has(q.id)).length || 0;
+    const untouchedCount = totalQuestions - answeredCount - skippedCount;
+
+    if (!forceSubmit && (skippedCount > 0 || untouchedCount > 0)) {
+      setShowSkipConfirmModal(true);
+      return;
+    }
+
+    setShowSkipConfirmModal(false);
+
+    // Build final answers payload excluding skipped questions
+    const finalAnswers: Record<string, any> = {};
+    for (const [qId, val] of Object.entries(answers)) {
+      if (!skippedQuestions.has(qId) && val !== undefined && val !== '') {
+        finalAnswers[qId] = val;
+      }
     }
 
     const cleanTeacherId = (id: any) => {
@@ -323,7 +355,7 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
     const rpcParams: any = {
       p_assignment_id: assignment.id,
       p_student_name: studentName.trim(),
-      p_answers: answers,
+      p_answers: finalAnswers,
       p_teacher_id: cleanTeacherId(assignment.teacher_id),
     };
 
@@ -526,8 +558,44 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
           <span>{answeredCount}/{totalQuestions} answered {skippedCount > 0 ? `· ${skippedCount} skipped` : ''}</span>
           <span style={{ color: ORANGE }}>{progressPercent}% complete</span>
         </div>
-        <div style={{ width: "100%", height: 6, background: "#0A1628", borderRadius: 3, overflow: "hidden" }}>
+        <div style={{ width: "100%", height: 6, background: "#0A1628", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
           <div style={{ width: `${progressPercent}%`, height: "100%", background: ORANGE, transition: "width 0.3s" }} />
+        </div>
+
+        {/* Question Jump Navigation */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 6, borderTop: "1px solid rgba(42, 59, 92, 0.5)", overflowX: "auto" }}>
+          <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", color: "#64748B", flexShrink: 0 }}>Jump:</span>
+          {(assignment.questions || []).map((q: any, idx: number) => {
+            const isSkipped = skippedQuestions.has(q.id);
+            const isAnswered = !isSkipped && answers[q.id] !== undefined && answers[q.id] !== '';
+            return (
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById(`sq-${idx}`);
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  border: isSkipped ? "1px solid #D97706" : isAnswered ? "1px solid #10B981" : "1px solid #2A3B5C",
+                  background: isSkipped ? "rgba(245, 158, 11, 0.2)" : isAnswered ? "rgba(16, 185, 129, 0.15)" : "#0A1628",
+                  color: isSkipped ? "#F59E0B" : isAnswered ? "#10B981" : "#94A3B8",
+                }}
+              >
+                {idx + 1}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -558,6 +626,53 @@ function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }
       <button type="submit" disabled={loading} style={buttonStyle as React.CSSProperties}>
         {loading ? "Submitting…" : "Submit assignment"}
       </button>
+
+      {/* Confirmation Modal */}
+      {showSkipConfirmModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0, 0, 0, 0.75)", padding: 16 }}>
+          <div style={{ background: "#0F1C2E", border: "1px solid #2A3B5C", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", color: "#fff", display: "flex", flexDirection: "column", gap: 14 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: "#fff" }}>Submit Assignment?</h3>
+            <p style={{ fontSize: 13, color: "#94A3B8", margin: 0, lineHeight: 1.4 }}>
+              You have unanswered or skipped questions. Your teacher will receive and grade all questions you answered.
+            </p>
+            <div style={{ background: "#0A1628", padding: 12, borderRadius: 10, border: "1px solid #1E2D4A", fontSize: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "#10B981", fontWeight: 700, marginBottom: 4 }}>
+                <span>Answered:</span>
+                <span>{answeredCount} / {totalQuestions}</span>
+              </div>
+              {skippedCount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#F59E0B", fontWeight: 700, marginBottom: 4 }}>
+                  <span>Skipped:</span>
+                  <span>{skippedCount}</span>
+                </div>
+              )}
+              {totalQuestions - answeredCount - skippedCount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#94A3B8", fontWeight: 700 }}>
+                  <span>Untouched:</span>
+                  <span>{totalQuestions - answeredCount - skippedCount}</span>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={() => setShowSkipConfirmModal(false)}
+                style={{ flex: 1, padding: "10px 12px", borderRadius: 8, background: "transparent", border: "1px solid #2A3B5C", color: "#C5CEDD", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                Review Questions
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit(undefined, true)}
+                disabled={loading}
+                style={{ flex: 1, padding: "10px 12px", borderRadius: 8, background: ORANGE, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                {loading ? "Submitting..." : "Submit Anyway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
@@ -574,16 +689,25 @@ interface QuestionFieldProps {
 
 function QuestionField({ index, question, value, isSkipped, onChange, onSkip }: QuestionFieldProps) {
   const isMcq = Array.isArray(question.options) && question.options.length > 0;
+  const isAnswered = !isSkipped && value !== undefined && value !== '';
 
   return (
-    <div style={{ marginTop: 18, padding: 12, borderRadius: 12, background: isSkipped ? "#1E1B10" : "#0F1C2E", border: isSkipped ? "1px solid #D97706" : "1px solid #1E2D4A" }}>
+    <div style={{ marginTop: 18, padding: 12, borderRadius: 12, background: isSkipped ? "#1E1B10" : isAnswered ? "rgba(16, 185, 129, 0.04)" : "#0F1C2E", border: isSkipped ? "1px solid #D97706" : isAnswered ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid #1E2D4A" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <p style={{ color: "#fff", fontSize: 14, fontWeight: 600, margin: 0 }}>
           {index + 1}. {question.text}
         </p>
-        {isSkipped && (
+        {isSkipped ? (
           <span style={{ fontSize: 10, fontWeight: 800, color: "#F59E0B", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 99, textTransform: "uppercase" }}>
             Skipped
+          </span>
+        ) : isAnswered ? (
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#10B981", background: "rgba(16, 185, 129, 0.15)", padding: "2px 8px", borderRadius: 99, textTransform: "uppercase" }}>
+            Answered
+          </span>
+        ) : (
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#64748B", background: "rgba(255, 255, 255, 0.05)", padding: "2px 8px", borderRadius: 99, textTransform: "uppercase" }}>
+            Untouched
           </span>
         )}
       </div>

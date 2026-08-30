@@ -41,6 +41,10 @@ interface AdminDashboardProps {
   onBack: () => void;
 }
 
+const isUUID = (str: any): boolean => {
+  return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str.trim());
+};
+
 export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -133,7 +137,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [loadingStudents, setLoadingStudents] = useState(false);
 
   const fetchClassesForSchool = async (schoolId: string) => {
-    if (!schoolId) {
+    if (!schoolId || !isUUID(schoolId)) {
       setClassesForSelectedSchool([]);
       return;
     }
@@ -344,7 +348,10 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
 
   const fetchTeachingAssignments = async (schoolId: string) => {
-    if (!schoolId) return;
+    if (!schoolId || !isUUID(schoolId)) {
+      setTeachingAssignmentsData(null);
+      return;
+    }
     setTeachingAssignmentsLoading(true);
     try {
       const { data, error } = await supabase.rpc('admin_get_school_teaching_assignments', {
@@ -367,12 +374,14 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
 
   useEffect(() => {
     if (activeTab === 'teaching_assignments') {
-      if (selectedSchoolId) {
+      if (selectedSchoolId && isUUID(selectedSchoolId)) {
         fetchTeachingAssignments(selectedSchoolId);
       } else if (schoolsList.length > 0) {
-        const firstSchoolId = schoolsList[0].id;
-        setSelectedSchoolId(firstSchoolId);
-        fetchTeachingAssignments(firstSchoolId);
+        const firstValidSchool = schoolsList.find(s => isUUID(s.id));
+        if (firstValidSchool) {
+          setSelectedSchoolId(firstValidSchool.id);
+          fetchTeachingAssignments(firstValidSchool.id);
+        }
       } else {
         fetchSchoolsList();
       }
@@ -458,27 +467,54 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
     setLoading(true);
     try {
       const { data, error } = await supabase.from('schools').select('*');
-      if (error) {
-        console.warn("Could not query 'schools' directly:", error.message);
-        const distinctSchools = Array.from(new Set(teachersList.map(t => t.school_name).filter(Boolean)));
-        setSchoolsList(distinctSchools.map((name, index) => ({
-          id: `fallback-${index}`,
-          name,
-          contact_name: 'Teacher registered',
-          county: 'AziLearn District'
-        })));
+      if (!error && data && data.length > 0) {
+        setSchoolsList(data);
+        return;
+      }
+      
+      // If direct schools query fails or returns empty, derive valid schools from teachers table
+      const { data: teachersData } = await supabase.from('teachers').select('school_id, school_name, name');
+      const schoolMap = new Map<string, any>();
+      
+      for (const t of teachersData || []) {
+        if (t.school_id && isUUID(t.school_id) && t.school_name) {
+          if (!schoolMap.has(t.school_id)) {
+            schoolMap.set(t.school_id, {
+              id: t.school_id,
+              name: t.school_name,
+              contact_name: t.name || 'School Staff',
+              county: 'AziLearn District'
+            });
+          }
+        }
+      }
+
+      if (schoolMap.size > 0) {
+        setSchoolsList(Array.from(schoolMap.values()));
       } else {
         setSchoolsList(data || []);
       }
     } catch (err: any) {
       console.error("Error loading schools list:", err);
-      const distinctSchools = Array.from(new Set(teachersList.map(t => t.school_name).filter(Boolean)));
-      setSchoolsList(distinctSchools.map((name, index) => ({
-        id: `fallback-${index}`,
-        name,
-        contact_name: 'Teacher registered',
-        county: 'AziLearn District'
-      })));
+      try {
+        const { data: teachersData } = await supabase.from('teachers').select('school_id, school_name, name');
+        const schoolMap = new Map<string, any>();
+        for (const t of teachersData || []) {
+          if (t.school_id && isUUID(t.school_id) && t.school_name) {
+            if (!schoolMap.has(t.school_id)) {
+              schoolMap.set(t.school_id, {
+                id: t.school_id,
+                name: t.school_name,
+                contact_name: t.name || 'School Staff',
+                county: 'AziLearn District'
+              });
+            }
+          }
+        }
+        setSchoolsList(Array.from(schoolMap.values()));
+      } catch (inner) {
+        setSchoolsList([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -561,12 +597,14 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
 
   useEffect(() => {
     if (activeTab === 'classes_students') {
-      if (selectedSchoolIdForClasses) {
+      if (selectedSchoolIdForClasses && isUUID(selectedSchoolIdForClasses)) {
         fetchClassesForSchool(selectedSchoolIdForClasses);
       } else if (schoolsList.length > 0) {
-        const firstSch = schoolsList[0].id;
-        setSelectedSchoolIdForClasses(firstSch);
-        fetchClassesForSchool(firstSch);
+        const firstValidSchool = schoolsList.find(s => isUUID(s.id));
+        if (firstValidSchool) {
+          setSelectedSchoolIdForClasses(firstValidSchool.id);
+          fetchClassesForSchool(firstValidSchool.id);
+        }
       }
     }
   }, [activeTab, schoolsList]);
@@ -767,10 +805,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('question_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.rpc('admin_list_content_requests');
       if (error) throw error;
       setTeacherRequests(data || []);
     } catch (err: any) { showToast(err.message, 'error'); }
@@ -875,7 +910,10 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
 
         // Mark request as completed
         if (targetRequestId) {
-          await supabase.from('question_requests').update({ status: 'completed', share_code: code }).eq('id', targetRequestId);
+          await supabase.rpc('admin_fulfill_content_request', {
+            p_request_id: targetRequestId,
+            p_share_code: code,
+          });
         }
       }
 
@@ -922,7 +960,10 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
          });
 
          if (targetRequestId) {
-          await supabase.from('question_requests').update({ status: 'completed', share_code: code }).eq('id', targetRequestId);
+          await supabase.rpc('admin_fulfill_content_request', {
+            p_request_id: targetRequestId,
+            p_share_code: code,
+          });
         }
       }
 
@@ -991,7 +1032,10 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
         }
 
         if (targetRequestId) {
-          await supabase.from('question_requests').update({ status: 'completed', share_code: code }).eq('id', targetRequestId);
+          await supabase.rpc('admin_fulfill_content_request', {
+            p_request_id: targetRequestId,
+            p_share_code: code,
+          });
         }
       }
 
@@ -1268,7 +1312,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                           <div className="flex justify-between items-start">
                             <div>
                               <p className="text-[9px] font-black text-indigo-500 uppercase tracking-wider">{req.subject} • {req.grade}</p>
-                              <h4 className="text-xs font-black text-brand-text uppercase leading-tight mt-0.5">{req.topic}</h4>
+                              <h4 className="text-xs font-black text-brand-text uppercase leading-tight mt-0.5">{req.title || req.topic}</h4>
                             </div>
                             <span className="px-2 py-0.5 bg-brand-accent/10 text-brand-accent rounded text-[7px] font-black uppercase tracking-wider inline-block">
                               {req.request_type || 'assessment'}
@@ -1278,7 +1322,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                             "{req.description || 'No direct custom instructions provided.'}"
                           </p>
                           <div className="flex items-center justify-between pt-2 border-t border-brand-border/50 text-[9px]">
-                            <span className="font-bold text-brand-muted">{req.teacher_name}</span>
+                            <span className="font-bold text-brand-muted">{req.teacher_name || req.school_name || 'School Admin'}</span>
                             <button
                               onClick={() => {
                                 setActiveTab('shared');
@@ -1286,7 +1330,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                                 setSubTab(reqType === 'assignment' ? 'assignments' : 'assessments');
                                 setCreationMode('manual');
                                 setIsCreating(true);
-                                setTargetTeacher(req.teacher_name);
+                                setTargetTeacher(req.teacher_name || null);
                                 setTargetTeacherId(req.teacher_id);
                                 setTargetSchool(req.school_name);
                                 setTargetRequestId(req.id);
@@ -1294,8 +1338,9 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                                 setAssignSubject(req.subject);
                                 setExamGrade(req.grade);
                                 setAssignGrade(req.grade);
-                                setExamTitle(`${req.topic} - For ${req.teacher_name}`);
-                                setAssignTitle(`${req.topic} - For ${req.teacher_name}`);
+                                const requesterLabel = req.teacher_name ? `For ${req.teacher_name}` : `For ${req.school_name}`;
+                                setExamTitle(req.title || `${req.topic} - ${requesterLabel}`);
+                                setAssignTitle(req.title || `${req.topic} - ${requesterLabel}`);
                               }}
                               className="bg-brand-accent text-white px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-md shadow-brand-accent/10 hover:scale-105 active:scale-95 transition-all"
                             >
@@ -1575,7 +1620,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
             <div className="space-y-6 animate-in fade-in duration-300">
                <div className="flex items-center justify-between px-2">
                   <div>
-                    <h3 className="text-xl font-black tracking-tight uppercase text-brand-text">Teacher Material Requests</h3>
+                    <h3 className="text-xl font-black tracking-tight uppercase text-brand-text">Content Requests</h3>
                     <p className="text-xs font-bold text-brand-muted uppercase tracking-widest mt-1">Deploy worksheets and tests on-demand</p>
                   </div>
                   <p className="text-[10px] font-black text-brand-muted bg-brand-surface border px-3 py-1.5 rounded-xl uppercase tracking-widest">{teacherRequests.length} Total</p>
@@ -1591,7 +1636,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                         <div className="flex justify-between items-start">
                           <div>
                             <p className="text-[10px] font-black text-brand-accent uppercase tracking-widest mb-1">{req.subject} • {req.grade}</p>
-                            <h4 className="text-lg font-black tracking-tight uppercase text-brand-text">{req.topic}</h4>
+                            <h4 className="text-lg font-black tracking-tight uppercase text-brand-text">{req.title || req.topic}</h4>
                           </div>
                           <div className="flex gap-2 items-center">
                             <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider inline-block ${req.request_type === 'groupwork' ? 'bg-sky-500/10 text-sky-600' : req.request_type === 'assignment' ? 'bg-amber-500/10 text-amber-600' : 'bg-purple-500/10 text-purple-600'}`}>
@@ -1606,11 +1651,20 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                         <div className="flex items-center justify-between pt-4 border-t border-brand-border text-xs">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-brand-accent/5 flex items-center justify-center text-brand-accent font-black text-[10px] shrink-0">
-                              {req.teacher_name ? req.teacher_name[0] : 'T'}
+                              {(req.teacher_name || req.school_name || 'S')[0]}
                             </div>
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-widest leading-none text-brand-text">{req.teacher_name}</p>
-                              <p className="text-[8px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">{req.school_name || 'No School'}</p>
+                              {req.teacher_name ? (
+                                <>
+                                  <p className="text-[10px] font-black uppercase tracking-widest leading-none text-brand-text">{req.teacher_name}</p>
+                                  <p className="text-[8px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">{req.school_name || 'No School'}</p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-[10px] font-black uppercase tracking-widest leading-none text-brand-text">{req.school_name}</p>
+                                  <p className="text-[8px] font-bold text-brand-muted uppercase tracking-widest mt-0.5">School Admin Request</p>
+                                </>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -1623,6 +1677,8 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                                   topic: req.topic,
                                   teacher_id: req.teacher_id,
                                   teacher_name: req.teacher_name,
+                                  school_id: req.school_id,
+                                  school_name: req.school_name,
                                   request_id: req.id
                                 });
                               }}
@@ -1637,7 +1693,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                                 setSubTab(reqType === 'assignment' ? 'assignments' : 'assessments');
                                 setCreationMode('manual');
                                 setIsCreating(true);
-                                setTargetTeacher(req.teacher_name);
+                                setTargetTeacher(req.teacher_name || null);
                                 setTargetTeacherId(req.teacher_id);
                                 setTargetSchool(req.school_name);
                                 setTargetRequestId(req.id);
@@ -1645,8 +1701,9 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                                 setAssignSubject(req.subject);
                                 setExamGrade(req.grade);
                                 setAssignGrade(req.grade);
-                                setExamTitle(`${req.topic} - For ${req.teacher_name}`);
-                                setAssignTitle(`${req.topic} - For ${req.teacher_name}`);
+                                const requesterLabel = req.teacher_name ? `For ${req.teacher_name}` : `For ${req.school_name}`;
+                                setExamTitle(req.title || `${req.topic} - ${requesterLabel}`);
+                                setAssignTitle(req.title || `${req.topic} - ${requesterLabel}`);
                               }}
                               className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all ${req.request_type !== 'groupwork' ? 'bg-brand-accent text-white shadow-lg shadow-brand-accent/10 ring-2 ring-brand-accent ring-offset-2 ring-offset-brand-surface' : 'bg-brand-bg text-brand-muted hover:text-brand-text border border-brand-border'}`}
                             >

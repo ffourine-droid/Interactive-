@@ -16,7 +16,6 @@ import { MaterialsList } from '../components/MaterialsList';
 import { SlidesViewer } from '../components/SlidesViewer';
 import { InteractiveNotes } from '../components/InteractiveNotes';
 import { fallbackMaterials } from '../data/fallbackMaterials';
-import GradeWheelPicker from '../components/GradeWheelPicker';
 
 import { useStudent } from '../contexts/StudentContext';
 
@@ -91,7 +90,6 @@ export default function Home({
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'slides' | 'pdf' | 'ppt' | 'notes'>('slides');
-  const [pickerMode, setPickerMode] = useState<'wheel' | 'grid'>('wheel');
   const [zoom, setZoom] = useState(100);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isOpening, setIsOpening] = useState(false);
@@ -571,182 +569,161 @@ export default function Home({
                 exit={{ opacity: 0, y: -8 }}
                 className="w-full"
               >
-                {/* View switcher header bar */}
-                <div className="px-4 pt-3 flex items-center justify-end">
-                  <button
-                    onClick={() => setPickerMode(prev => prev === 'wheel' ? 'grid' : 'wheel')}
-                    className="text-[11px] font-bold text-brand-muted bg-brand-surface border border-brand-border px-3 py-1.5 rounded-full shadow-sm hover:text-brand-text transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span>{pickerMode === 'wheel' ? '🔲 Grid View' : '🎡 Wheel Picker'}</span>
-                  </button>
-                </div>
-
-                {pickerMode === 'wheel' ? (
-                  <GradeWheelPicker
-                    onSelectGrade={(gradeStr) => handleClassSelect(gradeStr)}
-                    onBack={onBack}
-                    onExamsClick={onExamsClick}
-                    onCommunityClick={onCommunityClick}
-                    studentName={student ? student.name : undefined}
-                    onLogout={student ? handleLogout : undefined}
-                  />
-                ) : (
-                  <div className="px-4 py-3 space-y-5">
-                    {/* Header */}
-                    <header className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={onBack}
-                          className="w-9 h-9 rounded-xl bg-brand-surface border border-brand-border flex items-center justify-center text-brand-muted active:text-brand-accent transition-colors shadow-sm cursor-pointer"
-                        >
-                          <ArrowLeft size={16} />
-                        </button>
-                        <div
-                          className="flex items-center gap-2 cursor-pointer active:scale-95 transition-transform"
-                          onClick={handleLogoClick}
-                        >
-                          <div className="w-9 h-9 bg-[#FF6B2C] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#FF6B2C]/20 rotate-12">
-                            <FlaskConical size={18} />
-                          </div>
-                          <div>
-                            <h1 className="text-lg font-black text-brand-text tracking-tight leading-none">AziLearn</h1>
-                            <p className="text-[9px] text-brand-muted font-black uppercase tracking-wider whitespace-nowrap">Study Materials</p>
-                          </div>
+                <div className="px-4 py-3 space-y-5">
+                  {/* Header */}
+                  <header className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={onBack}
+                        className="w-9 h-9 rounded-xl bg-brand-surface border border-brand-border flex items-center justify-center text-brand-muted active:text-brand-accent transition-colors shadow-sm cursor-pointer"
+                      >
+                        <ArrowLeft size={16} />
+                      </button>
+                      <div
+                        className="flex items-center gap-2 cursor-pointer active:scale-95 transition-transform"
+                        onClick={handleLogoClick}
+                      >
+                        <div className="w-9 h-9 bg-[#FF6B2C] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#FF6B2C]/20 rotate-12">
+                          <FlaskConical size={18} />
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="bg-brand-surface border border-brand-border px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 max-w-[140px] truncate">
-                          <span className="text-[10px] font-bold text-brand-text truncate">
-                            {student ? student.name : 'Welcome!'}
-                          </span>
-                          <span className="text-sm shrink-0">🧠</span>
+                        <div>
+                          <h1 className="text-lg font-black text-brand-text tracking-tight leading-none">AziLearn</h1>
+                          <p className="text-[9px] text-brand-muted font-black uppercase tracking-wider whitespace-nowrap">Study Materials</p>
                         </div>
-                        {student && (
-                          <button
-                            onClick={handleLogout}
-                            className="w-8 h-8 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 flex items-center justify-center active:scale-90 transition-all shrink-0 cursor-pointer"
-                            title="Logout Profile"
-                          >
-                            <LogOut size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </header>
-
-                    {/* Grades sections */}
-                    <div className="space-y-5">
-                      {/* Primary School (Gr 1-6) */}
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-1 h-3.5 bg-emerald-500 rounded-full" />
-                            <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Primary School</h2>
-                          </div>
-                          <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 1 – 6</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-3 gap-2">
-                          {Array.from({ length: 6 }, (_, i) => {
-                            const gradeVal = i + 1;
-                            const gradeStr = `Grade ${gradeVal}`;
-                            return (
-                              <div
-                                key={gradeStr}
-                                onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                                className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-emerald-500/60 hover:border-emerald-500 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
-                              >
-                                <span className="font-display text-xl font-black text-brand-text group-hover:text-emerald-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
-                                <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Junior Secondary (Gr 7-9) */}
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-1 h-3.5 bg-brand-accent rounded-full" />
-                            <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Junior Secondary</h2>
-                          </div>
-                          <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 7 – 9</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-3 gap-2">
-                          {Array.from({ length: 3 }, (_, i) => {
-                            const gradeVal = i + 7;
-                            const gradeStr = `Grade ${gradeVal}`;
-                            return (
-                              <div
-                                key={gradeStr}
-                                onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                                className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-[#FF6B2C]/60 hover:border-[#FF6B2C] rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
-                              >
-                                <span className="font-display text-xl font-black text-brand-text group-hover:text-[#FF6B2C] transition-colors leading-none mb-0.5">{gradeVal}</span>
-                                <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Senior Secondary (Gr 10-12) */}
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-1 h-3.5 bg-purple-500 rounded-full" />
-                            <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Senior Secondary</h2>
-                          </div>
-                          <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 10 – 12</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-3 gap-2">
-                          {Array.from({ length: 3 }, (_, i) => {
-                            const gradeVal = i + 10;
-                            const gradeStr = `Grade ${gradeVal}`;
-                            return (
-                              <div
-                                key={gradeStr}
-                                onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
-                                className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-purple-500/60 hover:border-purple-500 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
-                              >
-                                <span className="font-display text-xl font-black text-brand-text group-hover:text-purple-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
-                                <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Quick Access Horizon Cards */}
-                      <div className="space-y-3 pt-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1 h-3.5 bg-blue-500 rounded-full" />
-                          <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted font-black">Quick Access</h2>
-                        </div>
-
-                        {/* School Forum Card */}
-                        <button
-                          onClick={onCommunityClick}
-                          className="relative overflow-hidden w-full bg-brand-surface border border-brand-border border-b-[4px] border-b-blue-500/50 hover:border-blue-500 rounded-2xl p-4 flex items-center justify-between transition-all shadow-sm group text-left real-press active:translate-y-[2px] cursor-pointer"
-                        >
-                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />
-                          <div className="flex items-center gap-3 pl-1">
-                            <div className="w-11 h-11 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500 text-xl font-bold shrink-0">
-                              💬
-                            </div>
-                            <div>
-                              <h3 className="font-display text-xs font-black text-brand-text group-hover:text-blue-500 transition-colors leading-tight">School Forum</h3>
-                              <p className="text-[10px] font-semibold text-brand-muted mt-0.5 leading-snug">Connect & discuss with classmates</p>
-                            </div>
-                          </div>
-                          <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0">›</span>
-                        </button>
                       </div>
                     </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="bg-brand-surface border border-brand-border px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 max-w-[140px] truncate">
+                        <span className="text-[10px] font-bold text-brand-text truncate">
+                          {student ? student.name : 'Welcome!'}
+                        </span>
+                        <span className="text-sm shrink-0">🧠</span>
+                      </div>
+                      {student && (
+                        <button
+                          onClick={handleLogout}
+                          className="w-8 h-8 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 flex items-center justify-center active:scale-90 transition-all shrink-0 cursor-pointer"
+                          title="Logout Profile"
+                        >
+                          <LogOut size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </header>
+
+                  {/* Grades sections */}
+                  <div className="space-y-5">
+                    {/* Primary School (Gr 1-6) */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-3.5 bg-emerald-500 rounded-full" />
+                          <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Primary School</h2>
+                        </div>
+                        <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 1 – 6</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2">
+                        {Array.from({ length: 6 }, (_, i) => {
+                          const gradeVal = i + 1;
+                          const gradeStr = `Grade ${gradeVal}`;
+                          return (
+                            <div
+                              key={gradeStr}
+                              onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
+                              className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-emerald-500/60 hover:border-emerald-500 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
+                            >
+                              <span className="font-display text-xl font-black text-brand-text group-hover:text-emerald-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Junior Secondary (Gr 7-9) */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-3.5 bg-brand-accent rounded-full" />
+                          <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Junior Secondary</h2>
+                        </div>
+                        <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 7 – 9</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2">
+                        {Array.from({ length: 3 }, (_, i) => {
+                          const gradeVal = i + 7;
+                          const gradeStr = `Grade ${gradeVal}`;
+                          return (
+                            <div
+                              key={gradeStr}
+                              onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
+                              className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-[#FF6B2C]/60 hover:border-[#FF6B2C] rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
+                            >
+                              <span className="font-display text-xl font-black text-brand-text group-hover:text-[#FF6B2C] transition-colors leading-none mb-0.5">{gradeVal}</span>
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Senior Secondary (Gr 10-12) */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-3.5 bg-purple-500 rounded-full" />
+                          <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted">Senior Secondary</h2>
+                        </div>
+                        <span className="text-[9px] font-bold text-brand-muted bg-brand-surface/80 border border-brand-border/40 px-2 py-0.5 rounded-md">Gr 10 – 12</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2">
+                        {Array.from({ length: 3 }, (_, i) => {
+                          const gradeVal = i + 10;
+                          const gradeStr = `Grade ${gradeVal}`;
+                          return (
+                            <div
+                              key={gradeStr}
+                              onClick={(e) => { rippleEffect(e); handleClassSelect(gradeStr); }}
+                              className="group relative overflow-hidden bg-brand-surface border border-brand-border border-b-[4px] border-b-purple-500/60 hover:border-purple-500 rounded-[16px] flex flex-col items-center justify-center p-3 min-h-[75px] transition-all duration-100 shadow-sm cursor-pointer select-none real-press active:translate-y-[2px]"
+                            >
+                              <span className="font-display text-xl font-black text-brand-text group-hover:text-purple-500 transition-colors leading-none mb-0.5">{gradeVal}</span>
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-brand-muted/70">Grade {gradeVal}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Quick Access Horizon Cards */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-3.5 bg-blue-500 rounded-full" />
+                        <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted font-black">Quick Access</h2>
+                      </div>
+
+                      {/* School Forum Card */}
+                      <button
+                        onClick={onCommunityClick}
+                        className="relative overflow-hidden w-full bg-brand-surface border border-brand-border border-b-[4px] border-b-blue-500/50 hover:border-blue-500 rounded-2xl p-4 flex items-center justify-between transition-all shadow-sm group text-left real-press active:translate-y-[2px] cursor-pointer"
+                      >
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />
+                        <div className="flex items-center gap-3 pl-1">
+                          <div className="w-11 h-11 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500 text-xl font-bold shrink-0">
+                            💬
+                          </div>
+                          <div>
+                            <h3 className="font-display text-xs font-black text-brand-text group-hover:text-blue-500 transition-colors leading-tight">School Forum</h3>
+                            <p className="text-[10px] font-semibold text-brand-muted mt-0.5 leading-snug">Connect & discuss with classmates</p>
+                          </div>
+                        </div>
+                        <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0">›</span>
+                      </button>
+                    </div>
                   </div>
-                )}
+                </div>
               </motion.div>
             ) : (
               /* ── MATERIALS VIEW ── */

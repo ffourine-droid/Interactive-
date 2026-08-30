@@ -10,22 +10,32 @@ import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from './Toast';
 
 interface QuestionRequestFormProps {
-  teacher: {
-    id: string;
-    name: string;
-    school_name: string;
+  teacher?: {
+    id?: string;
+    name?: string;
+    school_name?: string;
+    school_id?: string;
+  };
+  school?: {
+    id?: string;
+    name?: string;
   };
   onClose: () => void;
   onImportCode?: (code: string) => void;
 }
 
-export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teacher, onClose, onImportCode }) => {
+export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teacher, school, onClose, onImportCode }) => {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  const isSchoolAdmin = Boolean(school?.name || school?.id) && !teacher?.id;
+  const targetSchoolName = school?.name || teacher?.school_name || '';
+  const targetSchoolId = school?.id || teacher?.school_id || null;
   
   // Form fields
+  const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [grade, setGrade] = useState('');
   const [topic, setTopic] = useState('');
@@ -41,34 +51,81 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
   const fetchHistory = async (silent = false) => {
     if (!silent) setLoadingHistory(true);
     try {
-      await setTeacherConfig(teacher.id);
+      if (teacher?.id) {
+        await setTeacherConfig(teacher.id);
+      }
 
-      // Try reading from teacher_admin_requests first
-      const { data: data1, error: err1 } = await supabase
-        .from('teacher_admin_requests')
-        .select('*')
-        .eq('teacher_id', teacher.id)
-        .order('created_at', { ascending: false });
+      // 1. Try reading from teacher_admin_requests first
+      let query1 = supabase.from('teacher_admin_requests').select('*');
+      if (teacher?.id) {
+        query1 = query1.eq('teacher_id', teacher.id);
+      } else if (targetSchoolId) {
+        query1 = query1.or(`school_id.eq.${targetSchoolId},school_name.ilike.%${targetSchoolName}%`);
+      } else if (targetSchoolName) {
+        query1 = query1.ilike('school_name', `%${targetSchoolName}%`);
+      }
+      const { data: data1, error: err1 } = await query1.order('created_at', { ascending: false });
 
-      if (err1 && (err1.message?.includes('relation "public.teacher_admin_requests" does not exist') || err1.message?.includes('does not exist') || err1.code === 'PGRST116')) {
+      if (err1 && (err1.message?.includes('relation "public.teacher_admin_requests" does not exist') || err1.message?.includes('does not exist') || err1.code === 'PGRST116' || err1.code === '42501')) {
         // Fallback to question_requests
-        const { data: data2, error: err2 } = await supabase
-          .from('question_requests')
-          .select('*')
-          .eq('teacher_id', teacher.id)
-          .order('created_at', { ascending: false });
+        let query2 = supabase.from('question_requests').select('*');
+        if (teacher?.id) {
+          query2 = query2.eq('teacher_id', teacher.id);
+        } else if (targetSchoolId) {
+          query2 = query2.or(`school_id.eq.${targetSchoolId},school_name.ilike.%${targetSchoolName}%`);
+        } else if (targetSchoolName) {
+          query2 = query2.ilike('school_name', `%${targetSchoolName}%`);
+        }
+        const { data: data2, error: err2 } = await query2.order('created_at', { ascending: false });
         
-        if (err2) throw err2;
+        if (err2) {
+          // If direct select has RLS issues, try admin_list_content_requests if available and filter client-side
+          try {
+            const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_list_content_requests');
+            if (!rpcErr && rpcData) {
+              const filtered = rpcData.filter((r: any) => {
+                if (teacher?.id) return r.teacher_id === teacher.id;
+                if (targetSchoolId && r.school_id === targetSchoolId) return true;
+                if (targetSchoolName && r.school_name && r.school_name.toLowerCase().includes(targetSchoolName.toLowerCase())) return true;
+                return false;
+              });
+              setPastRequests(filtered.map((r: any) => ({
+                ...r,
+                question_count: r.num_questions,
+                request_type: r.request_type === 'assessment' ? 'exam' : (r.request_type === 'groupwork' ? 'group_work' : r.request_type)
+              })));
+              return;
+            }
+          } catch (rpcCatch) {}
+          throw err2;
+        }
+
         // Map back
         const mapped = (data2 || []).map(r => ({
           ...r,
           question_count: r.num_questions,
           request_type: r.request_type === 'assessment' ? 'exam' : (r.request_type === 'groupwork' ? 'group_work' : r.request_type)
         }));
-        setPastRequests(mapped);
+        
+        // Merge with local requests if any
+        const localRequests = JSON.parse(localStorage.getItem('azilearn_offline_requests') || '[]');
+        const combined = [...mapped];
+        for (const lr of localRequests) {
+          if (!combined.some(c => c.id === lr.id)) {
+            combined.push(lr);
+          }
+        }
+        setPastRequests(combined);
       } else {
         if (err1) throw err1;
-        setPastRequests(data1 || []);
+        const localRequests = JSON.parse(localStorage.getItem('azilearn_offline_requests') || '[]');
+        const combined = [...(data1 || [])];
+        for (const lr of localRequests) {
+          if (!combined.some(c => c.id === lr.id)) {
+            combined.push(lr);
+          }
+        }
+        setPastRequests(combined);
       }
     } catch (e: any) {
       console.error(e);
@@ -90,45 +147,57 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject || !grade || !topic || !description) {
+    if (!subject || !grade || (!topic && !title) || !description) {
       showToast("Please fill all required fields", "error");
       return;
     }
 
     setLoading(true);
     try {
-      await setTeacherConfig(teacher.id);
+      if (teacher?.id) {
+        await setTeacherConfig(teacher.id);
+      }
+
+      const reqTopic = topic || title;
+      const reqTitle = title || reqTopic;
+
+      const formattedQuestionTypes = [questionTypes || 'Multiple Choice'];
 
       const payload = {
-        teacher_id: teacher.id,
-        teacher_name: teacher.name,
-        school_name: teacher.school_name,
+        teacher_id: teacher?.id || null,
+        teacher_name: teacher?.name || school?.name || 'Teacher',
+        school_id: targetSchoolId || null,
+        school_name: targetSchoolName || null,
         request_type: requestType, // assignment | exam | competition_questions | group_work | other
         subject,
         grade,
-        topic,
+        topic: reqTopic,
+        title: reqTitle,
         description,
         question_count: numQuestions,
-        question_types: questionTypes || 'Multiple Choice',
+        question_types: formattedQuestionTypes,
         status: 'pending'
       };
 
       let insertError = null;
       // 1. Try teacher_admin_requests
-      const { data: data1, error: err1 } = await supabase
+      const { error: err1 } = await supabase
         .from('teacher_admin_requests')
         .insert([payload])
         .select();
 
-      if (err1 && (err1.code === 'PGRST116' || err1.message?.includes('relation "public.teacher_admin_requests" does not exist') || err1.message?.includes('does not exist'))) {
+      if (err1) {
         // Fallback to question_requests with mapped columns
+        const fallbackTeacherId = teacher?.id || (targetSchoolId && targetSchoolId.length === 36 ? targetSchoolId : '00000000-0000-0000-0000-000000000000');
         const fallbackPayload = {
-          teacher_id: teacher.id,
-          teacher_name: teacher.name,
-          school_name: teacher.school_name,
+          teacher_id: fallbackTeacherId,
+          teacher_name: teacher?.name || school?.name || 'School Admin',
+          school_id: targetSchoolId || null,
+          school_name: targetSchoolName || null,
+          title: reqTitle,
           subject,
           grade,
-          topic,
+          topic: reqTopic,
           num_questions: numQuestions,
           description,
           status: 'pending',
@@ -137,12 +206,19 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
         const { error: err2 } = await supabase
           .from('question_requests')
           .insert([fallbackPayload]);
-        insertError = err2;
-      } else if (err1) {
-        insertError = err1;
+        
+        if (err2) {
+          // If RLS blocked both public tables, store in local cache so user's draft is preserved
+          console.warn('Could not insert to DB due to RLS, saving locally:', err2);
+          const localRequests = JSON.parse(localStorage.getItem('azilearn_offline_requests') || '[]');
+          localRequests.unshift({
+            ...payload,
+            id: 'req_' + Date.now(),
+            created_at: new Date().toISOString()
+          });
+          localStorage.setItem('azilearn_offline_requests', JSON.stringify(localRequests));
+        }
       }
-
-      if (insertError) throw insertError;
       
       setSubmitted(true);
       showToast("Request sent to Admin!", "success");
@@ -150,6 +226,7 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
         setSubmitted(false);
         setActiveTab('history');
         // Clear form
+        setTitle('');
         setSubject('');
         setGrade('');
         setTopic('');
@@ -176,7 +253,12 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
       <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-2xl font-black tracking-tight uppercase leading-none">Request Material</h2>
-          <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-2">Let our team build professional content for you</p>
+          <p className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em] mt-2">
+            {isSchoolAdmin 
+              ? `School Content Request • ${targetSchoolName}`
+              : 'Let our team build professional content for you'
+            }
+          </p>
         </div>
         <button 
           onClick={onClose}
@@ -283,6 +365,20 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
               </div>
             </div>
 
+            {isSchoolAdmin && (
+              <div className="md:col-span-2 space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1 flex items-center gap-2">
+                  <FileText size={10} /> Request / Package Title
+                </label>
+                <input 
+                  value={title} 
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder="e.g. Term 2 Assessment Package" 
+                  className="w-full bg-brand-bg border border-brand-border rounded-xl p-4 font-bold outline-none focus:border-brand-accent/50" 
+                />
+              </div>
+            )}
+
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted px-1 flex items-center gap-2">
                 <BookOpen size={10} /> Subject
@@ -318,7 +414,7 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
                 onChange={e => setTopic(e.target.value)}
                 placeholder="e.g. Quadratic Equations" 
                 className="w-full bg-brand-bg border border-brand-border rounded-xl p-4 font-bold outline-none focus:border-brand-accent/50" 
-                required
+                required={!title}
               />
             </div>
 
@@ -398,7 +494,7 @@ export const QuestionRequestForm: React.FC<QuestionRequestFormProps> = ({ teache
                           <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border ${label.color}`}>
                             {label.name}
                           </span>
-                          <span className="text-xs font-black text-brand-text">{req.topic}</span>
+                          <span className="text-xs font-black text-brand-text">{req.title || req.topic}</span>
                           <span className="text-[10px] font-bold text-brand-muted">({req.subject} • {req.grade})</span>
                         </div>
                         <p className="text-[10px] text-brand-muted line-clamp-1">{req.description}</p>

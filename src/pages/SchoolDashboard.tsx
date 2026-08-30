@@ -29,6 +29,7 @@ import { useToast } from '../components/Toast';
 import { CANONICAL_SUBJECTS } from '../types';
 import SchoolTeachersList from '../components/SchoolTeachersList';
 import { SchoolClassesManager } from '../components/SchoolClassesManager';
+import { QuestionRequestForm } from '../components/QuestionRequestForm';
 
 interface SchoolDashboardProps {
   schoolName: string;
@@ -66,7 +67,8 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
   const [broadcasts, setBroadcasts] = useState<BroadcastAssignment[]>([]);
   
   // Navigation & Creation states
-  const [activeTab, setActiveTab] = useState<'teachers' | 'classes' | 'broadcasts'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'classes' | 'broadcasts' | 'requests'>('teachers');
+  const [showRequestModal, setShowRequestModal] = useState(false);
   const [creationStep, setCreationStep] = useState<null | 'details' | 'grades' | 'review' | 'success'>(null);
   const [isAddingGrade, setIsAddingGrade] = useState(false);
   const [editingGradeBlockId, setEditingGradeBlockId] = useState<string | null>(null);
@@ -730,19 +732,29 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
             <p className="text-[10px] text-brand-muted font-bold uppercase tracking-widest mt-1">Admin Dashboard</p>
           </div>
         </div>
-        <button 
-          onClick={onLogout}
-          className="flex items-center gap-2 px-4 py-2 bg-red-500/5 hover:bg-red-500/10 border border-red-500/15 rounded-xl text-red-500 text-xs font-black uppercase tracking-wider transition-all"
-        >
-          <LogOut size={14} />
-          Sign Out
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowRequestModal(true)}
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-brand-accent/10 hover:bg-brand-accent/20 border border-brand-accent/20 rounded-xl text-brand-accent text-xs font-black uppercase tracking-wider transition-all"
+          >
+            <Sparkles size={14} />
+            <span className="hidden sm:inline">Request Material</span>
+            <span className="sm:hidden">Request</span>
+          </button>
+          <button 
+            onClick={onLogout}
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-red-500/5 hover:bg-red-500/10 border border-red-500/15 rounded-xl text-red-500 text-xs font-black uppercase tracking-wider transition-all"
+          >
+            <LogOut size={14} />
+            Sign Out
+          </button>
+        </div>
       </header>
 
       {/* 2. Main Area / Creation Multi-Step Views */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 pb-24 relative">
         <AnimatePresence mode="wait">
-          {/* Dashboard Mode (Teachers, Classes, or Broadcasts tabs) */}
+          {/* Dashboard Mode (Teachers, Classes, Broadcasts, or Requests tabs) */}
           {creationStep === null && (
             <motion.div
               key="dashboard"
@@ -752,27 +764,34 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
               className="space-y-6"
             >
               {/* Tab Toggles */}
-              <div className="flex bg-brand-surface border border-brand-border p-1.5 rounded-2xl w-full md:max-w-xl flex-wrap md:flex-nowrap gap-1">
+              <div className="flex bg-brand-surface border border-brand-border p-1.5 rounded-2xl w-full md:max-w-2xl flex-wrap md:flex-nowrap gap-1">
                 <button
                   onClick={() => setActiveTab('teachers')}
-                  className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'teachers' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                  className={`flex-1 py-3 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'teachers' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
                 >
                   <Users size={16} />
                   Linked Teachers
                 </button>
                 <button
                   onClick={() => setActiveTab('classes')}
-                  className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'classes' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                  className={`flex-1 py-3 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'classes' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
                 >
                   <GraduationCap size={16} />
                   Classes & Rosters
                 </button>
                 <button
                   onClick={() => setActiveTab('broadcasts')}
-                  className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'broadcasts' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                  className={`flex-1 py-3 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'broadcasts' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
                 >
                   <Radio size={16} />
                   Active Broadcasts
+                </button>
+                <button
+                  onClick={() => setActiveTab('requests')}
+                  className={`flex-1 py-3 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'requests' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                >
+                  <Sparkles size={16} />
+                  Material Requests
                 </button>
               </div>
 
@@ -785,6 +804,13 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
                 <SchoolTeachersList schoolId={schoolId} />
               ) : activeTab === 'classes' ? (
                 <SchoolClassesManager schoolId={schoolId} />
+              ) : activeTab === 'requests' ? (
+                <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 sm:p-8 shadow-sm">
+                  <QuestionRequestForm 
+                    school={{ id: schoolId, name: schoolName }} 
+                    onClose={() => setActiveTab('teachers')}
+                  />
+                </div>
               ) : (
                 /* Active Broadcasts List */
                 <div className="space-y-4">
@@ -1314,16 +1340,43 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
 
       {/* 3. Sticky Action Bar at Bottom (when on main Dashboard view) */}
       {creationStep === null && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-brand-bg via-brand-bg/95 to-transparent z-30 flex justify-center pointer-events-none">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-brand-bg via-brand-bg/95 to-transparent z-30 flex justify-center gap-3 pointer-events-none">
+          <button
+            onClick={() => setShowRequestModal(true)}
+            className="pointer-events-auto bg-brand-surface hover:bg-brand-bg border border-brand-border text-brand-text font-black text-xs uppercase tracking-wider px-5 py-4.5 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 max-w-xs"
+          >
+            <Sparkles size={16} className="text-brand-accent" />
+            <span className="hidden sm:inline">Request Material</span>
+            <span className="sm:hidden">Request</span>
+          </button>
           <button
             onClick={handleStartCreateBroadcast}
-            className="pointer-events-auto bg-brand-accent hover:bg-brand-accent/90 text-white font-black text-xs uppercase tracking-[0.2em] px-8 py-4.5 rounded-2xl shadow-xl shadow-brand-accent/20 active:scale-95 transition-all flex items-center justify-center gap-2 max-w-sm w-full"
+            className="pointer-events-auto bg-brand-accent hover:bg-brand-accent/90 text-white font-black text-xs uppercase tracking-[0.2em] px-8 py-4.5 rounded-2xl shadow-xl shadow-brand-accent/20 active:scale-95 transition-all flex items-center justify-center gap-2 max-w-sm flex-1"
           >
             <Plus size={16} />
             Create Holiday Assignment
           </button>
         </div>
       )}
+
+      {/* 4. Request Material Modal */}
+      <AnimatePresence>
+        {showRequestModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="w-full max-w-2xl bg-brand-surface border border-brand-border rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden"
+            >
+              <QuestionRequestForm 
+                school={{ id: schoolId, name: schoolName }} 
+                onClose={() => setShowRequestModal(false)}
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
