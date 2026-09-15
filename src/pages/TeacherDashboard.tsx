@@ -22,7 +22,8 @@ import {
   Trash2,
   X,
   Award,
-  RefreshCw
+  RefreshCw,
+  KeyRound
 } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
 import { isTeacherLinkedToAssignment } from '../utils/teacherScoping';
@@ -36,6 +37,7 @@ import ModerationPage from './ModerationPage';
 import { SchoolSetupModal } from '../components/SchoolSetupModal';
 import LinkSchoolField from '../components/LinkSchoolField';
 import { TeacherBroadcastMarking } from '../components/TeacherBroadcastMarking';
+import { TeacherChangePinModal } from '../components/TeacherChangePinModal';
 
 interface Assignment {
   id: string;
@@ -59,6 +61,7 @@ interface Teacher {
   school_name: string;
   school_id?: string | null;
   school_linked?: boolean;
+  using_shared_pin?: boolean;
 }
 
 interface TeacherDashboardProps {
@@ -102,6 +105,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [editingClassName, setEditingClassName] = useState<string>('');
   const [isSchoolSetupOpen, setIsSchoolSetupOpen] = useState(false);
   const [showLinkSchoolBanner, setShowLinkSchoolBanner] = useState(false);
+  const [isChangePinOpen, setIsChangePinOpen] = useState(false);
+  const [isSharedPinDismissed, setIsSharedPinDismissed] = useState(false);
 
   // New state for dismissible banner & inline linking form
   const [isSchoolBannerDismissed, setIsSchoolBannerDismissed] = useState(() => {
@@ -1057,17 +1062,60 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-3 py-1.5 bg-red-500/5 text-red-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0"
-          >
-            <LogOut size={12} />
-            Logout
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsChangePinOpen(true)}
+              className="px-2.5 py-1.5 bg-brand-bg hover:bg-brand-accent/10 border border-brand-border hover:border-brand-accent/30 text-brand-muted hover:text-brand-accent rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+              title="Change PIN"
+              id="header-change-pin-btn"
+            >
+              <KeyRound size={12} />
+              PIN
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1.5 bg-red-500/5 text-red-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0"
+            >
+              <LogOut size={12} />
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="px-4 py-4 space-y-4">
+        {teacher?.using_shared_pin && !isSharedPinDismissed && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300" id="shared-pin-nudge-banner">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
+                <KeyRound size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-brand-text">
+                  You're using your school's shared PIN.
+                </p>
+                <p className="text-[11px] text-brand-muted font-medium mt-0.5">
+                  Set a personal PIN to keep your account secure.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <button
+                onClick={() => setIsChangePinOpen(true)}
+                className="px-3 py-1.5 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-sm hover:opacity-95 active:scale-95 transition-all"
+              >
+                Set Personal PIN
+              </button>
+              <button
+                onClick={() => setIsSharedPinDismissed(true)}
+                className="p-1.5 hover:bg-brand-border/40 rounded-lg text-brand-muted hover:text-brand-text transition-colors"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
         {(!isSchoolBannerDismissed && (teacher?.school_linked === false || !teacher?.school_id || teacher?.school_name === 'Unassigned')) && (
           <div className="bg-brand-accent/5 border border-brand-accent/25 rounded-2xl p-4 flex flex-col gap-3 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300" id="dismissible-school-banner">
             <div className="flex items-center justify-between gap-3 w-full">
@@ -1808,6 +1856,18 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           teacherName={teacher.name}
           onSchoolLinked={handleSchoolLinked}
           canSkip={true}
+        />
+      )}
+
+      {teacher && (
+        <TeacherChangePinModal
+          isOpen={isChangePinOpen}
+          onClose={() => setIsChangePinOpen(false)}
+          teacherId={teacher.id}
+          usingSharedPin={teacher.using_shared_pin}
+          onSuccess={() => {
+            setTeacher(prev => prev ? { ...prev, using_shared_pin: false } : null);
+          }}
         />
       )}
     </div>

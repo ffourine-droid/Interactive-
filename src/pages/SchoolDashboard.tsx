@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   School, 
@@ -6,11 +6,13 @@ import {
   Users, 
   Radio, 
   Plus, 
+  PlusCircle,
   Trash2, 
   Edit, 
   Calendar, 
   CheckCircle2, 
   ChevronRight, 
+  ChevronLeft,
   X, 
   BookOpen, 
   GraduationCap, 
@@ -22,12 +24,16 @@ import {
   ArrowLeft,
   ArrowRight,
   Sparkles,
-  Loader2
+  Loader2,
+  Settings,
+  KeyRound,
+  ShieldCheck
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { CANONICAL_SUBJECTS } from '../types';
 import SchoolTeachersList from '../components/SchoolTeachersList';
+import SchoolTeachingAssignmentsView from '../components/SchoolTeachingAssignmentsView';
 import { SchoolClassesManager } from '../components/SchoolClassesManager';
 import { QuestionRequestForm } from '../components/QuestionRequestForm';
 
@@ -67,7 +73,50 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
   const [broadcasts, setBroadcasts] = useState<BroadcastAssignment[]>([]);
   
   // Navigation & Creation states
-  const [activeTab, setActiveTab] = useState<'teachers' | 'classes' | 'broadcasts' | 'requests'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'assignments' | 'classes' | 'broadcasts' | 'create_assignment' | 'requests' | 'settings'>('teachers');
+  const navScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkNavScroll = () => {
+    const el = navScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 6);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 6);
+  };
+
+  const scrollNav = (direction: 'left' | 'right') => {
+    const el = navScrollRef.current;
+    if (!el) return;
+    const amount = direction === 'left' ? -200 : 200;
+    el.scrollBy({ left: amount, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const el = navScrollRef.current;
+    if (!el) return;
+    checkNavScroll();
+    el.addEventListener('scroll', checkNavScroll, { passive: true });
+    window.addEventListener('resize', checkNavScroll);
+    return () => {
+      el.removeEventListener('scroll', checkNavScroll);
+      window.removeEventListener('resize', checkNavScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = navScrollRef.current;
+    if (!el) return;
+    const activeBtn = el.querySelector<HTMLButtonElement>('[data-active="true"]');
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+    const timer = setTimeout(checkNavScroll, 300);
+    return () => clearTimeout(timer);
+  }, [activeTab]);
+
+  const [settingsSharedPin, setSettingsSharedPin] = useState('');
+  const [savingSettingsPin, setSavingSettingsPin] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [creationStep, setCreationStep] = useState<null | 'details' | 'grades' | 'review' | 'success'>(null);
   const [isAddingGrade, setIsAddingGrade] = useState(false);
@@ -733,14 +782,6 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowRequestModal(true)}
-            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-brand-accent/10 hover:bg-brand-accent/20 border border-brand-accent/20 rounded-xl text-brand-accent text-xs font-black uppercase tracking-wider transition-all"
-          >
-            <Sparkles size={14} />
-            <span className="hidden sm:inline">Request Material</span>
-            <span className="sm:hidden">Request</span>
-          </button>
           <button 
             onClick={onLogout}
             className="flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-red-500/5 hover:bg-red-500/10 border border-red-500/15 rounded-xl text-red-500 text-xs font-black uppercase tracking-wider transition-all"
@@ -752,7 +793,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
       </header>
 
       {/* 2. Main Area / Creation Multi-Step Views */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 pb-24 relative">
+      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 pb-12 relative">
         <AnimatePresence mode="wait">
           {/* Dashboard Mode (Teachers, Classes, Broadcasts, or Requests tabs) */}
           {creationStep === null && (
@@ -763,36 +804,85 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
               exit={{ opacity: 0 }}
               className="space-y-6"
             >
-              {/* Tab Toggles */}
-              <div className="flex bg-brand-surface border border-brand-border p-1.5 rounded-2xl w-full md:max-w-2xl flex-wrap md:flex-nowrap gap-1">
-                <button
-                  onClick={() => setActiveTab('teachers')}
-                  className={`flex-1 py-3 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'teachers' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
-                >
-                  <Users size={16} />
-                  Linked Teachers
-                </button>
-                <button
-                  onClick={() => setActiveTab('classes')}
-                  className={`flex-1 py-3 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'classes' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
-                >
-                  <GraduationCap size={16} />
-                  Classes & Rosters
-                </button>
-                <button
-                  onClick={() => setActiveTab('broadcasts')}
-                  className={`flex-1 py-3 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'broadcasts' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
-                >
-                  <Radio size={16} />
-                  Active Broadcasts
-                </button>
-                <button
-                  onClick={() => setActiveTab('requests')}
-                  className={`flex-1 py-3 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shrink-0 ${activeTab === 'requests' ? 'bg-brand-accent text-white shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
-                >
-                  <Sparkles size={16} />
-                  Material Requests
-                </button>
+              {/* Sliding Tab Navigation Bar */}
+              <div className="relative w-full">
+                {/* Scroll hint on mobile */}
+                <div className="flex items-center justify-between mb-2 sm:hidden px-1 text-[11px] font-bold text-brand-muted">
+                  <span>Navigation</span>
+                  <span className="flex items-center gap-1 text-[10px] text-brand-accent font-black uppercase tracking-wider">
+                    Slide for more <ChevronRight size={12} className="inline animate-pulse" />
+                  </span>
+                </div>
+
+                <div className="relative flex items-center">
+                  {/* Left scroll chevron button */}
+                  {canScrollLeft && (
+                    <button
+                      type="button"
+                      onClick={() => scrollNav('left')}
+                      aria-label="Slide tabs left"
+                      className="absolute left-1 sm:left-2 z-20 w-8 h-8 rounded-full bg-brand-surface/95 backdrop-blur-md border border-brand-border shadow-md flex items-center justify-center text-brand-text hover:text-brand-accent hover:border-brand-accent transition-all active:scale-95"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                  )}
+
+                  {/* Left edge fade gradient */}
+                  {canScrollLeft && (
+                    <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-brand-surface via-brand-surface/80 to-transparent rounded-l-2xl z-10" />
+                  )}
+
+                  {/* Horizontally Scrollable / Sliding Tabs */}
+                  <div
+                    ref={navScrollRef}
+                    onScroll={checkNavScroll}
+                    className="flex items-center gap-1 overflow-x-auto hide-scrollbar scroll-smooth bg-brand-surface border border-brand-border p-1 rounded-2xl w-full touch-pan-x select-none"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                  >
+                    {[
+                      { id: 'teachers', label: 'Teachers', icon: <Users size={15} /> },
+                      { id: 'assignments', label: 'Assignments', icon: <BookOpen size={15} /> },
+                      { id: 'classes', label: 'Classes', icon: <GraduationCap size={15} /> },
+                      { id: 'broadcasts', label: 'Broadcasts', icon: <Radio size={15} /> },
+                      { id: 'create_assignment', label: 'Create Assignment', icon: <PlusCircle size={15} /> },
+                      { id: 'settings', label: 'Settings', icon: <Settings size={15} /> },
+                    ].map(tab => {
+                      const isActive = activeTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          data-active={isActive}
+                          onClick={() => setActiveTab(tab.id as any)}
+                          className={`py-2 px-3 sm:px-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shrink-0 whitespace-nowrap ${
+                            isActive
+                              ? 'bg-brand-accent text-white shadow-sm shadow-brand-accent/20'
+                              : 'text-brand-muted hover:text-brand-text hover:bg-brand-bg'
+                          }`}
+                        >
+                          {tab.icon}
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right edge fade gradient */}
+                  {canScrollRight && (
+                    <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-brand-surface via-brand-surface/80 to-transparent rounded-r-2xl z-10" />
+                  )}
+
+                  {/* Right scroll chevron button */}
+                  {canScrollRight && (
+                    <button
+                      type="button"
+                      onClick={() => scrollNav('right')}
+                      aria-label="Slide tabs right"
+                      className="absolute right-1 sm:right-2 z-20 w-8 h-8 rounded-full bg-brand-surface/95 backdrop-blur-md border border-brand-border shadow-md flex items-center justify-center text-brand-text hover:text-brand-accent hover:border-brand-accent transition-all active:scale-95"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {loading ? (
@@ -802,22 +892,193 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
                 </div>
               ) : activeTab === 'teachers' ? (
                 <SchoolTeachersList schoolId={schoolId} />
+              ) : activeTab === 'assignments' ? (
+                <SchoolTeachingAssignmentsView schoolId={schoolId} />
               ) : activeTab === 'classes' ? (
                 <SchoolClassesManager schoolId={schoolId} />
-              ) : activeTab === 'requests' ? (
-                <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 sm:p-8 shadow-sm">
-                  <QuestionRequestForm 
-                    school={{ id: schoolId, name: schoolName }} 
-                    onClose={() => setActiveTab('teachers')}
-                  />
+              ) : (activeTab === 'create_assignment' || activeTab === 'requests') ? (
+                <div className="space-y-6">
+                  <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 sm:p-8 shadow-sm space-y-6">
+                    {/* Header with Title and Single Request Button */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-border/40 pb-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-brand-accent/10 flex items-center justify-center text-brand-accent shrink-0">
+                          <PlusCircle size={20} />
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-black text-brand-text">Create Holiday Assignment</h2>
+                          <p className="text-xs text-brand-muted font-bold uppercase tracking-wider mt-0.5">
+                            Broadcast school-wide holiday assignments across grades or request curated materials
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* The single Request Material button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowRequestModal(true)}
+                        className="flex items-center gap-2 px-3.5 py-2 bg-brand-accent/10 hover:bg-brand-accent/20 border border-brand-accent/25 rounded-xl text-brand-accent text-xs font-bold uppercase tracking-wider transition-all self-start sm:self-auto shadow-sm active:scale-95 shrink-0"
+                      >
+                        <Sparkles size={14} />
+                        <span>Request Material</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-5">
+                      {/* Curated Question Request Info Callout (informative, no duplicate button) */}
+                      <div className="p-4 bg-brand-accent/5 border border-brand-accent/15 rounded-2xl flex items-start sm:items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-brand-accent/10 text-brand-accent flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                          <Sparkles size={16} />
+                        </div>
+                        <p className="text-xs text-brand-muted font-medium leading-relaxed">
+                          Need curated questions for your students? Use the <span className="font-bold text-brand-text">Request Material</span> button above to submit custom requirements or track past requests.
+                        </p>
+                      </div>
+
+                      {/* Direct Creation Card */}
+                      <div className="p-6 bg-brand-bg border border-brand-border rounded-2xl space-y-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-brand-accent/10 flex items-center justify-center text-brand-accent">
+                            <Radio size={16} />
+                          </div>
+                          <h3 className="text-sm font-black text-brand-text uppercase tracking-wider">
+                            Broadcast Assignment Builder
+                          </h3>
+                        </div>
+                        <p className="text-xs text-brand-muted leading-relaxed font-medium">
+                          Create a multi-grade holiday assignment package in 3 simple steps: specify title and due date, build distinct question sheets per grade (with multiple-choice, short answers, or photo uploads), and broadcast directly to student classes with automatic teacher routing.
+                        </p>
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={handleStartCreateBroadcast}
+                            className="w-full sm:w-auto px-6 py-3.5 bg-brand-accent hover:bg-brand-accent/90 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-brand-accent/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                          >
+                            <Plus size={16} />
+                            <span>Start Assignment Builder</span>
+                            <ArrowRight size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : activeTab === 'settings' ? (
+                <div className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 sm:p-8 shadow-sm space-y-6">
+                  <div className="flex items-center gap-3 border-b border-brand-border/40 pb-4">
+                    <div className="w-10 h-10 rounded-2xl bg-brand-accent/10 flex items-center justify-center text-brand-accent">
+                      <Settings size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-brand-text">School Settings & Credentials</h2>
+                      <p className="text-xs text-brand-muted font-bold uppercase tracking-wider mt-0.5">
+                        Manage security credentials and school profile
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Shared Teacher PIN Manager */}
+                  <div className="bg-brand-bg border border-brand-border rounded-2xl p-6 space-y-4">
+                    <div className="flex items-center gap-2.5 text-amber-500">
+                      <KeyRound size={18} />
+                      <h3 className="text-sm font-black uppercase tracking-wider text-brand-text">
+                        School's Shared Teacher PIN
+                      </h3>
+                    </div>
+                    <p className="text-xs text-brand-muted leading-relaxed font-medium">
+                      This is the common 4-digit PIN given to new teachers to log into the portal. Once logged in, teachers are prompted to set their personal PIN.
+                    </p>
+
+                    <form 
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (settingsSharedPin.length !== 4) {
+                          showToast("PIN must be 4 digits", "error");
+                          return;
+                        }
+                        setSavingSettingsPin(true);
+                        try {
+                          const { data, error } = await supabase.rpc('school_set_teacher_pin', {
+                            p_school_id: schoolId,
+                            p_pin: settingsSharedPin.trim()
+                          });
+                          if (error) throw error;
+                          if (data && data.success === false) {
+                            throw new Error(data.message || 'Failed to update PIN');
+                          }
+                          showToast("School shared teacher PIN updated successfully!", "success");
+                          setSettingsSharedPin('');
+                        } catch (err: any) {
+                          showToast(err.message || 'Failed to update shared PIN', 'error');
+                        } finally {
+                          setSavingSettingsPin(false);
+                        }
+                      }}
+                      className="flex items-center gap-3 pt-2 max-w-sm"
+                    >
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        placeholder="••••"
+                        value={settingsSharedPin}
+                        onChange={(e) => setSettingsSharedPin(e.target.value.replace(/\D/g, ''))}
+                        className="w-32 bg-brand-surface border border-brand-border rounded-xl py-3 px-3 font-bold tracking-[0.3em] text-center text-brand-text outline-none focus:border-brand-accent transition-all text-sm placeholder-brand-muted/30"
+                        required
+                      />
+                      <button
+                        type="submit"
+                        disabled={savingSettingsPin || settingsSharedPin.length !== 4}
+                        className="px-4 py-3 bg-brand-accent hover:opacity-95 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-brand-accent/20 active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {savingSettingsPin ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                        <span>Update PIN</span>
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* School Information */}
+                  <div className="bg-brand-bg border border-brand-border rounded-2xl p-6 space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-brand-muted">
+                      School Information
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">School Name</p>
+                        <p className="text-sm font-black text-brand-text mt-0.5">{schoolName}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">School ID</p>
+                        <p className="text-xs font-mono font-bold text-brand-text mt-0.5 truncate">{schoolId}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 /* Active Broadcasts List */
                 <div className="space-y-4">
-                  <h2 className="text-xs font-black uppercase tracking-widest text-brand-muted px-1">Broadcast holiday assignments ({broadcasts.length})</h2>
+                  <div className="flex items-center justify-between gap-3 px-1">
+                    <h2 className="text-xs font-black uppercase tracking-widest text-brand-muted">
+                      Broadcast holiday assignments ({broadcasts.length})
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('create_assignment')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-accent/10 hover:bg-brand-accent/20 text-brand-accent text-xs font-black uppercase tracking-wider rounded-xl transition-all"
+                    >
+                      <Plus size={14} /> Create Assignment
+                    </button>
+                  </div>
                   {broadcasts.length === 0 ? (
-                    <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2rem] p-12 text-center text-brand-muted">
-                      <p className="font-bold">No holiday assignments created yet. Create one below.</p>
+                    <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2rem] p-12 text-center text-brand-muted space-y-3">
+                      <p className="font-bold">No holiday assignments created yet.</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('create_assignment')}
+                        className="px-4 py-2.5 bg-brand-accent hover:bg-brand-accent/90 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-sm transition-all inline-block"
+                      >
+                        + Create Holiday Assignment
+                      </button>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-3">
@@ -1338,28 +1599,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
         </AnimatePresence>
       </main>
 
-      {/* 3. Sticky Action Bar at Bottom (when on main Dashboard view) */}
-      {creationStep === null && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-brand-bg via-brand-bg/95 to-transparent z-30 flex justify-center gap-3 pointer-events-none">
-          <button
-            onClick={() => setShowRequestModal(true)}
-            className="pointer-events-auto bg-brand-surface hover:bg-brand-bg border border-brand-border text-brand-text font-black text-xs uppercase tracking-wider px-5 py-4.5 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 max-w-xs"
-          >
-            <Sparkles size={16} className="text-brand-accent" />
-            <span className="hidden sm:inline">Request Material</span>
-            <span className="sm:hidden">Request</span>
-          </button>
-          <button
-            onClick={handleStartCreateBroadcast}
-            className="pointer-events-auto bg-brand-accent hover:bg-brand-accent/90 text-white font-black text-xs uppercase tracking-[0.2em] px-8 py-4.5 rounded-2xl shadow-xl shadow-brand-accent/20 active:scale-95 transition-all flex items-center justify-center gap-2 max-w-sm flex-1"
-          >
-            <Plus size={16} />
-            Create Holiday Assignment
-          </button>
-        </div>
-      )}
-
-      {/* 4. Request Material Modal */}
+      {/* 3. Request Material Modal */}
       <AnimatePresence>
         {showRequestModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">

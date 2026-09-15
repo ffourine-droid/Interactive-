@@ -23,7 +23,6 @@ export type Page =
   | 'teacher' 
   | 'assignments' 
   | 'teacher-dashboard' 
-  | 'teacher-signup' 
   | 'teacher-login' 
   | 'teacher-class' 
   | 'parent'

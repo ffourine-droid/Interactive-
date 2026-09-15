@@ -1,21 +1,19 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { GraduationCap, ArrowLeft, Loader2, User, School, Lock } from 'lucide-react';
+import { GraduationCap, ArrowLeft, Loader2, User, Lock } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 
 interface TeacherLoginProps {
   onBack: () => void;
   onSuccess: () => void;
-  onNavigateToSignup: () => void;
 }
 
-const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNavigateToSignup }) => {
+const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    schoolName: '',
     pin: ''
   });
   const [dbError, setDbError] = useState<string | null>(null);
@@ -43,17 +41,21 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.schoolName || !formData.pin) {
-      showToast("Please fill all fields", "error");
+    if (!formData.name.trim() || !formData.pin.trim()) {
+      showToast("Please enter your name and 4-digit PIN", "error");
+      return;
+    }
+
+    if (formData.pin.length !== 4) {
+      showToast("PIN must be 4 digits", "error");
       return;
     }
 
     setLoading(true);
     try {
-      // Use the newly deployed and verified secure teacher_login RPC
+      // Calls teacher_login(p_name, p_pin). If no personal PIN is set, backend checks school shared PIN
       const { data, error } = await supabase.rpc('teacher_login', {
         p_name: formData.name.trim(),
-        p_school: formData.schoolName.trim(),
         p_pin: formData.pin.trim()
       });
 
@@ -62,7 +64,7 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
       }
 
       if (!data || !data.success) {
-        showToast(data?.message || "Incorrect details.", "error");
+        showToast(data?.message || "Incorrect name or PIN. Check spelling or ask your school admin.", "error");
         return;
       }
 
@@ -70,14 +72,16 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
         id: data.id,
         name: data.name,
         school_name: data.school_name,
-        school_id: data.school_id
+        school_id: data.school_id,
+        using_shared_pin: Boolean(data.using_shared_pin)
       }));
+
       await setTeacherConfig(data.id);
       showToast(`Welcome back, Teacher ${data.name.split(' ')[0]}!`, "success");
       onSuccess();
     } catch (err: any) {
       console.error("Teacher login exception:", err);
-      showToast(`Login exception: ${err.message || err}`, "error");
+      showToast(err.message || "Failed to log in", "error");
     } finally {
       setLoading(false);
     }
@@ -93,6 +97,7 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
         <button 
           onClick={onBack}
           className="mb-8 p-3 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-colors"
+          title="Back"
         >
           <ArrowLeft size={18} />
         </button>
@@ -114,22 +119,11 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
               <User className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
               <input 
                 type="text"
-                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-sm text-brand-text"
+                placeholder="e.g. Mrs. Jane Smith"
+                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-sm text-brand-text placeholder-brand-muted/40"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted ml-1">School Name</label>
-            <div className="relative">
-              <School className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
-              <input 
-                type="text"
-                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold text-sm text-brand-text"
-                value={formData.schoolName}
-                onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
+                required
               />
             </div>
           </div>
@@ -142,40 +136,32 @@ const TeacherLogin: React.FC<TeacherLoginProps> = ({ onBack, onSuccess, onNaviga
                 type="password"
                 inputMode="numeric"
                 maxLength={4}
-                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold tracking-[0.2em] text-brand-text"
+                placeholder="••••"
+                className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-brand-accent/50 transition-all font-bold tracking-[0.3em] text-brand-text placeholder-brand-muted/40"
                 value={formData.pin}
                 onChange={(e) => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '') })}
+                required
               />
             </div>
+            <p className="text-[10px] text-brand-muted font-medium ml-1">
+              Use your personal PIN or your school's common teacher PIN.
+            </p>
           </div>
 
           <button 
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 active:scale-95 transition-all flex items-center justify-center gap-2 mt-4"
+            className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 active:scale-95 transition-all flex items-center justify-center gap-2 mt-6"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : "Continue to Dashboard"}
           </button>
         </form>
-
-        <p className="mt-8 text-center text-sm font-bold text-brand-muted">
-          New teacher?{' '}
-          <button 
-            onClick={onNavigateToSignup}
-            className="text-brand-accent hover:underline"
-          >
-            Create account
-          </button>
-        </p>
 
         {/* Database Diagnostic and Quick Login Helper */}
         {dbError && (
           <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs text-red-400 font-medium">
             <p className="font-bold mb-1">⚠️ Database Connection Issue:</p>
             <p>{dbError}</p>
-            <p className="mt-2 text-[10px] text-red-300">
-              Please ensure your Supabase parameters are correct and you have run the <span className="font-mono bg-red-950 px-1 py-0.5 rounded">supabase_setup.sql</span> script in your Supabase SQL Editor.
-            </p>
           </div>
         )}
       </motion.div>

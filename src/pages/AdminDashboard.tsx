@@ -22,10 +22,12 @@ import {
   Zap,
   Users,
   X,
-  BookOpen
+  BookOpen,
+  KeyRound
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { CANONICAL_SUBJECTS } from '../types';
 import { ArenaQuestionCreator } from '../components/ArenaQuestionCreator';
 import { QuestionManager } from '../components/QuestionManager';
 import { MaterialManager } from '../components/MaterialManager';
@@ -119,6 +121,15 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [newSubjectName, setNewSubjectName] = useState<Record<string, string>>({});
   const [newSubjectTeacherId, setNewSubjectTeacherId] = useState<Record<string, string>>({});
   const [addingAssignment, setAddingAssignment] = useState<Record<string, boolean>>({});
+  const [adminSharedPin, setAdminSharedPin] = useState('');
+  const [savingAdminSharedPin, setSavingAdminSharedPin] = useState(false);
+  const [isAddTeacherModalOpen, setIsAddTeacherModalOpen] = useState(false);
+  const [adminTeacherName, setAdminTeacherName] = useState('');
+  const [adminTeacherEmail, setAdminTeacherEmail] = useState('');
+  const [adminTeacherAssignments, setAdminTeacherAssignments] = useState<{ classId: string; subject: string }[]>([
+    { classId: '', subject: '' }
+  ]);
+  const [isSubmittingAdminTeacher, setIsSubmittingAdminTeacher] = useState(false);
 
   // Classes & Students administration states
   const [selectedSchoolIdForClasses, setSelectedSchoolIdForClasses] = useState<string>('');
@@ -2307,24 +2318,96 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                   </p>
                 </div>
                 {schoolsList.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted shrink-0">Select School:</label>
-                    <select
-                      value={selectedSchoolId}
-                      onChange={(e) => {
-                        setSelectedSchoolId(e.target.value);
-                        fetchTeachingAssignments(e.target.value);
-                      }}
-                      className="px-3 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold text-brand-text outline-none focus:border-brand-accent/50"
-                    >
-                      <option value="">-- Choose School --</option>
-                      {schoolsList.map((sch) => (
-                        <option key={sch.id} value={sch.id}>{sch.name}</option>
-                      ))}
-                    </select>
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted shrink-0">School:</label>
+                      <select
+                        value={selectedSchoolId}
+                        onChange={(e) => {
+                          setSelectedSchoolId(e.target.value);
+                          fetchTeachingAssignments(e.target.value);
+                        }}
+                        className="px-3 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold text-brand-text outline-none focus:border-brand-accent/50"
+                      >
+                        <option value="">-- Choose School --</option>
+                        {schoolsList.map((sch) => (
+                          <option key={sch.id} value={sch.id}>{sch.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedSchoolId && (
+                      <button
+                        onClick={() => setIsAddTeacherModalOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-brand-accent text-white rounded-xl text-xs font-black uppercase tracking-wider hover:opacity-95 transition-all shadow-sm shrink-0"
+                      >
+                        <Plus size={14} />
+                        <span>Add Teacher</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
+
+              {/* Shared PIN Setting Banner when school is selected */}
+              {selectedSchoolId && (
+                <div className="bg-brand-surface border border-brand-border rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-amber-500 font-bold text-xs uppercase tracking-wider">
+                      <KeyRound size={14} />
+                      <span>School's Shared Teacher PIN</span>
+                    </div>
+                    <p className="text-[11px] text-brand-muted font-medium">
+                      Teachers use this common PIN to log in before setting their personal PIN.
+                    </p>
+                  </div>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (adminSharedPin.length !== 4) {
+                        showToast("PIN must be 4 digits", "error");
+                        return;
+                      }
+                      setSavingAdminSharedPin(true);
+                      try {
+                        const { data, error } = await supabase.rpc('school_set_teacher_pin', {
+                          p_school_id: selectedSchoolId,
+                          p_pin: adminSharedPin.trim()
+                        });
+                        if (error) throw error;
+                        if (data && data.success === false) {
+                          throw new Error(data.message || 'Failed to update PIN');
+                        }
+                        showToast("School shared PIN updated successfully!", "success");
+                        setAdminSharedPin('');
+                      } catch (err: any) {
+                        showToast(err.message || 'Failed to update shared PIN', 'error');
+                      } finally {
+                        setSavingAdminSharedPin(false);
+                      }
+                    }}
+                    className="flex items-center gap-2 shrink-0 w-full sm:w-auto"
+                  >
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="••••"
+                      value={adminSharedPin}
+                      onChange={(e) => setAdminSharedPin(e.target.value.replace(/\D/g, ''))}
+                      className="w-24 bg-brand-bg border border-brand-border rounded-xl py-2 px-2.5 font-bold tracking-[0.2em] text-center text-brand-text outline-none focus:border-brand-accent transition-all text-xs"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={savingAdminSharedPin || adminSharedPin.length !== 4}
+                      className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                    >
+                      {savingAdminSharedPin ? 'Saving...' : 'Set PIN'}
+                    </button>
+                  </form>
+                </div>
+              )}
 
               {teachingAssignmentsLoading ? (
                 <div className="py-20 text-center space-y-4 bg-brand-surface border border-brand-border rounded-[2.5rem]">
@@ -2382,43 +2465,63 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-start">
                                     <div>
-                                      <h4 className="font-bold text-sm text-brand-text">{cls.class_name}</h4>
-                                      <p className="text-[9px] text-brand-muted uppercase font-black tracking-widest mt-0.5">
-                                        Class ID: {cls.class_id}
-                                      </p>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h4 className="font-bold text-sm text-brand-text">{cls.class_name}</h4>
+                                        <span className="px-2 py-0.5 rounded-lg bg-brand-bg border border-brand-border text-[9px] font-black uppercase tracking-wider text-brand-muted">
+                                          Grade {cls.grade}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 mt-1 text-xs text-brand-muted font-bold">
+                                        <Users size={12} className="text-brand-accent" />
+                                        <span>{(cls.student_count ?? 0)} {(cls.student_count === 1 ? 'student' : 'students')}</span>
+                                      </div>
                                     </div>
                                     {!hasAssignments && (
                                       <span className="px-2 py-0.5 bg-red-500/10 text-red-500 border border-red-500/20 text-[8px] font-black uppercase tracking-wider rounded-md">
-                                        No subjects assigned
+                                        No teachers assigned
                                       </span>
                                     )}
                                   </div>
 
-                                  {/* Subject chips */}
-                                  <div className="flex flex-wrap gap-2 pt-1 min-h-[40px] items-center">
-                                    {hasAssignments ? (
-                                      cls.assignments.map((asg: any) => (
-                                        <div
-                                          key={asg.assignment_id}
-                                          className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold text-brand-text"
-                                        >
-                                          <span>
-                                            <span className="text-brand-accent font-black">{asg.subject}</span>
-                                            <span className="text-brand-muted"> — {asg.teacher_name}</span>
-                                          </span>
-                                          <button
-                                            onClick={() => handleRemoveTeacherSubject(asg.assignment_id)}
-                                            className="w-4 h-4 rounded-full hover:bg-red-500/10 text-brand-muted hover:text-red-500 flex items-center justify-center transition-colors"
-                                            title="Remove teaching assignment"
-                                          >
-                                            <X size={10} className="stroke-[3]" />
-                                          </button>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <p className="text-xs font-semibold text-red-400 italic">No assigned educators for this class yet.</p>
-                                    )}
-                                  </div>
+                                  {/* Small Table underneath */}
+                                  {hasAssignments ? (
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left border-collapse">
+                                        <thead>
+                                          <tr className="border-b border-brand-border/40 text-[9px] font-black uppercase tracking-wider text-brand-muted">
+                                            <th className="py-1.5 px-2">Subject</th>
+                                            <th className="py-1.5 px-2">Teacher</th>
+                                            <th className="py-1.5 px-2 text-right">Action</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-brand-border/20 text-xs font-bold text-brand-text">
+                                          {cls.assignments.map((asg: any) => (
+                                            <tr key={asg.assignment_id} className="group hover:bg-brand-bg/50 transition-colors">
+                                              <td className="py-2 px-2">
+                                                <span className="text-brand-accent font-black">{asg.subject}</span>
+                                              </td>
+                                              <td className="py-2 px-2">
+                                                <span className="text-brand-text">{asg.teacher_name}</span>
+                                              </td>
+                                              <td className="py-2 px-2 text-right">
+                                                <button
+                                                  onClick={() => handleRemoveTeacherSubject(asg.assignment_id)}
+                                                  className="inline-flex items-center justify-center p-1 text-brand-muted hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors"
+                                                  title="Remove assignment"
+                                                >
+                                                  <X size={13} className="stroke-[2.5]" />
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : (
+                                    <div className="py-2.5 px-3 rounded-xl bg-brand-bg/60 border border-brand-border/60 text-xs font-semibold text-brand-muted italic">
+                                      No teachers assigned
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* Add subject control */}
@@ -2470,6 +2573,203 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
                       </div>
                     ));
                   })()}
+                </div>
+              )}
+
+              {/* Add Teacher Modal in Admin Dashboard */}
+              {isAddTeacherModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                  <div className="relative w-full max-w-lg bg-brand-surface border border-brand-border rounded-[2.5rem] p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+                    <button
+                      onClick={() => setIsAddTeacherModalOpen(false)}
+                      className="absolute top-6 right-6 p-2 rounded-xl bg-brand-bg border border-brand-border text-brand-muted hover:text-brand-text transition-colors"
+                      title="Close"
+                    >
+                      <X size={16} />
+                    </button>
+
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-12 h-12 rounded-2xl bg-brand-accent/10 flex items-center justify-center text-brand-accent">
+                        <Users size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-brand-text">Add Teacher</h2>
+                        <p className="text-xs text-brand-muted font-bold uppercase tracking-wider mt-0.5">
+                          Register educator and assign class subjects
+                        </p>
+                      </div>
+                    </div>
+
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        const cleanName = adminTeacherName.trim();
+                        if (!cleanName) {
+                          showToast("Teacher name is required", "error");
+                          return;
+                        }
+
+                        setIsSubmittingAdminTeacher(true);
+                        try {
+                          // 1. Call admin_add_teacher (no PIN)
+                          const { data: addResult, error: addErr } = await supabase.rpc("admin_add_teacher", {
+                            p_name: cleanName,
+                            p_school_id: selectedSchoolId,
+                            p_email: adminTeacherEmail.trim() || null
+                          });
+
+                          if (addErr) throw addErr;
+                          if (addResult && addResult.success === false) {
+                            throw new Error(addResult.message || "Failed to add teacher");
+                          }
+
+                          const teacherId = addResult?.id || addResult?.teacher_id || addResult?.teacher?.id;
+
+                          // 2. Loop and assign classes + subjects
+                          if (teacherId) {
+                            for (const { classId, subject } of adminTeacherAssignments) {
+                              if (classId && subject.trim()) {
+                                try {
+                                  await supabase.rpc("admin_assign_teacher_subject", {
+                                    p_teacher_id: teacherId,
+                                    p_class_id: classId,
+                                    p_subject: subject.trim()
+                                  });
+                                } catch (assignErr) {
+                                  console.warn("Error assigning subject:", assignErr);
+                                }
+                              }
+                            }
+                          }
+
+                          showToast(`Teacher "${cleanName}" added successfully!`, "success");
+                          setAdminTeacherName('');
+                          setAdminTeacherEmail('');
+                          setAdminTeacherAssignments([{ classId: '', subject: '' }]);
+                          setIsAddTeacherModalOpen(false);
+                          fetchTeachingAssignments(selectedSchoolId);
+                        } catch (err: any) {
+                          showToast(err.message || "Failed to add teacher", "error");
+                        } finally {
+                          setIsSubmittingAdminTeacher(false);
+                        }
+                      }}
+                      className="space-y-4"
+                    >
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1">
+                          Teacher Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Mrs. Sarah Smith"
+                          value={adminTeacherName}
+                          onChange={(e) => setAdminTeacherName(e.target.value)}
+                          className="w-full bg-brand-bg border border-brand-border rounded-xl py-3 px-4 text-xs font-bold text-brand-text outline-none focus:border-brand-accent"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1">
+                          Email Address (optional)
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="e.g. sarah@school.com"
+                          value={adminTeacherEmail}
+                          onChange={(e) => setAdminTeacherEmail(e.target.value)}
+                          className="w-full bg-brand-bg border border-brand-border rounded-xl py-3 px-4 text-xs font-bold text-brand-text outline-none focus:border-brand-accent"
+                        />
+                      </div>
+
+                      {/* Class + Subject assignments */}
+                      <div className="space-y-2.5 pt-2 border-t border-brand-border/40">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-text">
+                          Teaching Assignments
+                        </label>
+
+                        {adminTeacherAssignments.map((row, idx) => (
+                          <div key={idx} className="flex items-center gap-2 p-2 bg-brand-bg border border-brand-border rounded-xl">
+                            <select
+                              value={row.classId}
+                              onChange={(e) => {
+                                const next = [...adminTeacherAssignments];
+                                next[idx].classId = e.target.value;
+                                setAdminTeacherAssignments(next);
+                              }}
+                              className="flex-1 bg-brand-surface border border-brand-border rounded-lg py-2 px-2.5 text-xs font-bold text-brand-text outline-none focus:border-brand-accent"
+                            >
+                              <option value="">Select Class...</option>
+                              {(teachingAssignmentsData?.classes || []).map((c: any) => (
+                                <option key={c.class_id} value={c.class_id}>
+                                  {c.class_name} ({c.grade})
+                                </option>
+                              ))}
+                            </select>
+
+                            <input
+                              type="text"
+                              list="admin-canonical-subjects"
+                              placeholder="Subject (e.g. Science)"
+                              value={row.subject}
+                              onChange={(e) => {
+                                const next = [...adminTeacherAssignments];
+                                next[idx].subject = e.target.value;
+                                setAdminTeacherAssignments(next);
+                              }}
+                              className="flex-1 bg-brand-surface border border-brand-border rounded-lg py-2 px-2.5 text-xs font-bold text-brand-text outline-none focus:border-brand-accent"
+                            />
+
+                            {adminTeacherAssignments.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAdminTeacherAssignments(adminTeacherAssignments.filter((_, i) => i !== idx));
+                                }}
+                                className="p-2 text-brand-muted hover:text-red-500 rounded-lg hover:bg-red-500/10 transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => setAdminTeacherAssignments([...adminTeacherAssignments, { classId: '', subject: '' }])}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-bg border border-brand-border hover:border-brand-accent text-brand-muted hover:text-brand-accent text-[10px] font-black uppercase tracking-wider transition-colors"
+                        >
+                          <Plus size={12} />
+                          <span>Add Another Class & Subject</span>
+                        </button>
+                      </div>
+
+                      <datalist id="admin-canonical-subjects">
+                        {CANONICAL_SUBJECTS.map((s) => (
+                          <option key={s} value={s} />
+                        ))}
+                      </datalist>
+
+                      <div className="pt-3 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddTeacherModalOpen(false)}
+                          className="flex-1 py-3 px-4 rounded-xl border border-brand-border text-xs font-black uppercase tracking-wider text-brand-muted hover:text-brand-text transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSubmittingAdminTeacher || !adminTeacherName.trim()}
+                          className="flex-1 py-3 px-4 rounded-xl bg-brand-accent text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-brand-accent/20 hover:opacity-95 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {isSubmittingAdminTeacher ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                          <span>{isSubmittingAdminTeacher ? "Saving..." : "Add & Assign"}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>

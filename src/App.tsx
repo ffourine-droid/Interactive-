@@ -18,7 +18,6 @@ const Home = React.lazy(() => import('./pages/Home'));
 const TeacherAssignmentCreator = React.lazy(() => import('./components/TeacherAssignmentCreator'));
 const StudentAssignmentView = React.lazy(() => import('./components/StudentAssignmentView'));
 const TeacherDashboard = React.lazy(() => import('./pages/TeacherDashboard'));
-const TeacherSignup = React.lazy(() => import('./pages/TeacherSignup'));
 const TeacherLogin = React.lazy(() => import('./pages/TeacherLogin'));
 const TeacherClassView = React.lazy(() => import('./pages/TeacherClassView'));
 const ParentPage = React.lazy(() => import('./pages/ParentPage'));
@@ -344,23 +343,6 @@ function AppContent() {
             </motion.div>
           </Suspense>
         );
-      case 'teacher-signup':
-        return (
-          <Suspense fallback={<LoadingFallback text="Creating Account..." />}>
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              key="teacher-signup"
-            >
-              <TeacherSignup 
-                onBack={() => setCurrentPage('landing')}
-                onSuccess={() => setCurrentPage('teacher-dashboard')}
-                onNavigateToLogin={() => setCurrentPage('teacher-login')}
-              />
-            </motion.div>
-          </Suspense>
-        );
       case 'teacher-login':
         return (
           <Suspense fallback={<LoadingFallback text="Logging in..." />}>
@@ -373,7 +355,6 @@ function AppContent() {
               <TeacherLogin 
                 onBack={() => setCurrentPage('landing')}
                 onSuccess={() => setCurrentPage('teacher-dashboard')}
-                onNavigateToSignup={() => setCurrentPage('teacher-signup')}
               />
             </motion.div>
           </Suspense>
