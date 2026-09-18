@@ -700,27 +700,55 @@ export default function Home({
                     {/* Quick Access Horizon Cards */}
                     <div className="space-y-3 pt-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-1 h-3.5 bg-blue-500 rounded-full" />
+                        <div className="w-1 h-3.5 bg-brand-accent rounded-full" />
                         <h2 className="font-display text-xs font-bold uppercase tracking-wider text-brand-muted font-black">Quick Access</h2>
                       </div>
 
-                      {/* School Forum Card */}
-                      <button
-                        onClick={onCommunityClick}
-                        className="relative overflow-hidden w-full bg-brand-surface border border-brand-border border-b-[4px] border-b-blue-500/50 hover:border-blue-500 rounded-2xl p-4 flex items-center justify-between transition-all shadow-sm group text-left real-press active:translate-y-[2px] cursor-pointer"
-                      >
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />
-                        <div className="flex items-center gap-3 pl-1">
-                          <div className="w-11 h-11 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500 text-xl font-bold shrink-0">
-                            💬
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {/* Assignments Card */}
+                        <button
+                          onClick={onAssignmentsClick}
+                          className="relative overflow-hidden w-full bg-brand-surface border border-brand-border border-b-[4px] border-b-brand-accent/50 hover:border-brand-accent rounded-2xl p-4 flex items-center justify-between transition-all shadow-sm group text-left real-press active:translate-y-[2px] cursor-pointer"
+                        >
+                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-accent" />
+                          <div className="flex items-center gap-3 pl-1">
+                            <div className="w-11 h-11 bg-brand-accent/10 rounded-xl flex items-center justify-center text-brand-accent text-xl font-bold shrink-0">
+                              📝
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="font-display text-xs font-black text-brand-text group-hover:text-brand-accent transition-colors leading-tight truncate">
+                                Assignments & Tasks
+                              </h3>
+                              <p className="text-[10px] font-semibold text-brand-muted mt-0.5 leading-snug truncate">
+                                View tasks, practice & submit work
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="font-display text-xs font-black text-brand-text group-hover:text-blue-500 transition-colors leading-tight">School Forum</h3>
-                            <p className="text-[10px] font-semibold text-brand-muted mt-0.5 leading-snug">Connect & discuss with classmates</p>
+                          <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0 ml-2">›</span>
+                        </button>
+
+                        {/* School Forum Card */}
+                        <button
+                          onClick={onCommunityClick}
+                          className="relative overflow-hidden w-full bg-brand-surface border border-brand-border border-b-[4px] border-b-blue-500/50 hover:border-blue-500 rounded-2xl p-4 flex items-center justify-between transition-all shadow-sm group text-left real-press active:translate-y-[2px] cursor-pointer"
+                        >
+                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />
+                          <div className="flex items-center gap-3 pl-1">
+                            <div className="w-11 h-11 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500 text-xl font-bold shrink-0">
+                              💬
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="font-display text-xs font-black text-brand-text group-hover:text-blue-500 transition-colors leading-tight truncate">
+                                School Forum
+                              </h3>
+                              <p className="text-[10px] font-semibold text-brand-muted mt-0.5 leading-snug truncate">
+                                Connect & discuss with classmates
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0">›</span>
-                      </button>
+                          <span className="text-xl font-bold text-brand-muted group-hover:text-brand-text transition-colors shrink-0 ml-2">›</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -791,15 +819,15 @@ export default function Home({
                       {[
                         {
                           id: 'assignment',
-                          label: 'Assignment....',
-                          sub: 'Submit assigned exercises and files',
+                          label: 'Assignments & Homework',
+                          sub: 'Submit assigned exercises, notes & photos',
                           icon: FileText,
                           color: 'text-violet-500 bg-violet-500/10 border-violet-500/15',
                           action: onAssignmentsClick
                         },
                         {
                           id: 'arena',
-                          label: 'Students arena.......',
+                          label: 'Student Quiz Arena',
                           sub: 'Join multiplayer learning and quiz challenges',
                           icon: FlaskConical,
                           color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/15',
@@ -807,7 +835,7 @@ export default function Home({
                         },
                         {
                           id: 'stories',
-                          label: 'Story quest......',
+                          label: 'Interactive Story Quests',
                           sub: 'Embark on engaging adventure learning quests',
                           icon: BookOpen,
                           color: 'text-[#FF6B2C] bg-[#FF6B2C]/10 border-[#FF6B2C]/15',
@@ -815,7 +843,7 @@ export default function Home({
                         },
                         {
                           id: 'forum',
-                          label: 'Combined school forum...',
+                          label: 'School Discussion Forum',
                           sub: 'Learn, chat, and discuss with classes',
                           icon: Users,
                           color: 'text-blue-500 bg-blue-500/10 border-blue-500/15',

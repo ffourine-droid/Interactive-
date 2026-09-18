@@ -1,92 +1,240 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useStudent } from "../contexts/StudentContext";
 import { assignmentService } from "../services/assignmentService";
+import { StudentAssignmentTaking } from "../components/assignment/StudentAssignmentTaking";
+import { AssignmentSuccessCelebration } from "../components/assignment/AssignmentSuccessCelebration";
+import { 
+  School, 
+  FileText, 
+  Calendar, 
+  Search, 
+  ArrowLeft, 
+  Loader2, 
+  AlertCircle,
+  Sparkles
+} from "lucide-react";
 
-const NAVY = "#0A1628";
-const ORANGE = "#F97316";
-
-const GRADES = ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"];
+const GRADES = [
+  "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6",
+  "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"
+];
 
 interface StudentFindAssignmentProps {
   onBack?: () => void;
 }
 
-/**
- * Route this at something like /school-assignment. This is intentionally
- * separate from the teacher/class assignment flow — no device account or
- * class membership is required. A student just needs to know their
- * school's name and the assignment title the school admin gave them.
- */
 export default function StudentFindAssignment({ onBack }: StudentFindAssignmentProps) {
-  const [step, setStep] = useState<"search" | "take" | "done">("search"); // search -> take -> done
+  const { currentStudent } = useStudent();
+  const [step, setStep] = useState<"search" | "take" | "done">("search");
   const [assignment, setAssignment] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [submission, setSubmission] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const studentName = currentStudent?.name || (() => {
+    try {
+      const s = localStorage.getItem('azilearn_student');
+      return s ? JSON.parse(s).name || 'Student' : 'Student';
+    } catch {
+      return 'Student';
+    }
+  })();
+
+  const handleSubmitAssignment = async (
+    submittedAnswers: Record<string, any>,
+    submittedFiles: Record<string, File>,
+    submittedSkipped: Set<string>
+  ) => {
+    if (!assignment) return;
+    setSubmitting(true);
+
+    try {
+      const finalAnswers: Record<string, any> = {};
+      for (const [qId, val] of Object.entries(submittedAnswers)) {
+        if (!submittedSkipped.has(qId) && val !== undefined && val !== '') {
+          finalAnswers[qId] = val;
+        }
+      }
+
+      // Handle photos if any
+      for (const qId of Object.keys(submittedFiles)) {
+        if (submittedSkipped.has(qId)) continue;
+        const file = submittedFiles[qId];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${assignment.id}/${studentName.replace(/\s+/g, '_')}_${qId}_${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('assignment-photos')
+          .upload(fileName, file);
+
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage
+            .from('assignment-photos')
+            .getPublicUrl(fileName);
+          finalAnswers[qId] = publicUrlData.publicUrl;
+        }
+      }
+
+      // Calculate score for auto-scored MCQs
+      let mcqCount = 0;
+      let correctCount = 0;
+      (assignment.questions || []).forEach((q: any) => {
+        if (q.type === 'mcq' && finalAnswers[q.id] !== undefined) {
+          mcqCount++;
+          if (parseInt(finalAnswers[q.id]) === q.correct_option) {
+            correctCount++;
+          }
+        }
+      });
+      const calculatedScore = mcqCount > 0 ? Math.round((correctCount / mcqCount) * 100) : null;
+
+      const loggedInStudentId = currentStudent?.student_id || (() => {
+        try {
+          const s = localStorage.getItem('azilearn_student');
+          return s ? JSON.parse(s).id || null : null;
+        } catch {
+          return null;
+        }
+      })();
+
+      const isRegistered = loggedInStudentId && String(loggedInStudentId).length === 36;
+      let activeStudentId = isRegistered ? loggedInStudentId : null;
+
+      // Roster resolution
+      if (!activeStudentId && studentName.trim()) {
+        try {
+          const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+          const res = await resolveStudentIdentity(studentName.trim(), null, assignment.grade || 'Grade 7');
+          if (res.status === 'EXACT_MATCH' && res.student) {
+            activeStudentId = res.student.id;
+          } else if (res.candidates && res.candidates.length > 0) {
+            activeStudentId = res.candidates[0].id;
+          }
+        } catch (err) {
+          console.warn('Roster lookup warning:', err);
+        }
+      }
+
+      const cleanTeacherId = (id: any) => {
+        if (!id) return null;
+        const str = String(id).trim().toLowerCase();
+        if (str === 'null' || str === 'undefined' || str === '') return null;
+        if (str.length !== 36) return null;
+        return id;
+      };
+
+      let recorded = false;
+      let assignedTeacher = null;
+
+      if (assignment.is_broadcast) {
+        if (activeStudentId) {
+          const { data, error: bErr } = await supabase.rpc("submit_broadcast_assignment", {
+            p_student_id: activeStudentId,
+            p_assignment_id: assignment.id,
+            p_answers: finalAnswers
+          });
+          const response = data as any;
+          if (!bErr && response && response.success !== false) {
+            recorded = true;
+            assignedTeacher = response?.teacher_assigned;
+          }
+        }
+      }
+
+      if (!recorded) {
+        const rpcParams: any = {
+          p_assignment_id: assignment.id,
+          p_student_name: studentName.trim(),
+          p_answers: finalAnswers,
+          p_teacher_id: cleanTeacherId(assignment.teacher_id),
+        };
+        if (activeStudentId) {
+          rpcParams.p_student_id = activeStudentId;
+        }
+
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc("submit_school_assignment", rpcParams);
+        const response = rpcRes as any;
+        if (!rpcErr && response && response.success !== false) {
+          recorded = true;
+        }
+      }
+
+      setSubmission({
+        assignment_id: assignment.id,
+        student_id: activeStudentId || undefined,
+        status: 'submitted',
+        created_at: new Date().toISOString(),
+        teacher_assigned: assignedTeacher,
+        score: calculatedScore,
+        answers: finalAnswers
+      });
+
+      setStep("done");
+    } catch (err: any) {
+      console.error("Submission failed:", err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: NAVY,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        fontFamily: "system-ui, -apple-system, sans-serif",
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 480 }}>
-        {step === "search" && (
-          <SearchForm
-            onFound={(a) => {
-              setAssignment(a);
-              setAnswers({});
-              setStep("take");
-            }}
-          />
-        )}
-        {step === "take" && (
-          <TakeAssignment
-            assignment={assignment}
-            answers={answers}
-            setAnswers={setAnswers}
-            onBack={() => setStep("search")}
-            onSubmitted={() => setStep("done")}
-          />
-        )}
-        {step === "done" && <DoneScreen onRestart={() => setStep("search")} />}
-
-        {onBack && (
-          <div style={{ marginTop: 16, textAlign: "center" }}>
-            <button
-              onClick={onBack}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#8C9BB5",
-                fontSize: 13,
-                cursor: "pointer",
-                textDecoration: "underline",
+    <div className="min-h-screen bg-brand-bg text-brand-text font-sans flex flex-col">
+      {step === "search" && (
+        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-md">
+            <SearchForm
+              onFound={(a) => {
+                setAssignment(a);
+                setAnswers({});
+                setStep("take");
               }}
-            >
-              Back to Home
-            </button>
+              onBack={onBack}
+            />
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {step === "take" && assignment && (
+        <StudentAssignmentTaking
+          assignment={assignment}
+          studentName={studentName}
+          initialAnswers={answers}
+          onBack={() => setStep("search")}
+          onSubmit={handleSubmitAssignment}
+          submitting={submitting}
+          needsClassSelection={false}
+          availableClasses={[]}
+          onSelectClass={() => {}}
+        />
+      )}
+
+      {step === "done" && (
+        <div className="flex-1 flex flex-col items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            <AssignmentSuccessCelebration
+              assignment={assignment}
+              submission={submission}
+              onBackToAssignments={() => setStep("search")}
+              onBackToHome={onBack || (() => setStep("search"))}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 interface SearchFormProps {
   onFound: (assignment: any) => void;
+  onBack?: () => void;
 }
 
-function SearchForm({ onFound }: SearchFormProps) {
-  const [schoolName, setSchoolName] = useState("");
+function SearchForm({ onFound, onBack }: SearchFormProps) {
+  const { currentStudent } = useStudent();
+  const [schoolName, setSchoolName] = useState(() => currentStudent?.school_name || "");
   const [title, setTitle] = useState("");
-  const [grade, setGrade] = useState(GRADES[0]);
+  const [grade, setGrade] = useState(() => currentStudent?.grade || GRADES[6]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -104,735 +252,123 @@ function SearchForm({ onFound }: SearchFormProps) {
     setLoading(false);
 
     if (rpcError) {
-      setError("Something went wrong. Try again.");
+      setError("Search request failed. Please check connection and try again.");
       return;
     }
-    
+
     const response = data as any;
     if (!response || !response.success) {
-      setError(response?.message || "Assignment not found.");
+      setError(response?.message || "No assignment found matching those details.");
       return;
     }
     onFound(response.assignment);
   }
 
   return (
-    <form onSubmit={handleSubmit} style={cardStyle as React.CSSProperties}>
-      <h1 style={titleStyle as React.CSSProperties}>Find your assignment</h1>
-      <p style={subtitleStyle as React.CSSProperties}>
-        Your teacher or school admin will tell you the exact assignment name to enter.
-      </p>
-
-      <label style={labelStyle as React.CSSProperties}>School name</label>
-      <input
-        value={schoolName}
-        onChange={(e) => setSchoolName(e.target.value)}
-        required
-        placeholder="e.g. Greenfield Academy"
-        style={inputStyle as React.CSSProperties}
-      />
-
-      <label style={labelStyle as React.CSSProperties}>Grade</label>
-      <select value={grade} onChange={(e) => setGrade(e.target.value)} style={inputStyle as React.CSSProperties}>
-        {GRADES.map((g) => (
-          <option key={g} value={g}>
-            {g}
-          </option>
-        ))}
-      </select>
-
-      <label style={labelStyle as React.CSSProperties}>Assignment name</label>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        required
-        placeholder="e.g. Mathematics Term Two Assignment"
-        style={inputStyle as React.CSSProperties}
-      />
-
-      {error && <p style={errorStyle as React.CSSProperties}>{error}</p>}
-
-      <button type="submit" disabled={loading} style={buttonStyle as React.CSSProperties}>
-        {loading ? "Searching…" : "Find assignment"}
-      </button>
-    </form>
-  );
-}
-
-interface TakeAssignmentProps {
-  assignment: any;
-  answers: Record<string, any>;
-  setAnswers: React.Dispatch<React.SetStateAction<Record<string, any>>>;
-  onBack: () => void;
-  onSubmitted: () => void;
-}
-
-function TakeAssignment({ assignment, answers, setAnswers, onBack, onSubmitted }: TakeAssignmentProps) {
-  const { currentStudent } = useStudent();
-  const [studentName, setStudentName] = useState(() => {
-    if (currentStudent?.name) return currentStudent.name;
-    try {
-      const studentStr = localStorage.getItem('azilearn_student');
-      if (studentStr) {
-        const parsed = JSON.parse(studentStr);
-        return parsed.name || "";
-      }
-    } catch {}
-    return "";
-  });
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [submissionId, setSubmissionId] = useState<string | null>(null);
-  const [skippedQuestions, setSkippedQuestions] = useState<Set<string>>(new Set());
-  const [showSkipConfirmModal, setShowSkipConfirmModal] = useState(false);
-  const saveDebounceTimers = useRef<Record<string, any>>({});
-
-  useEffect(() => {
-    async function loadDraft() {
-      const activeStudentId = currentStudent?.student_id || (() => {
-        try {
-          const studentStr = localStorage.getItem('azilearn_student');
-          if (studentStr) return JSON.parse(studentStr).id || null;
-        } catch {}
-        return null;
-      })();
-
-      if (activeStudentId && activeStudentId.length === 36 && assignment?.id) {
-        const draftRes = await assignmentService.getOrCreateDraft(activeStudentId, assignment.id);
-        if (draftRes) {
-          if (draftRes.already_submitted) {
-            onSubmitted();
-            return;
-          }
-          if (draftRes.submission_id || draftRes.id) {
-            setSubmissionId(draftRes.submission_id || draftRes.id);
-          }
-          if (draftRes.draft_answers && typeof draftRes.draft_answers === 'object') {
-            setAnswers(draftRes.draft_answers);
-          }
-          if (draftRes.skipped_questions) {
-            if (Array.isArray(draftRes.skipped_questions)) {
-              setSkippedQuestions(new Set(draftRes.skipped_questions));
-            } else if (typeof draftRes.skipped_questions === 'object') {
-              setSkippedQuestions(new Set(Object.keys(draftRes.skipped_questions)));
-            }
-          }
-        }
-      }
-    }
-    loadDraft();
-  }, [assignment?.id]);
-
-  const saveAnswerDraft = async (questionId: string, val: any) => {
-    const activeStudentId = currentStudent?.student_id || (() => {
-      try {
-        const studentStr = localStorage.getItem('azilearn_student');
-        if (studentStr) return JSON.parse(studentStr).id || null;
-      } catch {}
-      return null;
-    })();
-
-    if (!submissionId || !activeStudentId || activeStudentId.length !== 36) return;
-
-    await assignmentService.saveDraftAnswer(activeStudentId, submissionId, questionId, val);
-  };
-
-  function setAnswer(questionId: string, value: any, isText: boolean = false) {
-    setAnswers((a) => ({ ...a, [questionId]: value }));
-
-    setSkippedQuestions(prev => {
-      if (prev.has(questionId)) {
-        const next = new Set(prev);
-        next.delete(questionId);
-        return next;
-      }
-      return prev;
-    });
-
-    if (isText) {
-      if (saveDebounceTimers.current[questionId]) {
-        clearTimeout(saveDebounceTimers.current[questionId]);
-      }
-      saveDebounceTimers.current[questionId] = setTimeout(() => {
-        saveAnswerDraft(questionId, value);
-      }, 500);
-    } else {
-      if (saveDebounceTimers.current[questionId]) {
-        clearTimeout(saveDebounceTimers.current[questionId]);
-      }
-      saveAnswerDraft(questionId, value);
-    }
-  }
-
-  const handleSkipQuestion = async (qIndex: number, questionId: string) => {
-    if (saveDebounceTimers.current[questionId]) {
-      clearTimeout(saveDebounceTimers.current[questionId]);
-    }
-
-    setSkippedQuestions(prev => {
-      const next = new Set(prev);
-      next.add(questionId);
-      return next;
-    });
-
-    setAnswers(prev => {
-      const next = { ...prev };
-      delete next[questionId];
-      return next;
-    });
-
-    const activeStudentId = currentStudent?.student_id || (() => {
-      try {
-        const studentStr = localStorage.getItem('azilearn_student');
-        if (studentStr) return JSON.parse(studentStr).id || null;
-      } catch {}
-      return null;
-    })();
-
-    if (submissionId && activeStudentId && activeStudentId.length === 36) {
-      await assignmentService.skipQuestion(activeStudentId, submissionId, questionId);
-    }
-
-    const nextEl = document.getElementById(`sq-${qIndex + 1}`);
-    if (nextEl) {
-      nextEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  async function handleSubmit(e?: React.FormEvent, forceSubmit: boolean = false) {
-    if (e) e.preventDefault();
-    setError("");
-
-    if (!studentName.trim()) {
-      setError("Please enter your name.");
-      return;
-    }
-
-    const totalQuestions = assignment.questions?.length || 0;
-    const answeredCount = assignment.questions?.filter((q: any) => 
-      !skippedQuestions.has(q.id) && answers[q.id] !== undefined && answers[q.id] !== ''
-    ).length || 0;
-    const skippedCount = assignment.questions?.filter((q: any) => skippedQuestions.has(q.id)).length || 0;
-    const untouchedCount = totalQuestions - answeredCount - skippedCount;
-
-    if (!forceSubmit && (skippedCount > 0 || untouchedCount > 0)) {
-      setShowSkipConfirmModal(true);
-      return;
-    }
-
-    setShowSkipConfirmModal(false);
-
-    // Build final answers payload excluding skipped questions
-    const finalAnswers: Record<string, any> = {};
-    for (const [qId, val] of Object.entries(answers)) {
-      if (!skippedQuestions.has(qId) && val !== undefined && val !== '') {
-        finalAnswers[qId] = val;
-      }
-    }
-
-    const cleanTeacherId = (id: any) => {
-      if (!id) return null;
-      const str = String(id).trim().toLowerCase();
-      if (str === 'null' || str === 'undefined' || str === '') return null;
-      if (str.length !== 36) return null;
-      return id;
-    };
-
-    const loggedInStudentId = (() => {
-      if (currentStudent?.student_id) return currentStudent.student_id;
-      try {
-        const studentStr = localStorage.getItem('azilearn_student');
-        if (studentStr) {
-          const parsed = JSON.parse(studentStr);
-          return parsed.id || null;
-        }
-      } catch {}
-      return null;
-    })();
-
-    const isRegisteredStudent = loggedInStudentId && loggedInStudentId.length === 36;
-
-    const rpcParams: any = {
-      p_assignment_id: assignment.id,
-      p_student_name: studentName.trim(),
-      p_answers: finalAnswers,
-      p_teacher_id: cleanTeacherId(assignment.teacher_id),
-    };
-
-    if (isRegisteredStudent) {
-      rpcParams.p_student_id = loggedInStudentId;
-    }
-
-    setLoading(true);
-    let response: any = null;
-    let activeStudentId: string | null = loggedInStudentId;
-    let resolvedClassId: string | null = null;
-
-    if (assignment.is_broadcast) {
-
-      if (studentName.trim()) {
-        try {
-          const { resolveStudentIdentity } = await import('../services/studentIdentityService');
-          const res = await resolveStudentIdentity(studentName.trim(), null, assignment.grade || 'Grade 7');
-          if (res.student?.class_id) resolvedClassId = res.student.class_id;
-        } catch {}
-      }
-
-      if (!resolvedClassId) {
-        let schoolId = assignment.school_id || assignment.target_school_id;
-        if (!schoolId && assignment.teacher_id) {
-          const { data: teacherRow } = await supabase
-            .from('teachers')
-            .select('school_id')
-            .eq('id', assignment.teacher_id)
-            .maybeSingle();
-          if (teacherRow?.school_id) schoolId = teacherRow.school_id;
-        }
-
-        let query = supabase.from('classes').select('id, name').eq('grade', assignment.grade || 'Grade 7');
-        if (schoolId) query = query.eq('school_id', schoolId);
-
-        const { data: classes } = await query;
-        if (classes && classes.length === 1) {
-          resolvedClassId = classes[0].id;
-        }
-      }
-
-      if (!activeStudentId || activeStudentId.length !== 36) {
-        if (studentName.trim()) {
-          try {
-            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
-            const res = await resolveStudentIdentity(studentName.trim(), resolvedClassId, assignment.grade || 'Grade 7');
-            if (res.status === 'EXACT_MATCH' && res.student) {
-              activeStudentId = res.student.id;
-            } else if (res.candidates && res.candidates.length > 0) {
-              activeStudentId = res.candidates[0].id;
-            }
-          } catch (lookupErr) {
-            console.warn('Roster lookup warning:', lookupErr);
-          }
-        }
-      }
-
-      if (activeStudentId && activeStudentId.length === 36) {
-        const { data: bRes, error: rpcError } = await supabase.rpc("submit_broadcast_assignment", {
-          p_student_id: activeStudentId,
-          p_assignment_id: assignment.id,
-          p_answers: answers
-        });
-
-        if (!rpcError && bRes && bRes.success !== false) {
-          response = bRes;
-        }
-      }
-
-      // Fallback: If broadcast submission RPC wasn't recorded, try submit_school_assignment RPC
-      if (!response || !response.success) {
-        const cleanTeacherId = (id: any) => {
-          if (!id) return null;
-          const str = String(id).trim().toLowerCase();
-          if (str === 'null' || str === 'undefined' || str === '') return null;
-          if (str.length !== 36) return null;
-          return id;
-        };
-
-        const rpcParamsBroadcast: any = {
-          p_assignment_id: assignment.id,
-          p_student_name: studentName.trim(),
-          p_answers: answers,
-          p_teacher_id: cleanTeacherId(assignment.teacher_id),
-        };
-        if (activeStudentId && activeStudentId.length === 36) {
-          rpcParamsBroadcast.p_student_id = activeStudentId;
-        }
-
-        const { data: sRes, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParamsBroadcast);
-        if (!rpcError && sRes && sRes.success !== false) {
-          response = sRes;
-        }
-      }
-    } else {
-      if (!activeStudentId || activeStudentId.length !== 36) {
-        if (studentName.trim()) {
-          try {
-            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
-            const res = await resolveStudentIdentity(studentName.trim(), assignment.class_id || null, assignment.grade || 'Grade 7');
-            if (res.status === 'EXACT_MATCH' && res.student) {
-              activeStudentId = res.student.id;
-            } else if (res.candidates && res.candidates.length > 0) {
-              activeStudentId = res.candidates[0].id;
-            }
-          } catch (lookupErr) {
-            console.warn('Roster lookup warning:', lookupErr);
-          }
-        }
-      }
-
-      if (activeStudentId && activeStudentId.length === 36) {
-        rpcParams.p_student_id = activeStudentId;
-      }
-
-      const { data: sRes, error: rpcError } = await supabase.rpc("submit_school_assignment", rpcParams);
-      if (!rpcError && sRes && sRes.success !== false) {
-        response = sRes;
-      }
-    }
-
-    if (response && response.success) {
-      const applySubmissionTeacherId = async () => {
-        let tid = assignment.teacher_id && String(assignment.teacher_id).trim() !== 'null' ? assignment.teacher_id : null;
-        let cid = resolvedClassId;
-
-        if (!cid && studentName.trim()) {
-          try {
-            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
-            const res = await resolveStudentIdentity(studentName.trim(), null, assignment.grade || 'Grade 7');
-            if (res.student?.class_id) cid = res.student.class_id;
-          } catch {}
-        }
-
-        if (cid && !tid) {
-          if (assignment.subject) {
-            const { data: ts } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).ilike('subject', assignment.subject.trim()).maybeSingle();
-            if (ts?.teacher_id) tid = ts.teacher_id;
-          }
-          if (!tid) {
-            const { data: tsAny } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).limit(1).maybeSingle();
-            if (tsAny?.teacher_id) tid = tsAny.teacher_id;
-          }
-          if (!tid) {
-            const { data: cl } = await supabase.from('classes').select('teacher_id').eq('id', cid).maybeSingle();
-            if (cl?.teacher_id) tid = cl.teacher_id;
-          }
-        }
-
-        const updatePayload: any = { is_broadcast: assignment.is_broadcast === true };
-        if (tid) updatePayload.teacher_id = tid;
-
-        if (activeStudentId && activeStudentId.length === 36) {
-          await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_id', String(activeStudentId));
-        } else if (studentName.trim()) {
-          await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_name', studentName.trim());
-        }
-      };
-      applySubmissionTeacherId().catch(() => {});
-    }
-
-    if (!response || !response.success) {
-      // Students are added to the roster by the school admin — never self-registered.
-      // Without a real, roster-matched student_id we do not fabricate one or
-      // write a submission under a made-up guest identity.
-      setLoading(false);
-      setError(
-        activeStudentId
-          ? "Failed to submit assignment. Please try again."
-          : "We couldn't find your name on the roster. Ask your school admin to add you, then try again."
-      );
-      return;
-    }
-
-    setLoading(false);
-    onSubmitted();
-  }
-
-  const totalQuestions = assignment.questions?.length || 0;
-  const answeredCount = (assignment.questions || []).filter((q: any) => answers[q.id] !== undefined && answers[q.id] !== '' && !skippedQuestions.has(q.id)).length;
-  const skippedCount = (assignment.questions || []).filter((q: any) => skippedQuestions.has(q.id)).length;
-  const progressPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
-
-  return (
-    <form onSubmit={handleSubmit} style={cardStyle as React.CSSProperties}>
-      <button type="button" onClick={onBack} style={linkButtonStyle as React.CSSProperties}>
-        ← Search again
-      </button>
-
-      <h1 style={titleStyle as React.CSSProperties}>{assignment.title}</h1>
-      <p style={subtitleStyle as React.CSSProperties}>
-        {assignment.subject} · {assignment.grade}
-        {assignment.due_date ? ` · Due ${new Date(assignment.due_date).toLocaleDateString()}` : ""}
-      </p>
-
-      {/* Progress Bar */}
-      <div style={{ margin: "16px 0", padding: "12px", background: "#132338", borderRadius: 12, border: "1px solid #2A3B5C" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, color: "#94A3B8", marginBottom: 6 }}>
-          <span>{answeredCount}/{totalQuestions} answered {skippedCount > 0 ? `· ${skippedCount} skipped` : ''}</span>
-          <span style={{ color: ORANGE }}>{progressPercent}% complete</span>
+    <div className="bg-brand-surface border border-brand-border rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+      <div className="space-y-1.5 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-brand-accent/15 text-brand-accent flex items-center justify-center mx-auto mb-3 shadow-xs">
+          <School size={28} />
         </div>
-        <div style={{ width: "100%", height: 6, background: "#0A1628", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
-          <div style={{ width: `${progressPercent}%`, height: "100%", background: ORANGE, transition: "width 0.3s" }} />
-        </div>
-
-        {/* Question Jump Navigation */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 6, borderTop: "1px solid rgba(42, 59, 92, 0.5)", overflowX: "auto" }}>
-          <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", color: "#64748B", flexShrink: 0 }}>Jump:</span>
-          {(assignment.questions || []).map((q: any, idx: number) => {
-            const isSkipped = skippedQuestions.has(q.id);
-            const isAnswered = !isSkipped && answers[q.id] !== undefined && answers[q.id] !== '';
-            return (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById(`sq-${idx}`);
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }}
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontWeight: 800,
-                  flexShrink: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  border: isSkipped ? "1px solid #D97706" : isAnswered ? "1px solid #10B981" : "1px solid #2A3B5C",
-                  background: isSkipped ? "rgba(245, 158, 11, 0.2)" : isAnswered ? "rgba(16, 185, 129, 0.15)" : "#0A1628",
-                  color: isSkipped ? "#F59E0B" : isAnswered ? "#10B981" : "#94A3B8",
-                }}
-              >
-                {idx + 1}
-              </button>
-            );
-          })}
-        </div>
+        <h1 className="font-display font-black text-2xl text-brand-text">
+          Find Your School Assignment
+        </h1>
+        <p className="text-xs text-brand-muted max-w-xs mx-auto leading-relaxed">
+          Enter your school name and the exact assignment title given by your teacher.
+        </p>
       </div>
 
-      {(assignment.questions || []).map((q: any, i: number) => (
-        <div key={q.id} id={`sq-${i}`}>
-          <QuestionField 
-            index={i} 
-            question={q} 
-            value={answers[q.id]} 
-            isSkipped={skippedQuestions.has(q.id)}
-            onChange={(v, isText) => setAnswer(q.id, v, isText)} 
-            onSkip={() => handleSkipQuestion(i, q.id)}
-          />
-        </div>
-      ))}
-
-      <label style={{ ...labelStyle as React.CSSProperties, marginTop: 20 }}>Your name</label>
-      <input
-        value={studentName}
-        onChange={(e) => setStudentName(e.target.value)}
-        required
-        placeholder="Full name"
-        style={inputStyle as React.CSSProperties}
-      />
-
-      {error && <p style={errorStyle as React.CSSProperties}>{error}</p>}
-
-      <button type="submit" disabled={loading} style={buttonStyle as React.CSSProperties}>
-        {loading ? "Submitting…" : "Submit assignment"}
-      </button>
-
-      {/* Confirmation Modal */}
-      {showSkipConfirmModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0, 0, 0, 0.75)", padding: 16 }}>
-          <div style={{ background: "#0F1C2E", border: "1px solid #2A3B5C", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", color: "#fff", display: "flex", flexDirection: "column", gap: 14 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: "#fff" }}>Submit Assignment?</h3>
-            <p style={{ fontSize: 13, color: "#94A3B8", margin: 0, lineHeight: 1.4 }}>
-              You have unanswered or skipped questions. Your teacher will receive and grade all questions you answered.
-            </p>
-            <div style={{ background: "#0A1628", padding: 12, borderRadius: 10, border: "1px solid #1E2D4A", fontSize: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", color: "#10B981", fontWeight: 700, marginBottom: 4 }}>
-                <span>Answered:</span>
-                <span>{answeredCount} / {totalQuestions}</span>
-              </div>
-              {skippedCount > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", color: "#F59E0B", fontWeight: 700, marginBottom: 4 }}>
-                  <span>Skipped:</span>
-                  <span>{skippedCount}</span>
-                </div>
-              )}
-              {totalQuestions - answeredCount - skippedCount > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", color: "#94A3B8", fontWeight: 700 }}>
-                  <span>Untouched:</span>
-                  <span>{totalQuestions - answeredCount - skippedCount}</span>
-                </div>
-              )}
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-              <button
-                type="button"
-                onClick={() => setShowSkipConfirmModal(false)}
-                style={{ flex: 1, padding: "10px 12px", borderRadius: 8, background: "transparent", border: "1px solid #2A3B5C", color: "#C5CEDD", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-              >
-                Review Questions
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSubmit(undefined, true)}
-                disabled={loading}
-                style={{ flex: 1, padding: "10px 12px", borderRadius: 8, background: ORANGE, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-              >
-                {loading ? "Submitting..." : "Submit Anyway"}
-              </button>
-            </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1">
+          <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
+            School Name
+          </label>
+          <div className="relative">
+            <School className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+            <input
+              value={schoolName}
+              onChange={(e) => setSchoolName(e.target.value)}
+              required
+              placeholder="e.g. Greenfield Academy"
+              className="w-full pl-10 pr-3.5 py-3 rounded-2xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text transition-all"
+            />
           </div>
         </div>
-      )}
-    </form>
-  );
-}
 
-interface QuestionFieldProps {
-  key?: any;
-  index: number;
-  question: any;
-  value: any;
-  isSkipped?: boolean;
-  onChange: (val: any, isText?: boolean) => void;
-  onSkip?: () => void;
-}
-
-function QuestionField({ index, question, value, isSkipped, onChange, onSkip }: QuestionFieldProps) {
-  const isMcq = Array.isArray(question.options) && question.options.length > 0;
-  const isAnswered = !isSkipped && value !== undefined && value !== '';
-
-  return (
-    <div style={{ marginTop: 18, padding: 12, borderRadius: 12, background: isSkipped ? "#1E1B10" : isAnswered ? "rgba(16, 185, 129, 0.04)" : "#0F1C2E", border: isSkipped ? "1px solid #D97706" : isAnswered ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid #1E2D4A" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <p style={{ color: "#fff", fontSize: 14, fontWeight: 600, margin: 0 }}>
-          {index + 1}. {question.text}
-        </p>
-        {isSkipped ? (
-          <span style={{ fontSize: 10, fontWeight: 800, color: "#F59E0B", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 99, textTransform: "uppercase" }}>
-            Skipped
-          </span>
-        ) : isAnswered ? (
-          <span style={{ fontSize: 10, fontWeight: 800, color: "#10B981", background: "rgba(16, 185, 129, 0.15)", padding: "2px 8px", borderRadius: 99, textTransform: "uppercase" }}>
-            Answered
-          </span>
-        ) : (
-          <span style={{ fontSize: 10, fontWeight: 800, color: "#64748B", background: "rgba(255, 255, 255, 0.05)", padding: "2px 8px", borderRadius: 99, textTransform: "uppercase" }}>
-            Untouched
-          </span>
-        )}
-      </div>
-
-      {isMcq ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {question.options.map((opt: string) => (
-            <label
-              key={opt}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                color: "#C5CEDD",
-                fontSize: 14,
-                background: value === opt ? "#1C2D4A" : "transparent",
-                border: "1px solid #2A3B5C",
-                borderRadius: 8,
-                padding: "8px 10px",
-                cursor: "pointer",
-              }}
+        <div className="space-y-1">
+          <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
+            Grade Level
+          </label>
+          <div className="relative">
+            <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+            <select
+              value={grade}
+              onChange={(e) => setGrade(e.target.value)}
+              className="w-full pl-10 pr-3.5 py-3 rounded-2xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text appearance-none transition-all"
             >
-              <input
-                type="radio"
-                name={question.id}
-                checked={value === opt}
-                onChange={() => onChange(opt, false)}
-              />
-              {opt}
-            </label>
-          ))}
+              {GRADES.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      ) : (
-        <textarea
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value, true)}
-          rows={3}
-          style={{ ...(inputStyle as React.CSSProperties), resize: "vertical" }}
-        />
-      )}
 
-      {onSkip && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+        <div className="space-y-1">
+          <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
+            Assignment Title
+          </label>
+          <div className="relative">
+            <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              placeholder="e.g. Mathematics Term Two Assignment"
+              className="w-full pl-10 pr-3.5 py-3 rounded-2xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text transition-all"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-700 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-4 rounded-2xl bg-brand-accent text-white font-black uppercase tracking-wider text-xs shadow-lg shadow-brand-accent/20 hover:brightness-105 active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="animate-spin" size={16} />
+              <span>Searching Records...</span>
+            </>
+          ) : (
+            <>
+              <Search size={16} />
+              <span>Find Assignment</span>
+            </>
+          )}
+        </button>
+      </form>
+
+      {onBack && (
+        <div className="text-center pt-2">
           <button
             type="button"
-            onClick={onSkip}
-            style={{
-              background: isSkipped ? "rgba(245, 158, 11, 0.2)" : "rgba(255, 255, 255, 0.05)",
-              border: isSkipped ? "1px solid #D97706" : "1px solid #2A3B5C",
-              color: isSkipped ? "#F59E0B" : "#8C9BB5",
-              borderRadius: 6,
-              padding: "4px 10px",
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
+            onClick={onBack}
+            className="text-xs text-brand-muted hover:text-brand-text font-bold inline-flex items-center gap-1.5 transition-colors"
           >
-            {isSkipped ? "Skipped ✓" : "Skip question →"}
+            <ArrowLeft size={14} />
+            <span>Back to Dashboard</span>
           </button>
         </div>
       )}
     </div>
   );
 }
-
-interface DoneScreenProps {
-  onRestart: () => void;
-}
-
-function DoneScreen({ onRestart }: DoneScreenProps) {
-  return (
-    <div style={cardStyle as React.CSSProperties}>
-      <h1 style={titleStyle as React.CSSProperties}>Submitted ✓</h1>
-      <p style={subtitleStyle as React.CSSProperties}>Submitted — your teacher will see this in their grading queue.</p>
-      <button type="button" onClick={onRestart} style={buttonStyle as React.CSSProperties}>
-        Find another assignment
-      </button>
-    </div>
-  );
-}
-
-const cardStyle = {
-  background: "#101F38",
-  border: "1px solid #1C2D4A",
-  borderRadius: 16,
-  padding: 28,
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-};
-
-const titleStyle = { color: "#fff", fontSize: 22, fontWeight: 700, margin: "10px 0 0 0" };
-const subtitleStyle = { color: "#8C9BB5", fontSize: 14, marginTop: 6, marginBottom: 4 };
-const labelStyle = { color: "#C5CEDD", fontSize: 13, marginTop: 14, marginBottom: 6 };
-const inputStyle = {
-  background: "#0A1628",
-  border: "1px solid #2A3B5C",
-  borderRadius: 8,
-  padding: "10px 12px",
-  color: "#fff",
-  fontSize: 15,
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box"
-};
-const buttonStyle = {
-  marginTop: 22,
-  background: ORANGE,
-  color: "#0A1628",
-  fontWeight: 700,
-  fontSize: 15,
-  border: "none",
-  borderRadius: 8,
-  padding: "12px 16px",
-  cursor: "pointer",
-  width: "100%"
-};
-const linkButtonStyle = {
-  background: "none",
-  border: "none",
-  color: "#8C9BB5",
-  fontSize: 13,
-  cursor: "pointer",
-  textDecoration: "underline",
-  alignSelf: "flex-start",
-  padding: 0,
-};
-const errorStyle = { color: "#FCA5A5", fontSize: 13, marginTop: 14 };

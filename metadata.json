@@ -1,6 +1,6 @@
 {
   "name": "AziLearn",
   "description": "Educational platform with teacher dashboards, admin material requests, and gamified arena competitions.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

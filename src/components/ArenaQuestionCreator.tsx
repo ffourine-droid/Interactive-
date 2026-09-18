@@ -194,8 +194,40 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
   }, [initialData]);
 
   const fetchTeachers = async () => {
+    try {
+      const { data: teacherData, error: teacherErr } = await supabase
+        .from('teachers')
+        .select('id, name, school_name')
+        .order('name');
+      
+      if (!teacherErr && teacherData && teacherData.length > 0) {
+        setTeachers(teacherData.map(t => ({
+          id: t.id,
+          username: t.name,
+          school_name: t.school_name
+        })));
+        return;
+      }
+    } catch (_) {}
+
+    // Fallback if teachers table is inaccessible
     const { data } = await supabase.from('profiles').select('id, username, school_name').order('username');
     setTeachers(data || []);
+  };
+
+  const markRequestCompleted = async (requestId: string, code?: string) => {
+    try {
+      await supabase.rpc('admin_fulfill_content_request', {
+        p_request_id: requestId,
+        p_share_code: code || 'ARENA-COMP',
+      });
+    } catch (_) {}
+    try {
+      await supabase.from('content_requests').update({ status: 'completed' }).eq('id', requestId);
+    } catch (_) {}
+    try {
+      await supabase.from('question_requests').update({ status: 'completed' }).eq('id', requestId);
+    } catch (_) {}
   };
 
   const handleManualSave = async () => {
@@ -267,7 +299,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
 
       // 3. Mark request as completed
       if (initialData?.request_id) {
-        await supabase.from('question_requests').update({ status: 'completed' }).eq('id', initialData.request_id);
+        await markRequestCompleted(initialData.request_id, comp.id);
       }
 
       showToast(`Group project live for ${targetName || 'Teacher'}!`, "success");
@@ -367,7 +399,7 @@ export const ArenaQuestionCreator: React.FC<ArenaQuestionCreatorProps> = ({ init
         if (qErr) throw qErr;
 
         if (initialData?.request_id) {
-          await supabase.from('question_requests').update({ status: 'completed' }).eq('id', initialData.request_id);
+          await markRequestCompleted(initialData.request_id, comp.id);
         }
 
         showToast(`Imported ${selected.length} questions and created competition for ${targetName}`, 'success');

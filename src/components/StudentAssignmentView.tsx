@@ -1,28 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Search, 
-  Send, 
-  Camera, 
-  CheckCircle2, 
-  Clock, 
-  ChevronLeft, 
-  User, 
-  FileText, 
-  ArrowRight,
-  Loader2,
-  AlertCircle,
-  HelpCircle,
-  Trophy,
-  Calendar,
-  Filter,
-  School,
-  FastForward
-} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
 import { assignmentService } from '../services/assignmentService';
 import { useStudent } from '../contexts/StudentContext';
+import { AssignmentDiscoveryView } from './assignment/AssignmentDiscoveryView';
+import { StudentAssignmentTaking } from './assignment/StudentAssignmentTaking';
+import { AssignmentSuccessCelebration } from './assignment/AssignmentSuccessCelebration';
+import { ChevronLeft } from 'lucide-react';
 
 interface Question {
   id: string;
@@ -30,6 +14,9 @@ interface Question {
   text: string;
   options: string[];
   correct_option: number | null;
+  max_marks?: number;
+  marks?: number;
+  points?: number;
 }
 
 interface Assignment {
@@ -43,6 +30,10 @@ interface Assignment {
   questions: Question[];
   is_broadcast?: boolean;
   teacher_id?: string;
+  teacher?: {
+    name?: string;
+    school_name?: string;
+  };
 }
 
 export const StudentAssignmentView: React.FC<{ 
@@ -65,7 +56,6 @@ export const StudentAssignmentView: React.FC<{
     return '';
   });
   const [searchTitle, setSearchTitle] = useState('');
-  const [hasSearched, setHasSearched] = useState(false);
   const [assignments, setAssignments] = useState<any[]>([]);
   
   const [studentName, setStudentName] = useState(() => {
@@ -108,7 +98,21 @@ export const StudentAssignmentView: React.FC<{
   const [needsClassSelection, setNeedsClassSelection] = useState(false);
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [showSkipConfirmModal, setShowSkipConfirmModal] = useState(false);
+  
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [submission, setSubmission] = useState<any | null>(null);
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [skippedQuestions, setSkippedQuestions] = useState<Set<string>>(new Set());
+  
+  // Direct find states
+  const [directFindLoading, setDirectFindLoading] = useState(false);
+  const [directFindError, setDirectFindError] = useState<string | null>(null);
+
+  const { showToast } = useToast();
+
   useEffect(() => {
     if (!isInitialized) {
       if (currentStudent) {
@@ -133,17 +137,6 @@ export const StudentAssignmentView: React.FC<{
     }
   }, [currentStudent, isInitialized]);
 
-  const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
-  const [files, setFiles] = useState<Record<string, File>>({});
-  const [submission, setSubmission] = useState<any | null>(null);
-  const [submissionId, setSubmissionId] = useState<string | null>(null);
-  const [skippedQuestions, setSkippedQuestions] = useState<Set<string>>(new Set());
-  const saveDebounceTimers = React.useRef<Record<string, any>>({});
-  const { showToast } = useToast();
-
   useEffect(() => {
     if (step === 'entry' && isInitialized && !preSelectedAssignmentId) {
       fetchAssignments();
@@ -158,12 +151,11 @@ export const StudentAssignmentView: React.FC<{
 
   const fetchAssignments = async () => {
     setLoading(true);
-    setHasSearched(true);
     try {
       const sId = currentStudent?.student_id || studentId;
       const hasSearchFilters = searchTeacher.trim() || searchSchool.trim() || searchTitle.trim();
       
-      // If we have a logged-in student and NO search criteria are entered, use RPC to fetch their exact assignments
+      // If student id exists and no explicit search filter is active, fetch registered student's assignments
       if (sId && sId.length === 36 && !hasSearchFilters) { 
         const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_get_assignments', {
           p_student_id: sId
@@ -173,18 +165,43 @@ export const StudentAssignmentView: React.FC<{
           setAssignments(rpcRes.assignments || []);
           setLoading(false);
           return;
-        } else if (rpcErr) {
-          console.warn("student_get_assignments RPC failed, falling back to searchAssignments:", rpcErr.message);
         }
       }
 
-      // Explicit search or fallback with filters (including title)
+      // Explicit search or fallback with filters
       const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool, searchTitle);
-      setAssignments(data);
+      setAssignments(data || []);
     } catch (err: any) {
-      showToast(err.message, "error");
+      showToast(err.message || "Failed to load assignments.", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDirectSchoolFind = async (school: string, title: string, grade: string) => {
+    setDirectFindLoading(true);
+    setDirectFindError(null);
+    try {
+      const { data, error: rpcError } = await supabase.rpc("find_school_assignment", {
+        p_school_name: school.trim(),
+        p_title: title.trim(),
+        p_grade: grade,
+      });
+
+      if (rpcError) throw new Error("Could not search for assignment. Please try again.");
+      
+      const response = data as any;
+      if (!response || !response.success || !response.assignment) {
+        throw new Error(response?.message || "No assignment found matching those exact details.");
+      }
+
+      showToast("Assignment found! Opening...", "success");
+      await handleJoinAssignment(response.assignment.id);
+    } catch (err: any) {
+      setDirectFindError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setDirectFindLoading(false);
     }
   };
 
@@ -203,7 +220,6 @@ export const StudentAssignmentView: React.FC<{
 
       // For broadcast assignments, resolve/ask for class right away
       if ((data as Assignment).is_broadcast) {
-        const isUuid = (v: any) => v && String(v).length === 36 && String(v).includes('-');
         let existingClassId: string | null = null;
 
         if (studentName) {
@@ -283,7 +299,7 @@ export const StudentAssignmentView: React.FC<{
       }
 
       setStep('taking');
-      showToast("Assignment joined! Good luck! 🎉", "success");
+      showToast("Assignment ready! Good luck! ✨", "success");
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
@@ -300,86 +316,18 @@ export const StudentAssignmentView: React.FC<{
     await assignmentService.saveDraftAnswer(activeStudentId, submissionId, questionId, val);
   };
 
-  const handleAnswerChange = (questionId: string, val: any, isText: boolean = false) => {
-    setAnswers(prev => ({ ...prev, [questionId]: val }));
-
-    setSkippedQuestions(prev => {
-      if (prev.has(questionId)) {
-        const next = new Set(prev);
-        next.delete(questionId);
-        return next;
-      }
-      return prev;
-    });
-
-    if (isText) {
-      if (saveDebounceTimers.current[questionId]) {
-        clearTimeout(saveDebounceTimers.current[questionId]);
-      }
-      saveDebounceTimers.current[questionId] = setTimeout(() => {
-        saveAnswerDraft(questionId, val);
-      }, 500);
-    } else {
-      if (saveDebounceTimers.current[questionId]) {
-        clearTimeout(saveDebounceTimers.current[questionId]);
-      }
-      saveAnswerDraft(questionId, val);
-    }
-  };
-
-  const handleSkipQuestion = async (qIndex: number, questionId: string) => {
-    if (!assignment) return;
-
-    if (saveDebounceTimers.current[questionId]) {
-      clearTimeout(saveDebounceTimers.current[questionId]);
-    }
-
-    setSkippedQuestions(prev => {
-      const next = new Set(prev);
-      next.add(questionId);
-      return next;
-    });
-
-    setAnswers(prev => {
-      const next = { ...prev };
-      delete next[questionId];
-      return next;
-    });
-
-    setFiles(prev => {
-      if (!prev[questionId]) return prev;
-      const next = { ...prev };
-      delete next[questionId];
-      return next;
-    });
-
+  const handleSkipQuestionRemote = async (questionId: string) => {
     const activeStudentId = currentStudent?.student_id || studentId;
     const isUuid = (v: any) => v && String(v).length === 36 && String(v).includes('-');
 
     if (submissionId && activeStudentId && isUuid(activeStudentId)) {
       await assignmentService.skipQuestion(activeStudentId, submissionId, questionId);
     }
-
-    showToast(`Question ${qIndex + 1} skipped`, "info");
-
-    const nextCard = document.getElementById(`q-${qIndex + 1}`);
-    if (nextCard) {
-      nextCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  const handleFileChange = (questionId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setFiles(prev => ({ ...prev, [questionId]: file }));
-      handleAnswerChange(questionId, file.name, false); 
-    }
   };
 
   const ensureClassSelected = async (): Promise<string | null> => {
     if (!assignment) return null;
 
-    // 1. Already-registered student with a class on file? Use it.
     if (currentStudent?.class_id) return currentStudent.class_id;
     const effectiveName = studentName.trim() || currentStudent?.name;
     if (effectiveName) {
@@ -390,10 +338,8 @@ export const StudentAssignmentView: React.FC<{
       } catch {}
     }
 
-    // 2. Already picked one this session?
     if (selectedClassId) return selectedClassId;
 
-    // 3. Need to ask — fetch classes for this grade+school and show picker
     let schoolId = (assignment as any).school_id || (assignment as any).target_school_id;
 
     if (!schoolId && assignment.teacher_id) {
@@ -428,38 +374,26 @@ export const StudentAssignmentView: React.FC<{
     return 'PENDING';
   };
 
-  const submitAssignment = async (forceSubmit: boolean = false) => {
+  const submitAssignment = async (
+    submittedAnswers: Record<string, any>, 
+    submittedFiles: Record<string, File>, 
+    submittedSkipped: Set<string>
+  ) => {
     if (!assignment) return;
     
-    // Check skipped & untouched questions for non-blocking confirmation
-    const totalQuestions = assignment.questions?.length || 0;
-    const answeredCount = assignment.questions?.filter(q => 
-      !skippedQuestions.has(q.id) && 
-      ((answers[q.id] !== undefined && answers[q.id] !== '') || files[q.id])
-    ).length || 0;
-    const skippedCount = assignment.questions?.filter(q => skippedQuestions.has(q.id)).length || 0;
-    const untouchedCount = totalQuestions - answeredCount - skippedCount;
-
-    if (!forceSubmit && (skippedCount > 0 || untouchedCount > 0)) {
-      setShowSkipConfirmModal(true);
-      return;
-    }
-
-    setShowSkipConfirmModal(false);
     setSubmitting(true);
     try {
-      // Build final answers payload excluding skipped questions
       const finalAnswers: Record<string, any> = {};
-      for (const [qId, val] of Object.entries(answers)) {
-        if (!skippedQuestions.has(qId) && val !== undefined && val !== '') {
+      for (const [qId, val] of Object.entries(submittedAnswers)) {
+        if (!submittedSkipped.has(qId) && val !== undefined && val !== '') {
           finalAnswers[qId] = val;
         }
       }
       
-      // 1. Upload photos if any (and not skipped)
-      for (const qId of Object.keys(files)) {
-        if (skippedQuestions.has(qId)) continue;
-        const file = files[qId];
+      // Upload photos if any
+      for (const qId of Object.keys(submittedFiles)) {
+        if (submittedSkipped.has(qId)) continue;
+        const file = submittedFiles[qId];
         const fileExt = file.name.split('.').pop();
         const fileName = `${assignment.id}/${studentName.replace(/\s+/g, '_')}_${qId}_${Date.now()}.${fileExt}`;
         
@@ -476,7 +410,7 @@ export const StudentAssignmentView: React.FC<{
         finalAnswers[qId] = publicUrlData.publicUrl;
       }
 
-      // 2. Calculate score for MCQs based on submitted answers
+      // Calculate score for MCQs based on submitted answers
       let mcqCount = 0;
       let correctCount = 0;
       
@@ -491,65 +425,84 @@ export const StudentAssignmentView: React.FC<{
 
       const score = mcqCount > 0 ? Math.round((correctCount / mcqCount) * 100) : null;
 
-    // 3. Insert submission or submit via RPC
-    let submissionRecorded = false;
-    let assignedTeacherName = null;
-    let activeStudentId = currentStudent?.student_id || studentId;
-    const isUuid = (id: any) => id && String(id).length === 36 && String(id).includes('-');
-    const effectiveStudentName = studentName.trim() || currentStudent?.name || 'Student';
+      let submissionRecorded = false;
+      let assignedTeacherName = null;
+      let activeStudentId = currentStudent?.student_id || studentId;
+      const isUuid = (id: any) => id && String(id).length === 36 && String(id).includes('-');
+      const effectiveStudentName = studentName.trim() || currentStudent?.name || 'Student';
 
-    // Look up an existing roster student by class + name before ever creating
-    // a new one. This prevents submitting "as" an existing student (e.g. "One
-    // south") from silently creating a duplicate guest student instead of
-    // reusing the real record.
-    const findRosterStudentId = async (classId: string | null) => {
-      if (!effectiveStudentName) return null;
-      try {
-        const { resolveStudentIdentity } = await import('../services/studentIdentityService');
-        const res = await resolveStudentIdentity(effectiveStudentName, classId, assignment?.grade || 'Grade 7');
-        if (res.status === 'EXACT_MATCH' && res.student) {
-          return res.student.id;
+      const findRosterStudentId = async (classId: string | null) => {
+        if (!effectiveStudentName) return null;
+        try {
+          const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+          const res = await resolveStudentIdentity(effectiveStudentName, classId, assignment?.grade || 'Grade 7');
+          if (res.status === 'EXACT_MATCH' && res.student) {
+            return res.student.id;
+          }
+          if (res.candidates && res.candidates.length > 0) {
+            return res.candidates[0].id;
+          }
+        } catch (err) {
+          console.warn('Roster lookup warning:', err);
         }
-        if (res.candidates && res.candidates.length > 0) {
-          return res.candidates[0].id;
+        return null;
+      };
+
+      if (assignment.is_broadcast) {
+        const classId = await ensureClassSelected();
+        if (classId === 'PENDING') {
+          setSubmitting(false);
+          return;
         }
-      } catch (err) {
-        console.warn('Roster lookup warning:', err);
-      }
-      return null;
-    };
 
-    if (assignment.is_broadcast) {
-      // Resolve class before registering, so the student isn't orphaned
-      const classId = await ensureClassSelected();
-      if (classId === 'PENDING') {
-        setSubmitting(false);
-        return; // wait for the picker; user will re-trigger submit after choosing
-      }
-
-      if (!isUuid(activeStudentId)) {
-        const rosterMatchId = await findRosterStudentId(classId);
-        if (rosterMatchId) {
-          activeStudentId = rosterMatchId;
+        if (!isUuid(activeStudentId)) {
+          const rosterMatchId = await findRosterStudentId(classId);
+          if (rosterMatchId) {
+            activeStudentId = rosterMatchId;
+          }
         }
-      }
 
-      if (activeStudentId && isUuid(activeStudentId)) {
-        const { data, error: submitError } = await supabase.rpc('submit_broadcast_assignment', {
-          p_student_id: activeStudentId,
-          p_assignment_id: assignment.id,
-          p_answers: finalAnswers
-        });
+        if (activeStudentId && isUuid(activeStudentId)) {
+          const { data, error: submitError } = await supabase.rpc('submit_broadcast_assignment', {
+            p_student_id: activeStudentId,
+            p_assignment_id: assignment.id,
+            p_answers: finalAnswers
+          });
 
-        const response = data as any;
-        if (!submitError && response && response.success !== false) {
-          submissionRecorded = true;
-          assignedTeacherName = response?.teacher_assigned;
+          const response = data as any;
+          if (!submitError && response && response.success !== false) {
+            submissionRecorded = true;
+            assignedTeacherName = response?.teacher_assigned;
+          }
         }
-      }
 
-      // Fallback for broadcast assignment: submit via submit_school_assignment if submit_broadcast_assignment didn't record
-      if (!submissionRecorded) {
+        if (!submissionRecorded) {
+          const cleanTeacherId = (id: any) => {
+            if (!id) return null;
+            const str = String(id).trim().toLowerCase();
+            if (str === 'null' || str === 'undefined' || str === '') return null;
+            if (str.length !== 36) return null;
+            return id;
+          };
+
+          const rpcParams: any = {
+            p_assignment_id: assignment.id,
+            p_student_name: effectiveStudentName,
+            p_answers: finalAnswers,
+            p_teacher_id: cleanTeacherId(assignment.teacher_id),
+          };
+
+          if (activeStudentId && isUuid(activeStudentId)) {
+            rpcParams.p_student_id = activeStudentId;
+          }
+
+          const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', rpcParams);
+          const response = rpcRes as any;
+          if (!submitError && response && response.success !== false) {
+            submissionRecorded = true;
+          }
+        }
+      } else {
         const cleanTeacherId = (id: any) => {
           if (!id) return null;
           const str = String(id).trim().toLowerCase();
@@ -558,6 +511,15 @@ export const StudentAssignmentView: React.FC<{
           return id;
         };
 
+        if (!isUuid(activeStudentId)) {
+          const rosterMatchId = await findRosterStudentId(assignment.class_id || null);
+          if (rosterMatchId) {
+            activeStudentId = rosterMatchId;
+          }
+        }
+
+        const isRegisteredStudent = isUuid(activeStudentId);
+
         const rpcParams: any = {
           p_assignment_id: assignment.id,
           p_student_name: effectiveStudentName,
@@ -565,7 +527,7 @@ export const StudentAssignmentView: React.FC<{
           p_teacher_id: cleanTeacherId(assignment.teacher_id),
         };
 
-        if (activeStudentId && isUuid(activeStudentId)) {
+        if (isRegisteredStudent) {
           rpcParams.p_student_id = activeStudentId;
         }
 
@@ -575,89 +537,47 @@ export const StudentAssignmentView: React.FC<{
           submissionRecorded = true;
         }
       }
-    } else {
-      const cleanTeacherId = (id: any) => {
-        if (!id) return null;
-        const str = String(id).trim().toLowerCase();
-        if (str === 'null' || str === 'undefined' || str === '') return null;
-        if (str.length !== 36) return null;
-        return id;
-      };
 
-      if (!isUuid(activeStudentId)) {
-        const rosterMatchId = await findRosterStudentId(assignment.class_id || null);
-        if (rosterMatchId) {
-          activeStudentId = rosterMatchId;
-        }
+      if (submissionRecorded) {
+        const applySubmissionTeacherId = async () => {
+          let tid = assignment.teacher_id && String(assignment.teacher_id).trim() !== 'null' ? assignment.teacher_id : null;
+          let cid = typeof selectedClassId === 'string' && selectedClassId !== 'PENDING' ? selectedClassId : null;
+
+          if (!cid && effectiveStudentName) {
+            try {
+              const { resolveStudentIdentity } = await import('../services/studentIdentityService');
+              const res = await resolveStudentIdentity(effectiveStudentName, null, assignment?.grade);
+              if (res.student?.class_id) cid = res.student.class_id;
+            } catch {}
+          }
+
+          if (cid && !tid) {
+            if (assignment.subject) {
+              const { data: ts } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).ilike('subject', assignment.subject.trim()).maybeSingle();
+              if (ts?.teacher_id) tid = ts.teacher_id;
+            }
+            if (!tid) {
+              const { data: tsAny } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).limit(1).maybeSingle();
+              if (tsAny?.teacher_id) tid = tsAny.teacher_id;
+            }
+            if (!tid) {
+              const { data: cl } = await supabase.from('classes').select('teacher_id').eq('id', cid).maybeSingle();
+              if (cl?.teacher_id) tid = cl.teacher_id;
+            }
+          }
+
+          const updatePayload: any = { is_broadcast: assignment.is_broadcast === true };
+          if (tid) updatePayload.teacher_id = tid;
+
+          if (activeStudentId && isUuid(activeStudentId)) {
+            await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_id', String(activeStudentId));
+          } else if (effectiveStudentName) {
+            await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_name', effectiveStudentName);
+          }
+        };
+        applySubmissionTeacherId().catch(() => {});
       }
 
-      const isRegisteredStudent = isUuid(activeStudentId);
-
-      const rpcParams: any = {
-        p_assignment_id: assignment.id,
-        p_student_name: effectiveStudentName,
-        p_answers: finalAnswers,
-        p_teacher_id: cleanTeacherId(assignment.teacher_id),
-      };
-
-      if (isRegisteredStudent) {
-        rpcParams.p_student_id = activeStudentId;
-      }
-
-      const { data: rpcRes, error: submitError } = await supabase.rpc('submit_school_assignment', rpcParams);
-      const response = rpcRes as any;
-      if (!submitError && response && response.success !== false) {
-        submissionRecorded = true;
-      }
-    }
-
-    // Post-submission patch to ensure teacher_id and is_broadcast are set on the submission row
-    if (submissionRecorded) {
-      const applySubmissionTeacherId = async () => {
-        let tid = assignment.teacher_id && String(assignment.teacher_id).trim() !== 'null' ? assignment.teacher_id : null;
-        let cid = typeof selectedClassId === 'string' && selectedClassId !== 'PENDING' ? selectedClassId : null;
-
-        if (!cid && effectiveStudentName) {
-          try {
-            const { resolveStudentIdentity } = await import('../services/studentIdentityService');
-            const res = await resolveStudentIdentity(effectiveStudentName, null, assignment?.grade);
-            if (res.student?.class_id) cid = res.student.class_id;
-          } catch {}
-        }
-
-        if (cid && !tid) {
-          if (assignment.subject) {
-            const { data: ts } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).ilike('subject', assignment.subject.trim()).maybeSingle();
-            if (ts?.teacher_id) tid = ts.teacher_id;
-          }
-          if (!tid) {
-            const { data: tsAny } = await supabase.from('teacher_subjects').select('teacher_id').eq('class_id', cid).limit(1).maybeSingle();
-            if (tsAny?.teacher_id) tid = tsAny.teacher_id;
-          }
-          if (!tid) {
-            const { data: cl } = await supabase.from('classes').select('teacher_id').eq('id', cid).maybeSingle();
-            if (cl?.teacher_id) tid = cl.teacher_id;
-          }
-        }
-
-        const updatePayload: any = { is_broadcast: assignment.is_broadcast === true };
-        if (tid) updatePayload.teacher_id = tid;
-
-        if (activeStudentId && isUuid(activeStudentId)) {
-          await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_id', String(activeStudentId));
-        } else if (effectiveStudentName) {
-          await supabase.from('assignment_submissions').update(updatePayload).eq('assignment_id', assignment.id).eq('student_name', effectiveStudentName);
-        }
-      };
-      applySubmissionTeacherId().catch(() => {});
-    }
-
-      // Direct Table Fallback if RPC failed or returned success: false.
-      // We only ever write using a REAL roster-matched student id. If none
-      // is available, we must not fabricate one — that would silently
-      // orphan the submission from the parent portal (which matches on
-      // real student_id) even though the teacher's view is name-based
-      // and would still show it.
       if (!submissionRecorded) {
         const isUuidId = (id: any) => id && String(id).length === 36 && String(id).includes('-');
         const fallbackStudentId = isUuidId(activeStudentId)
@@ -696,7 +616,6 @@ export const StudentAssignmentView: React.FC<{
             });
 
           if (insertError) {
-            console.error('Direct submission error:', insertError);
             throw new Error('Failed to record assignment submission.');
           }
         }
@@ -709,11 +628,12 @@ export const StudentAssignmentView: React.FC<{
         created_at: new Date().toISOString(),
         submitted_at: new Date().toISOString(),
         teacher_assigned: assignedTeacherName,
-        score: score
+        score: score,
+        answers: finalAnswers
       });
 
       setStep('success');
-      showToast('Assignment submitted! Excellent work! 🎉', 'success');
+      showToast('Assignment submitted! Fantastic effort! 🎉', 'success');
     } catch (err: any) {
       console.error('Submission error:', err);
       showToast(err.message || "Failed to submit assignment.", "error");
@@ -722,602 +642,115 @@ export const StudentAssignmentView: React.FC<{
     }
   };
 
-  // Helper to format due date
-  const getDueStatus = (dateStr: string) => {
-    const due = new Date(dateStr);
-    const now = new Date();
-    const diff = due.getTime() - now.getTime();
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    
-    if (days < 0) return "Overdue";
-    if (days === 0) return "Due Today";
-    if (days === 1) return "Due Tomorrow";
-    return `Due in ${days} days`;
-  };
-
+  // ── STEP 1: SUCCESS CELEBRATION ──
   if (step === 'success') {
     return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center">
-        <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-10 shadow-2xl max-w-sm w-full"
-        >
-          <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
-            <Trophy className="text-emerald-500" size={40} />
-          </div>
-          <h2 className="text-2xl font-black tracking-tight mb-2">Great Job!</h2>
-          <p className="text-brand-text/60 font-bold mb-8">Submitted — your teacher will see this in their grading queue.</p>
-          
-          <div className="bg-brand-bg/50 rounded-2xl p-6 mb-8 text-left space-y-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Assignment</p>
-              <p className="font-bold text-sm">{assignment?.title}</p>
-            </div>
-            {submission?.score !== undefined && submission?.score !== null && (
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-accent mb-1">Grade</p>
-                <p className="text-2xl font-black text-brand-accent">{submission.score}%</p>
-              </div>
-            )}
-            {submission?.teacher_comment && (
-              <div className="bg-brand-accent/5 p-4 rounded-xl border border-brand-accent/20">
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-accent mb-1">Teacher Feedback</p>
-                <p className="text-sm font-bold text-brand-text italic">"{submission.teacher_comment}"</p>
-              </div>
-            )}
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Submitted At</p>
-              <p className="font-bold text-sm">
-                {submission?.created_at ? new Date(submission.created_at).toLocaleString() : new Date().toLocaleString()}
-              </p>
-            </div>
-          </div>
-
-          <button 
-            onClick={onBack}
-            className="w-full bg-brand-accent text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-accent/20 active:scale-95 transition-all"
-          >
-            Back to Lessons
-          </button>
-
-          {onExamsClick && (
-            <button 
-              onClick={onExamsClick}
-              className="w-full mt-4 bg-brand-bg border-2 border-brand-accent text-brand-accent py-5 rounded-2xl font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
+      <div className="min-h-screen bg-brand-bg">
+        <header className="sticky top-0 z-40 bg-brand-surface/90 backdrop-blur-md border-b border-brand-border px-4 py-3">
+          <div className="max-w-md mx-auto flex items-center justify-between">
+            <button
+              onClick={() => {
+                setStep('entry');
+                fetchAssignments();
+              }}
+              className="flex items-center gap-1.5 text-xs font-bold text-brand-muted hover:text-brand-text transition-colors"
             >
-              Take a Timed Assessment
+              <ChevronLeft size={16} />
+              <span>All Assignments</span>
             </button>
-          )}
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (step === 'taking' && assignment) {
-    const totalQuestions = assignment.questions?.length || 0;
-    const answeredCount = assignment.questions?.filter(q => answers[q.id] !== undefined && answers[q.id] !== '' && !skippedQuestions.has(q.id)).length || 0;
-    const skippedCount = assignment.questions?.filter(q => skippedQuestions.has(q.id)).length || 0;
-    const progressPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
-
-    return (
-      <div className="max-w-[420px] mx-auto pb-12">
-        <header className="sticky top-0 z-50 bg-brand-bg/90 backdrop-blur-xl border-b border-brand-border p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className="p-2 hover:bg-brand-surface rounded-xl transition-colors">
-              <ChevronLeft size={20} />
-            </button>
-            <div>
-              <h2 className="font-black text-sm tracking-tight truncate max-w-[150px]">{assignment.title}</h2>
-              <p className="text-[10px] font-bold text-brand-accent uppercase tracking-widest">{assignment.subject}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 bg-amber-500/10 text-amber-600 px-3 py-1.5 rounded-full border border-amber-500/10">
-            <Clock size={12} className="shrink-0" />
-            <span className="text-[10px] font-bold whitespace-nowrap">{getDueStatus(assignment.due_date)}</span>
+            <span className="text-xs font-black uppercase tracking-wider text-emerald-600">
+              Handed In
+            </span>
           </div>
         </header>
 
-        {/* Progress Bar Header */}
-        <div className="bg-brand-surface/90 backdrop-blur-md border-b border-brand-border px-4 py-3 sticky top-[65px] z-40 shadow-sm space-y-2">
-          <div className="max-w-[420px] mx-auto space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-bold text-brand-text">
-              <div className="flex items-center gap-2">
-                <span className="text-brand-accent font-black">{answeredCount}/{totalQuestions} answered</span>
-                {skippedCount > 0 && (
-                  <span className="text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider">
-                    · {skippedCount} skipped
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-black uppercase text-brand-muted tracking-widest">{progressPercent}% complete</span>
-            </div>
-            <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden border border-brand-border/40">
-              <div 
-                className="h-full bg-gradient-to-r from-brand-accent to-amber-500 transition-all duration-300 rounded-full"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Question Quick Jump Bar */}
-          <div className="flex items-center justify-between gap-2 pt-1 border-t border-brand-border/30">
-            <span className="text-[10px] font-black uppercase tracking-wider text-brand-muted shrink-0">Jump to:</span>
-            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar max-w-[320px]">
-              {assignment.questions.map((q, idx) => {
-                const isSkipped = skippedQuestions.has(q.id);
-                const isAnswered = !isSkipped && ((answers[q.id] !== undefined && answers[q.id] !== '') || files[q.id]);
-                return (
-                  <button
-                    key={q.id}
-                    type="button"
-                    onClick={() => {
-                      const el = document.getElementById(`q-${idx}`);
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }}
-                    className={`w-7 h-7 rounded-lg text-xs font-black transition-all flex items-center justify-center shrink-0 active:scale-95 ${
-                      isSkipped
-                        ? 'bg-amber-500/15 text-amber-600 border border-amber-500/40 shadow-xs'
-                        : isAnswered
-                          ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-500/40 shadow-xs'
-                          : 'bg-brand-bg text-brand-muted border border-brand-border hover:border-brand-accent/40'
-                    }`}
-                    title={`Question ${idx + 1}: ${isSkipped ? 'Skipped' : isAnswered ? 'Answered' : 'Untouched'}`}
-                  >
-                    {idx + 1}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <main className="p-4 space-y-6">
-          {needsClassSelection && (
-            <div className="bg-brand-surface border-2 border-brand-accent/40 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
-              <div>
-                <p className="text-sm font-bold text-brand-text">Which class/section are you in?</p>
-                <p className="text-xs text-brand-muted">This helps route your work to the right teacher.</p>
-              </div>
-              <div className="space-y-2">
-                {availableClasses.map(c => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedClassId(c.id);
-                      setNeedsClassSelection(false);
-                      setTimeout(() => {
-                        submitAssignment();
-                      }, 50);
-                    }}
-                    className="w-full text-left p-3.5 rounded-xl border border-brand-border hover:border-brand-accent hover:bg-brand-accent/5 transition-all flex items-center justify-between font-bold text-sm text-brand-text active:scale-98"
-                  >
-                    <span>{c.name}</span>
-                    <ArrowRight size={16} className="text-brand-accent" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-brand-accent/5 border border-brand-accent/10 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center text-white font-black">
-              {studentName.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-brand-accent/40 leading-none mb-1">Student</p>
-              <p className="font-bold text-sm tracking-tight">{studentName}</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {assignment.questions.map((q, idx) => {
-              const isSkipped = skippedQuestions.has(q.id);
-              const isAnswered = !isSkipped && ((answers[q.id] !== undefined && answers[q.id] !== '') || files[q.id]);
-              
-              return (
-                <motion.div 
-                  key={q.id}
-                  id={`q-${idx}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className={`bg-brand-surface border rounded-2xl p-4 shadow-sm transition-all ${
-                    isSkipped
-                      ? 'border-amber-500/40 bg-amber-500/[0.02]'
-                      : isAnswered
-                        ? 'border-emerald-500/30 bg-emerald-500/[0.01]'
-                        : 'border-brand-border'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-start gap-3">
-                      <div className={`w-7 h-7 rounded-lg border flex items-center justify-center font-black text-xs shrink-0 ${
-                        isSkipped
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-600'
-                          : isAnswered
-                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600'
-                            : 'bg-brand-bg border-brand-border text-brand-accent'
-                      }`}>
-                        {idx + 1}
-                      </div>
-                      <h3 className="font-bold text-base leading-tight pt-0.5 text-brand-text">{q.text}</h3>
-                    </div>
-
-                    {/* Status Badges */}
-                    {isSkipped ? (
-                      <span className="shrink-0 px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
-                        <FastForward size={12} />
-                        Skipped
-                      </span>
-                    ) : isAnswered ? (
-                      <span className="shrink-0 px-2.5 py-1 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
-                        <CheckCircle2 size={12} />
-                        Answered
-                      </span>
-                    ) : (
-                      <span className="shrink-0 px-2.5 py-1 bg-brand-bg text-brand-muted border border-brand-border text-[10px] font-black uppercase tracking-wider rounded-full flex items-center gap-1">
-                        <HelpCircle size={12} />
-                        Untouched
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-3 pl-0 sm:pl-10 space-y-3">
-                    {q.type === 'mcq' && (
-                      <div className="space-y-2">
-                        {q.options.map((opt, optIdx) => (
-                          <button
-                            key={optIdx}
-                            onClick={() => handleAnswerChange(q.id, optIdx.toString(), false)}
-                            className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between group ${
-                              answers[q.id] === optIdx.toString()
-                                ? 'bg-brand-accent border-brand-accent text-white'
-                                : 'bg-brand-bg border-brand-border hover:border-brand-accent/50 text-brand-text/80'
-                            }`}
-                          >
-                            <span className="font-bold text-sm">{opt}</span>
-                            <div className={`w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center ${
-                              answers[q.id] === optIdx.toString() ? 'border-white' : 'border-brand-border/40 group-hover:border-brand-accent/40'
-                            }`}>
-                              {answers[q.id] === optIdx.toString() && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {q.type === 'short_answer' && (
-                      <textarea 
-                        placeholder="Type your answer here..."
-                        className="w-full bg-brand-bg border border-brand-border rounded-xl p-3.5 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold text-sm min-h-[90px] resize-none"
-                        value={answers[q.id] || ''}
-                        onChange={e => handleAnswerChange(q.id, e.target.value, true)}
-                      />
-                    )}
-
-                    {q.type === 'photo' && (
-                      <div className="space-y-3">
-                        {files[q.id] ? (
-                          <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-emerald-500/10 rounded-lg">
-                                <Camera className="text-emerald-500" size={18} />
-                              </div>
-                              <div className="max-w-[150px]">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-500/40 leading-none mb-1">Uploaded</p>
-                                <p className="text-xs font-bold truncate">{files[q.id].name}</p>
-                              </div>
-                            </div>
-                            <button 
-                              onClick={() => {
-                                const newFiles = { ...files };
-                                delete newFiles[q.id];
-                                setFiles(newFiles);
-                                const newAnswers = { ...answers };
-                                delete newAnswers[q.id];
-                                setAnswers(newAnswers);
-                              }}
-                              className="p-1.5 text-brand-muted hover:text-red-500 transition-colors"
-                            >
-                              <AlertCircle size={16} />
-                            </button>
-                          </div>
-                        ) : (
-                          <label className="w-full flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-brand-border rounded-2xl cursor-pointer hover:bg-brand-accent/5 hover:border-brand-accent/30 transition-all group">
-                            <Camera className="text-brand-muted group-hover:text-brand-accent transition-colors" size={24} />
-                            <div className="text-center">
-                              <p className="text-xs font-bold text-brand-text">Capture Work</p>
-                              <p className="text-[9px] uppercase font-black tracking-widest text-brand-muted">Camera or Upload</p>
-                            </div>
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              capture="environment" 
-                              className="hidden" 
-                              onChange={e => handleFileChange(q.id, e)}
-                            />
-                          </label>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Question Skip Bar */}
-                    <div className="mt-3 pt-3 border-t border-brand-border/30 flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">
-                        {isSkipped ? 'Skipped for now' : isAnswered ? 'Draft saved' : 'Not answered yet'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleSkipQuestion(idx, q.id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 ${
-                          isSkipped
-                            ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30'
-                            : 'bg-brand-bg hover:bg-brand-accent/10 text-brand-muted hover:text-brand-accent border border-brand-border'
-                        }`}
-                      >
-                        <FastForward size={14} />
-                        {isSkipped ? 'Skipped ✓' : 'Skip Question'}
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-
-          <button 
-            onClick={() => submitAssignment(false)}
-            disabled={submitting}
-            className="w-full bg-brand-accent text-white py-3.5 rounded-xl font-bold uppercase tracking-wider shadow-lg shadow-brand-accent/10 hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="animate-spin" size={18} />
-                Submitting Work...
-              </>
-            ) : (
-              <>
-                <Send size={18} />
-                Submit Assignment
-              </>
-            )}
-          </button>
+        <main className="max-w-md mx-auto pt-4">
+          <AssignmentSuccessCelebration
+            assignment={assignment}
+            submission={submission}
+            onBackToAssignments={() => {
+              setStep('entry');
+              fetchAssignments();
+            }}
+            onBackToHome={onBack}
+            onExamsClick={onExamsClick}
+          />
         </main>
-
-        {/* Non-blocking Submit Confirmation Modal */}
-        <AnimatePresence>
-          {showSkipConfirmModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="bg-brand-surface border border-brand-border rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-                    <AlertCircle size={22} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-brand-text">Submit Assignment?</h3>
-                    <p className="text-xs text-brand-muted">You have unanswered or skipped questions.</p>
-                  </div>
-                </div>
-
-                <div className="bg-brand-bg rounded-xl p-3 space-y-2 border border-brand-border/40 text-xs">
-                  <div className="flex justify-between items-center text-emerald-600 font-bold">
-                    <span>Answered:</span>
-                    <span>{answeredCount} / {totalQuestions}</span>
-                  </div>
-                  {skippedCount > 0 && (
-                    <div className="flex justify-between items-center text-amber-600 font-bold">
-                      <span>Skipped:</span>
-                      <span>{skippedCount}</span>
-                    </div>
-                  )}
-                  {totalQuestions - answeredCount - skippedCount > 0 && (
-                    <div className="flex justify-between items-center text-brand-muted font-bold">
-                      <span>Untouched:</span>
-                      <span>{totalQuestions - answeredCount - skippedCount}</span>
-                    </div>
-                  )}
-                </div>
-
-                <p className="text-xs text-brand-muted leading-relaxed">
-                  Your teacher will receive and grade all questions you answered. Skipped or untouched questions will be submitted as omitted.
-                </p>
-
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowSkipConfirmModal(false)}
-                    className="flex-1 py-2.5 px-4 rounded-xl border border-brand-border text-xs font-bold text-brand-text hover:bg-brand-bg transition-colors"
-                  >
-                    Review Questions
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => submitAssignment(true)}
-                    disabled={submitting}
-                    className="flex-1 py-2.5 px-4 rounded-xl bg-brand-accent text-white text-xs font-bold shadow-md hover:opacity-95 transition-all flex items-center justify-center gap-1.5"
-                  >
-                    {submitting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                    Submit Anyway
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
       </div>
     );
   }
 
+  // ── STEP 2: ASSIGNMENT TAKING ──
+  if (step === 'taking' && assignment) {
+    return (
+      <StudentAssignmentTaking
+        assignment={assignment}
+        studentName={studentName}
+        initialAnswers={answers}
+        initialSkipped={skippedQuestions}
+        onBack={() => setStep('entry')}
+        onSubmit={submitAssignment}
+        onSaveDraftAnswer={saveAnswerDraft}
+        onSkipQuestionRemote={handleSkipQuestionRemote}
+        submitting={submitting}
+        needsClassSelection={needsClassSelection}
+        availableClasses={availableClasses}
+        onSelectClass={(cid) => {
+          setSelectedClassId(cid);
+          setNeedsClassSelection(false);
+        }}
+      />
+    );
+  }
+
+  // ── STEP 3: DISCOVERY & ENTRY VIEW ──
   return (
-    <div className="min-h-screen bg-brand-bg flex flex-col">
-      {/* Header */}
-      <div className="bg-white/80 dark:bg-brand-card/80 backdrop-blur-xl border-b border-brand-accent/10 sticky top-0 z-50 p-4">
-        <div className="max-w-[420px] mx-auto flex items-center justify-between">
+    <div className="min-h-screen bg-brand-bg flex flex-col font-sans">
+      {/* App bar */}
+      <header className="sticky top-0 z-40 bg-brand-surface/90 backdrop-blur-md border-b border-brand-border px-4 py-3 shadow-xs">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button 
               onClick={onBack}
-              className="w-10 h-10 flex items-center justify-center hover:bg-brand-accent/10 rounded-full transition-colors"
+              className="w-9 h-9 rounded-xl bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-text transition-colors"
+              title="Return to home"
             >
-              <ChevronLeft size={20} className="text-brand-accent" />
+              <ChevronLeft size={20} />
             </button>
-            <h1 className="font-sans font-bold text-xl text-brand-text">Assignments</h1>
+            <div>
+              <h1 className="font-display font-black text-base sm:text-lg text-brand-text leading-none">
+                Assignments & Homework
+              </h1>
+              <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mt-0.5">
+                Practice, Exercises & Assessments
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <main className="flex-1 overflow-y-auto w-full max-w-[420px] mx-auto p-4 space-y-6">
-        <div className="space-y-4">
-          <div className="group">
-            <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted ml-1 mb-2">My Full Name</label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40" size={18} />
-              <input 
-                type="text"
-                placeholder="e.g. John Kamau"
-                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
-                value={studentName}
-                onChange={e => setStudentName(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="relative group">
-              <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
-              <input 
-                type="text"
-                placeholder="Assignment Name"
-                value={searchTitle}
-                onChange={e => setSearchTitle(e.target.value)}
-                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
-              />
-              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">Assignment Name</span>
-            </div>
-
-            <div className="relative group">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
-              <input 
-                type="text"
-                placeholder="Teacher's Name"
-                value={searchTeacher}
-                onChange={e => setSearchTeacher(e.target.value)}
-                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
-              />
-              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">Teacher Name</span>
-            </div>
-
-            <div className="relative group">
-              <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
-              <input 
-                type="text"
-                placeholder="School Name"
-                value={searchSchool}
-                onChange={e => setSearchSchool(e.target.value)}
-                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm"
-              />
-              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">School</span>
-            </div>
-
-            <div className="relative group">
-              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
-              <select 
-                value={searchGrade}
-                onChange={e => setSearchGrade(e.target.value)}
-                className="w-full bg-white dark:bg-brand-card border border-brand-accent/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-brand-accent/10 focus:border-brand-accent/30 outline-none transition-all shadow-sm appearance-none"
-              >
-                {['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-              <span className="absolute left-10 -top-2 px-2 bg-white dark:bg-brand-card text-[8px] font-black uppercase text-brand-muted tracking-widest transition-all group-focus-within:text-brand-accent rounded-md border border-brand-accent/30">Grade</span>
-            </div>
-            
-            <button
-              onClick={fetchAssignments}
-              disabled={loading}
-              className="w-full bg-brand-text text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-brand-text/10 flex items-center justify-center gap-3 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
-              Search for Assignments
-            </button>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 grayscale opacity-50">
-            <Loader2 className="animate-spin text-brand-accent mb-4" size={32} />
-            <p className="text-xs font-bold text-brand-muted uppercase tracking-widest">Checking assignments...</p>
-          </div>
-        ) : !hasSearched ? (
-           <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-brand-accent/5 flex items-center justify-center text-brand-accent/30">
-                 <Search size={32} />
-              </div>
-              <div className="space-y-1">
-                 <p className="font-bold text-brand-text">Find Your Assignment</p>
-                 <p className="text-xs text-brand-muted max-w-[200px]">Enter details above to find your assignments.</p>
-              </div>
-           </div>
-        ) : assignments.length > 0 ? (
-          <div className="space-y-4">
-            {assignments.map((asgn, idx) => (
-              <motion.div
-                key={asgn.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className="bg-white dark:bg-brand-card rounded-2xl p-4 border border-brand-accent/5 shadow-md overflow-hidden group cursor-pointer active:scale-[0.98] transition-all"
-                onClick={() => handleJoinAssignment(asgn.id)}
-              >
-                <div className="flex flex-col gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        {asgn.is_broadcast && (
-                          <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-1.5 py-0.5 rounded-full border border-indigo-500/15">
-                            <School size={8} />
-                            School-wide
-                          </span>
-                        )}
-                        <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{asgn.subject}</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-amber-600 bg-amber-500/5 px-2 py-0.5 rounded-lg">{getDueStatus(asgn.due_date)}</span>
-                    </div>
-                    <h3 className="font-sans font-bold text-lg text-brand-text truncate">{asgn.title}</h3>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold text-brand-muted uppercase tracking-wider">
-                      <span className="font-black text-brand-accent">{asgn.teacher?.name}</span>
-                      <span className="w-1 h-1 rounded-full bg-brand-muted/30" />
-                      <span className="italic">{asgn.teacher?.school_name}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between pt-2">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-accent">
-                      Start Assignment <ArrowRight size={14} />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
-             <div className="w-16 h-16 rounded-full bg-brand-accent/5 flex items-center justify-center text-brand-accent/30">
-                <AlertCircle size={32} />
-             </div>
-             <div className="space-y-1">
-                <p className="font-bold text-brand-text">No Assignments Found</p>
-                <p className="text-xs text-brand-muted max-w-[200px]">Try searching for your teacher's name or school.</p>
-             </div>
-          </div>
-        )}
+      {/* Main Content */}
+      <main className="max-w-3xl mx-auto w-full px-4 pt-5 flex-1">
+        <AssignmentDiscoveryView
+          studentName={studentName}
+          onStudentNameChange={setStudentName}
+          assignments={assignments}
+          loading={loading}
+          onRefresh={fetchAssignments}
+          onSelectAssignment={handleJoinAssignment}
+          searchTitle={searchTitle}
+          setSearchTitle={setSearchTitle}
+          searchTeacher={searchTeacher}
+          setSearchTeacher={setSearchTeacher}
+          searchSchool={searchSchool}
+          setSearchSchool={setSearchSchool}
+          searchGrade={searchGrade}
+          setSearchGrade={setSearchGrade}
+          onSearch={fetchAssignments}
+          onDirectSchoolFind={handleDirectSchoolFind}
+          directFindLoading={directFindLoading}
+          directFindError={directFindError}
+        />
       </main>
     </div>
   );
