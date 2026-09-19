@@ -122,9 +122,9 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       if (data) {
         setForm(prev => ({
           ...prev,
-          title: data.title,
-          subject: data.subject,
-          grade: data.grade,
+          title: data.title || '',
+          subject: data.subject || '',
+          grade: data.grade || '',
         }));
         setQuestions(data.questions);
         showToast("Assignment data loaded successfully!", "success");
@@ -598,7 +598,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                     type="text"
                     placeholder="e.g. Weekly Math Quiz"
                     className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-6 outline-none focus:border-brand-accent/50 focus:ring-4 focus:ring-brand-accent/5 transition-all font-bold"
-                    value={form.title}
+                    value={form.title || ''}
                     onChange={e => setForm({...form, title: e.target.value})}
                   />
                 </div>
@@ -686,7 +686,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                   <input 
                     type="date"
                     className="w-full bg-brand-bg border border-brand-border rounded-2xl py-4 pl-12 pr-6 outline-none focus:border-brand-accent/50 transition-all font-bold"
-                    value={form.due_date}
+                    value={form.due_date || ''}
                     onChange={e => setForm({...form, due_date: e.target.value})}
                   />
                 </div>

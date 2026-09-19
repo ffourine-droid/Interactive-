@@ -678,6 +678,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
           questions: block.questions,
           share_code: randomCode,
           is_broadcast: true,
+          created_by_admin: true,
           school_name: cleanSchoolName
         };
 
@@ -696,7 +697,8 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
             class_name: 'School Broadcast',
             due_date: formattedDueDate,
             questions: block.questions,
-            share_code: randomCode
+            share_code: randomCode,
+            created_by_admin: true
           };
           const { error: retryError } = await supabase
             .from('assignments')
@@ -709,6 +711,7 @@ export const SchoolDashboard: React.FC<SchoolDashboardProps> = ({ schoolName, on
               title: broadcastTitle,
               subject: block.subject,
               grade: block.grade,
+              class_name: 'School Broadcast',
               questions: block.questions,
               share_code: randomCode
             };

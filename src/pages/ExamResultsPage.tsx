@@ -1288,9 +1288,17 @@ export default function ExamResultsPage({
                                   <input
                                     type="number"
                                     value={
-                                      gradingMarks[idx] ??
-                                      selectedAttempt.grading?.[idx] ??
-                                      0
+                                      (() => {
+                                        const gm = gradingMarks[idx];
+                                        if (gm !== undefined && gm !== null) {
+                                          return typeof gm === 'object' ? ((gm as any).marks_awarded ?? 0) : gm;
+                                        }
+                                        const sag = selectedAttempt.grading?.[idx] ?? selectedAttempt.grading?.[String(idx)];
+                                        if (sag !== undefined && sag !== null) {
+                                          return typeof sag === 'object' ? (sag.marks_awarded ?? 0) : sag;
+                                        }
+                                        return 0;
+                                      })()
                                     }
                                     onChange={(e) =>
                                       handleGradeChange(

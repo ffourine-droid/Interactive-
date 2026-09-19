@@ -27,10 +27,11 @@ import {
   AlertCircle,
   ExternalLink,
   ChevronRight,
-  BookOpen
+  BookOpen,
+  UserCheck
 } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
-import { isTeacherLinkedToAssignment } from '../utils/teacherScoping';
+import { isTeacherLinkedToAssignment, isSchoolAdminAssignment, isTeacherCreatedAssignment } from '../utils/teacherScoping';
 import { useToast } from './Toast';
 
 interface Teacher {
@@ -222,7 +223,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
   
   // Filtering & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'broadcast' | 'graded'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'my' | 'broadcast' | 'graded'>('all');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
   const [expandedAssignmentId, setExpandedAssignmentId] = useState<string | null>(null);
@@ -261,7 +262,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
       ] = await Promise.all([
         supabase.rpc('teacher_get_assignments', { p_teacher_id: teacher.id }),
         supabase.from('assignments').select('*').eq('teacher_id', teacher.id).order('created_at', { ascending: false }),
-        supabase.from('assignments').select('*').or('is_broadcast.eq.true,class_name.eq.School Broadcast').order('created_at', { ascending: false }),
+        supabase.from('assignments').select('*').or('is_broadcast.eq.true,class_name.eq.School Broadcast,created_by_admin.eq.true').order('created_at', { ascending: false }),
         supabase.from('assignment_submissions').select('*').order('submitted_at', { ascending: false }),
         supabase.from('submissions').select('*').order('submitted_at', { ascending: false })
       ]);
@@ -289,10 +290,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
       // C. Process Broadcast assignments
       if (broadcastsRes.data) {
         const relevantBroadcasts = broadcastsRes.data.filter((b: any) => {
-          if (teacherSchool && b.school_name && b.school_name.trim().toLowerCase() !== teacherSchool.toLowerCase()) {
-            return false;
-          }
-          return isTeacherLinkedToAssignment(b, teacherSubjectsRef.current, classesRef.current);
+          return isTeacherLinkedToAssignment(b, teacherSubjectsRef.current, classesRef.current, teacher.id, teacherSchool, teacher.name);
         });
 
         relevantBroadcasts.forEach((rb: any) => {
@@ -330,18 +328,51 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
         if (missingAsgns) {
           missingAsgns.forEach((a: any) => {
-            if (a && a.id) assignmentMap.set(a.id, a);
+            // Only add missing assignments if they are actually linked to this teacher
+            if (a && a.id && isTeacherLinkedToAssignment(a, teacherSubjectsRef.current, classesRef.current, teacher.id, teacherSchool, teacher.name)) {
+              assignmentMap.set(a.id, a);
+            }
           });
         }
       }
 
-      const finalAssignments = Array.from(assignmentMap.values());
+      // Fetch rooted students for this teacher's classes
+      const classIds = (classesRef.current || []).map((c: any) => c.id).filter(Boolean);
+      let rootedStudents: any[] = [];
+      if (classIds.length > 0) {
+        try {
+          const { data: stData } = await supabase
+            .from('students')
+            .select('id, name, class_id, grade')
+            .in('class_id', classIds);
+          if (stData) rootedStudents = stData;
+        } catch (stErr) {
+          console.warn("Could not load rooted students in TeacherBroadcastMarking:", stErr);
+        }
+      }
+
+      // Strict assignment scoping: only assignments this teacher is linked to
+      const finalAssignments = Array.from(assignmentMap.values()).filter((a: any) => {
+        return isTeacherLinkedToAssignment(a, teacherSubjectsRef.current, classesRef.current, teacher.id, teacherSchool);
+      });
       const assignmentIdSet = new Set(finalAssignments.map(a => a.id));
 
-      // Filter submissions to those relevant to this teacher's assignments or teacher_id
-      const relevantSubmissions = normalizedSubs.filter(s => 
-        s.teacher_id === teacher.id || assignmentIdSet.has(s.assignment_id)
-      );
+      // Strict submission scoping: submissions must belong to teacher's assignments AND rooted students
+      const stIds = new Set(rootedStudents.map((s: any) => s.id).filter(Boolean));
+      const stNames = new Set(rootedStudents.map((s: any) => s.name?.toLowerCase().trim()).filter(Boolean));
+
+      const relevantSubmissions = normalizedSubs.filter(s => {
+        if (!assignmentIdSet.has(s.assignment_id) && s.teacher_id !== teacher.id) {
+          return false;
+        }
+        if (rootedStudents.length > 0) {
+          if (s.student_id && stIds.has(s.student_id)) return true;
+          if (s.student_name && stNames.has(s.student_name?.toLowerCase().trim())) return true;
+          if (s.teacher_id === teacher.id) return true;
+          return false;
+        }
+        return true;
+      });
 
       setAssignments(finalAssignments);
       setSubmissions(relevantSubmissions);
@@ -487,19 +518,21 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
   // Derived Statistics
   const stats = useMemo(() => {
     const totalAssignments = assignments.length;
-    const broadcastCount = assignments.filter(a => a.is_broadcast || a.class_name === 'School Broadcast').length;
+    const myCount = assignments.filter(a => isTeacherCreatedAssignment(a, teacher?.id)).length;
+    const broadcastCount = assignments.filter(a => isSchoolAdminAssignment(a)).length;
     const totalSubmissions = submissions.length;
     const pendingCount = submissions.filter(s => s.status !== 'graded').length;
     const gradedCount = submissions.filter(s => s.status === 'graded').length;
     
     return {
       totalAssignments,
+      myCount,
       broadcastCount,
       totalSubmissions,
       pendingCount,
       gradedCount
     };
-  }, [assignments, submissions]);
+  }, [assignments, submissions, teacher?.id]);
 
   // Unique Subjects & Grades for filtering
   const availableSubjects = useMemo(() => {
@@ -543,12 +576,16 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
       // 4. Tab Status Filter
       const asgnSubs = submissions.filter(s => s.assignment_id === asgn.id);
-      const isBroadcast = asgn.is_broadcast || asgn.class_name === 'School Broadcast';
+      const isBroadcast = isSchoolAdminAssignment(asgn);
+      const isMy = isTeacherCreatedAssignment(asgn, teacher?.id);
       const hasPending = asgnSubs.some(s => s.status !== 'graded');
       const hasGraded = asgnSubs.some(s => s.status === 'graded');
 
       if (activeFilter === 'pending') {
         return hasPending || asgnSubs.length === 0;
+      }
+      if (activeFilter === 'my') {
+        return isMy;
       }
       if (activeFilter === 'broadcast') {
         return isBroadcast;
@@ -559,7 +596,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
       return true;
     });
-  }, [assignments, submissions, activeFilter, selectedSubject, selectedGrade, searchQuery]);
+  }, [assignments, submissions, activeFilter, selectedSubject, selectedGrade, searchQuery, teacher?.id]);
 
   // Open Marking Interface for a Student Submission
   const handleOpenMarkingModal = (submission: SubmissionItem, assignment: AssignmentItem) => {
@@ -581,13 +618,13 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
         const autoScore = isCorrect ? defaultMax : 0;
         
         initialGrades[qId] = {
-          score: existingGrading[qId]?.marks_awarded !== undefined ? existingGrading[qId].marks_awarded! : autoScore,
+          score: (existingGrading[qId]?.marks_awarded !== undefined && existingGrading[qId]?.marks_awarded !== null) ? existingGrading[qId].marks_awarded! : autoScore,
           comment: existingGrading[qId]?.comment || ''
         };
       } else {
         // Short Answer / Photo subjective grading
         initialGrades[qId] = {
-          score: existingGrading[qId]?.marks_awarded !== undefined ? existingGrading[qId].marks_awarded! : '',
+          score: (existingGrading[qId]?.marks_awarded !== undefined && existingGrading[qId]?.marks_awarded !== null) ? existingGrading[qId].marks_awarded! : '',
           comment: existingGrading[qId]?.comment || ''
         };
       }
@@ -840,21 +877,32 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
               Needs Marking ({stats.pendingCount})
             </button>
             <button
+              onClick={() => setActiveFilter('my')}
+              className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 flex items-center gap-1.5 ${
+                activeFilter === 'my'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-brand-bg border border-brand-border text-brand-muted hover:text-brand-text'
+              }`}
+            >
+              <UserCheck size={12} />
+              Created by You ({stats.myCount})
+            </button>
+            <button
               onClick={() => setActiveFilter('broadcast')}
               className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 flex items-center gap-1.5 ${
                 activeFilter === 'broadcast'
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                  ? 'bg-purple-600 text-white shadow-sm'
                   : 'bg-brand-bg border border-brand-border text-brand-muted hover:text-brand-text'
               }`}
             >
               <School size={12} />
-              Broadcasts ({stats.broadcastCount})
+              Admin Broadcasts ({stats.broadcastCount})
             </button>
             <button
               onClick={() => setActiveFilter('graded')}
               className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 flex items-center gap-1.5 ${
                 activeFilter === 'graded'
-                  ? 'bg-emerald-600 text-white shadow-sm'
+                  ? 'bg-indigo-600 text-white shadow-sm'
                   : 'bg-brand-bg border border-brand-border text-brand-muted hover:text-brand-text'
               }`}
             >
@@ -899,7 +947,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
       ) : (
         <div className="space-y-4">
           {filteredAssignments.map((assignment, asgnIdx) => {
-            const isBroadcast = assignment.is_broadcast || assignment.class_name === 'School Broadcast';
+            const isAdmin = isSchoolAdminAssignment(assignment);
             const asgnSubmissions = submissions.filter(s => s.assignment_id === assignment.id);
             const pendingSubs = asgnSubmissions.filter(s => s.status !== 'graded');
             const gradedSubs = asgnSubmissions.filter(s => s.status === 'graded');
@@ -912,7 +960,11 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: asgnIdx * 0.04 }}
-                className="bg-brand-surface border border-brand-border rounded-[2rem] overflow-hidden shadow-sm hover:border-brand-accent/40 transition-all"
+                className={`bg-brand-surface border rounded-[2rem] overflow-hidden shadow-sm transition-all ${
+                  isAdmin 
+                    ? 'border-purple-500/25 hover:border-purple-500/50 bg-gradient-to-br from-purple-500/[0.02] to-brand-surface' 
+                    : 'border-brand-border hover:border-brand-accent/40'
+                }`}
               >
                 {/* Assignment Header Row */}
                 <div 
@@ -921,15 +973,15 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                 >
                   <div className="space-y-2 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {isBroadcast ? (
-                        <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">
+                      {isAdmin ? (
+                        <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-purple-600 bg-purple-500/10 border border-purple-500/20 px-2.5 py-0.5 rounded-full">
                           <School size={10} />
-                          School Broadcast
+                          School Admin Broadcast
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-brand-accent bg-brand-accent/10 border border-brand-accent/20 px-2.5 py-0.5 rounded-full">
-                          <BookOpen size={10} />
-                          Class Work
+                        <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                          <UserCheck size={10} />
+                          Created by You
                         </span>
                       )}
 
@@ -1184,7 +1236,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                       <input
                         type="text"
                         placeholder="Reply message sent to parent..."
-                        value={parentReply}
+                        value={parentReply ?? ''}
                         onChange={(e) => setParentReply(e.target.value)}
                         className="w-full bg-brand-surface border border-brand-border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:border-brand-accent"
                       />
@@ -1350,7 +1402,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                                     type="number"
                                     min="0"
                                     max={qMax}
-                                    value={currentGrade.score}
+                                    value={currentGrade.score ?? ''}
                                     placeholder="0"
                                     onChange={(e) => {
                                       const val = e.target.value === '' ? '' : parseInt(e.target.value);
@@ -1371,7 +1423,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                             <input
                               type="text"
                               placeholder="Optional note for this question..."
-                              value={currentGrade.comment}
+                              value={currentGrade.comment ?? ''}
                               onChange={(e) => {
                                 const comment = e.target.value;
                                 setQuestionGrades(prev => ({

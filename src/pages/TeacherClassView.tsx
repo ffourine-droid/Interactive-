@@ -18,10 +18,16 @@ import {
   Save,
   Swords,
   FolderOpen,
-  School
+  School,
+  UserCheck
 } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
-import { isTeacherLinkedToAssignment } from '../utils/teacherScoping';
+import { 
+  isTeacherLinkedToAssignment, 
+  isSchoolAdminAssignment, 
+  isTeacherCreatedAssignment, 
+  isAssignmentForClass 
+} from '../utils/teacherScoping';
 import { useToast } from '../components/Toast';
 import { ParentCodeTable } from '../components/ParentCodeTable';
 import { StudentManager } from '../components/StudentManager';
@@ -103,6 +109,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [feedbackInput, setFeedbackInput] = useState<string>('');
   const [replyInput, setReplyInput] = useState<string>('');
   const [questionGrades, setQuestionGrades] = useState<Record<string, { score: number | '', comment: string }>>({});
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'my' | 'broadcast'>('all');
 
   useEffect(() => {
     fetchInitialData();
@@ -417,65 +424,89 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         console.warn("Failed to load teacher_subjects in class view:", e);
       }
 
-      // Defensive fallback: Fetch school-wide broadcast assignments for this school
-      try {
-        const teacherSchool = teacherRes.data?.school_name || 
-                              (examsRes.data && examsRes.data.length > 0 ? (examsRes.data[0] as any).school_name : null) || 
-                              (classRes.data as any)?.school_name;
-        
-        let actualSchoolName = teacherSchool;
-        if (!actualSchoolName) {
+      // Comprehensive retrieval of Admin & Broadcast Assignments:
+      let actualSchoolName: string | null = 
+        teacherRes.data?.school_name || 
+        (examsRes.data && examsRes.data.length > 0 ? (examsRes.data[0] as any).school_name : null) || 
+        (classRes.data as any)?.school_name;
+      
+      if (!actualSchoolName) {
+        try {
           const { data: teacherProfile } = await supabase
             .from('teachers')
             .select('school_name')
             .eq('id', teacherId)
             .maybeSingle();
-          if (teacherProfile) {
+          if (teacherProfile?.school_name) {
             actualSchoolName = teacherProfile.school_name;
           }
+        } catch (e) {
+          console.warn("Teacher profile lookup error:", e);
+        }
+      }
+
+      try {
+        // Fetch broadcast and admin assignments with flexible matching
+        const { data: broadcasts, error: bError } = await supabase
+          .from('assignments')
+          .select('*')
+          .or('is_broadcast.eq.true,class_name.eq.School Broadcast,created_by_admin.eq.true');
+
+        let teacherClasses: any[] = [];
+        try {
+          const { data: cData } = await supabase.rpc('teacher_get_classes', { p_teacher_id: teacherId });
+          if (cData && Array.isArray(cData)) {
+            teacherClasses = cData;
+            setTeacherClasses(cData);
+          }
+        } catch (e) {}
+
+        if (!bError && broadcasts && broadcasts.length > 0) {
+          const relevantBroadcasts = broadcasts.filter((b: any) => {
+            return isTeacherLinkedToAssignment(b, tSubjectsList, teacherClasses, teacherId, actualSchoolName, teacherRes.data?.name);
+          });
+
+          // Append with no duplicates
+          relevantBroadcasts.forEach((rb: any) => {
+            if (!assignmentsData.some((a: any) => a.id === rb.id)) {
+              assignmentsData.push(rb);
+            }
+          });
         }
 
-        if (actualSchoolName) {
-          // Fetch broadcast assignments for this school with flexible matching
-          const { data: broadcasts, error: bError } = await supabase
-            .from('assignments')
+        // Also query admin_assignments table
+        try {
+          const { data: adminAsgns } = await supabase
+            .from('admin_assignments')
             .select('*')
-            .or('is_broadcast.eq.true,class_name.eq.School Broadcast');
+            .order('created_at', { ascending: false });
 
-          if (!bError && broadcasts && broadcasts.length > 0) {
-            // Get all fetched classes for this teacher to verify taught mappings
-            let teacherClasses: any[] = [];
-            try {
-              const { data: cData } = await supabase.rpc('teacher_get_classes', { p_teacher_id: teacherId });
-              if (cData && Array.isArray(cData)) {
-                teacherClasses = cData;
-                setTeacherClasses(cData);
-              }
-            } catch (e) {}
-
-            const taughtMappings = tSubjectsList.map(ts => {
-              const matchedClass = teacherClasses.find((c: any) => c.id === ts.class_id) || (classRes.data?.id === ts.class_id ? classRes.data : null);
-              return {
-                grade: matchedClass?.grade || '',
-                subject: ts.subject || ''
+          if (adminAsgns && adminAsgns.length > 0) {
+            adminAsgns.forEach((adm: any) => {
+              const normalizedAdm = {
+                ...adm,
+                id: adm.id,
+                title: adm.title,
+                subject: adm.subject,
+                grade: adm.grade,
+                class_name: 'School Broadcast',
+                is_broadcast: true,
+                created_by_admin: true,
+                school_name: adm.target_school_name || actualSchoolName,
+                questions: adm.questions,
+                share_code: adm.share_code,
+                due_date: adm.due_date || adm.created_at,
+                created_at: adm.created_at
               };
-            }).filter(m => m.grade);
-
-            // Filter broadcasts: teacher must teach the broadcast's grade & subject (via teacher_subjects)
-            const relevantBroadcasts = broadcasts.filter((b: any) => {
-              if (actualSchoolName && b.school_name && b.school_name.trim().toLowerCase() !== actualSchoolName.trim().toLowerCase()) {
-                return false;
-              }
-              return isTeacherLinkedToAssignment(b, tSubjectsList, teacherClasses);
-            });
-
-            // Append with no duplicates
-            relevantBroadcasts.forEach((rb: any) => {
-              if (!assignmentsData.some((a: any) => a.id === rb.id)) {
-                assignmentsData.push(rb);
+              if (!assignmentsData.some((a: any) => a.id === adm.id || (adm.share_code && a.share_code === adm.share_code))) {
+                if (isTeacherLinkedToAssignment(normalizedAdm, tSubjectsList, teacherClasses, teacherId, actualSchoolName, teacherRes.data?.name)) {
+                  assignmentsData.push(normalizedAdm);
+                }
               }
             });
           }
+        } catch (admErr) {
+          console.warn("admin_assignments lookup error:", admErr);
         }
       } catch (fallbackErr) {
         console.warn("Broadcast fallback retrieval in class view warning:", fallbackErr);
@@ -1074,33 +1105,73 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         </section>
 
         <div className="space-y-4">
-            <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted flex items-center gap-2 px-2 whitespace-nowrap">
-            <FileText size={14} />
-            Assessments
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-2">
+            <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted flex items-center gap-2 whitespace-nowrap">
+              <FileText size={14} />
+              Assignments
+            </h2>
+
+            {/* Filter pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <button
+                onClick={() => setAssignmentFilter('all')}
+                className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                  assignmentFilter === 'all'
+                    ? 'bg-brand-text text-brand-bg shadow-sm'
+                    : 'bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-text'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setAssignmentFilter('my')}
+                className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1 ${
+                  assignmentFilter === 'my'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-brand-surface border border-brand-border text-brand-muted hover:text-emerald-600'
+                }`}
+              >
+                <UserCheck size={11} />
+                My Assignments
+              </button>
+              <button
+                onClick={() => setAssignmentFilter('broadcast')}
+                className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1 ${
+                  assignmentFilter === 'broadcast'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-brand-surface border border-brand-border text-brand-muted hover:text-purple-600'
+                }`}
+              >
+                <School size={11} />
+                Admin Broadcasts
+              </button>
+            </div>
+          </div>
           {(() => {
             const classAssignments = assignments.filter(a => {
-              if (classId === 'dynamic-class') return true;
-              if (a.class_id === classId) return true;
-              if (a.class_name && className && a.class_name.toLowerCase() === className.toLowerCase()) return true;
-              if (a.is_broadcast && a.grade && classGrade && a.grade.toLowerCase().trim() === classGrade.toLowerCase().trim()) {
-                return teacherSubjects.some(ts => 
-                  ts.class_id === classId && 
-                  (ts.subject?.toLowerCase().trim() === a.subject?.toLowerCase().trim() || ts.subject?.toLowerCase().trim() === 'general')
-                );
-              }
-              return false;
+              return isAssignmentForClass(a, classId, className, classGrade, teacherSubjects);
+            }).filter(a => {
+              if (assignmentFilter === 'my' && !isTeacherCreatedAssignment(a, teacher?.id)) return false;
+              if (assignmentFilter === 'broadcast' && !isSchoolAdminAssignment(a)) return false;
+              return true;
             });
             if (classAssignments.length === 0) {
               return (
                 <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">
-                   <p className="font-bold font-lg">No assignments for this class.</p>
+                   <p className="font-bold font-lg">
+                    {assignmentFilter === 'broadcast' 
+                      ? 'No school administrator broadcast assignments match this class.'
+                      : assignmentFilter === 'my'
+                      ? 'No teacher-created assignments for this class yet.'
+                      : 'No assignments for this class.'}
+                   </p>
                 </div>
               );
             }
             return classAssignments.map((assignment) => {
             const assignmentSubmissions = submissions.filter(s => s.assignment_id === assignment.id);
             const isExpanded = expandedAssignment === assignment.id;
+            const isAdmin = isSchoolAdminAssignment(assignment);
             
             // Use the class students as the base for status if assignment doesn't have its own list
             // User requested students to be stored in DB, so we prefer the class-level student list.
@@ -1118,7 +1189,11 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             return (
               <div 
                 key={assignment.id} 
-                className="bg-brand-surface border border-brand-border rounded-[2rem] overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                className={`bg-brand-surface border rounded-[2rem] overflow-hidden shadow-sm hover:shadow-md transition-all ${
+                  isAdmin 
+                    ? 'border-purple-500/20 bg-gradient-to-br from-purple-500/[0.02] to-brand-surface' 
+                    : 'border-brand-border'
+                }`}
               >
                 <div 
                   className="p-6 cursor-pointer"
@@ -1126,8 +1201,22 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                 >
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                     <div>
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        {isAdmin ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-600 border border-purple-500/20 flex items-center gap-1">
+                            <School size={10} /> School Admin Broadcast
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
+                            <UserCheck size={10} /> Created by You
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-brand-bg text-brand-muted border border-brand-border">
+                          {assignment.subject}
+                        </span>
+                      </div>
                       <h3 className="text-xl font-black tracking-tight">{assignment.title}</h3>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-brand-muted mt-1 truncate">{assignment.subject} • Due {new Date(assignment.due_date).toLocaleDateString()}</p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-brand-muted mt-1 truncate">Due {new Date(assignment.due_date).toLocaleDateString()}</p>
                       
                       {assignment.share_code && (
                         <div className="mt-3 p-2 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-center justify-between group/code hover:border-emerald-500 transition-all inline-flex min-w-[120px]"
@@ -1350,7 +1439,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                       <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Score / {selectedExamAttempt.total_marks}</label>
                       <input 
                         type="number"
-                        value={gradeInput}
+                        value={gradeInput ?? ''}
                         onChange={e => setGradeInput(e.target.value)}
                         className="w-full bg-brand-surface border border-brand-accent/20 rounded-2xl py-4 px-6 font-black text-xl text-brand-accent outline-none"
                       />
@@ -1358,7 +1447,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                     <div className="md:col-span-2">
                       <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Teacher Feedback</label>
                       <textarea 
-                        value={feedbackInput}
+                        value={feedbackInput ?? ''}
                         onChange={e => setFeedbackInput(e.target.value)}
                         className="w-full bg-brand-surface border border-brand-accent/20 rounded-2xl py-4 px-6 font-bold text-sm outline-none min-h-[120px] resize-none"
                         placeholder="Provide feedback on the assessment performance..."
@@ -1657,7 +1746,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                     <div className="md:col-span-2">
                       <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Teacher Feedback (Overall)</label>
                       <textarea 
-                        value={feedbackInput}
+                        value={feedbackInput ?? ''}
                         onChange={e => setFeedbackInput(e.target.value)}
                         className="w-full bg-brand-surface border border-brand-accent/20 rounded-2xl py-4 px-6 font-bold text-sm outline-none focus:ring-4 focus:ring-brand-accent/5 transition-all min-h-[100px] resize-none"
                         placeholder="Provide overall feedback on the assignment performance..."

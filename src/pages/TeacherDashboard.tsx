@@ -23,10 +23,26 @@ import {
   X,
   Award,
   RefreshCw,
-  KeyRound
+  KeyRound,
+  FileText,
+  CheckCircle2,
+  Sparkles,
+  UserCheck,
+  Search,
+  Eye,
+  Copy
 } from 'lucide-react';
 import { supabase, setTeacherConfig } from '../lib/supabase';
-import { isTeacherLinkedToAssignment } from '../utils/teacherScoping';
+import { 
+  isTeacherLinkedToAssignment, 
+  isSchoolAdminAssignment, 
+  isTeacherCreatedAssignment, 
+  isAssignmentForClass,
+  isGradeMatch,
+  isSubjectMatch,
+  isStudentRootedToTeacher, 
+  filterSubmissionsForTeacher 
+} from '../utils/teacherScoping';
 import { useToast } from '../components/Toast';
 import { TeacherCompetitionManager } from '../components/TeacherCompetitionManager';
 import { QuestionRequestForm } from '../components/QuestionRequestForm';
@@ -44,8 +60,17 @@ interface Assignment {
   title: string;
   subject: string;
   grade: string;
-  class_id: string;
-  due_date: string;
+  class_id?: string;
+  class_name?: string;
+  due_date?: string;
+  share_code?: string;
+  questions?: any;
+  teacher_id?: string;
+  school_name?: string;
+  is_broadcast?: boolean;
+  created_by_admin?: boolean;
+  created_at?: string;
+  expected_students?: any[];
 }
 
 interface Class {
@@ -91,7 +116,13 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [newClassSubject, setNewClassSubject] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [studentNames, setStudentNames] = useState('');
-  const [activeView, setActiveView] = useState<'classes' | 'exams' | 'competitions' | 'forum_moderation' | 'grading_queue'>('classes');
+  const [activeView, setActiveView] = useState<'classes' | 'assignments' | 'exams' | 'competitions' | 'forum_moderation' | 'grading_queue'>('classes');
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'my_assignments' | 'broadcast'>('all');
+  const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [assignmentSubjectFilter, setAssignmentSubjectFilter] = useState('all');
+  const [assignmentGradeFilter, setAssignmentGradeFilter] = useState('all');
+  const [previewAssignment, setPreviewAssignment] = useState<Assignment | null>(null);
+  const [rootedStudents, setRootedStudents] = useState<any[]>([]);
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
   const [loadingPendingSubmissions, setLoadingPendingSubmissions] = useState(false);
   const [gradingMarks, setGradingMarks] = useState<Record<string, number>>({});
@@ -171,7 +202,11 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   }, []);
 
-  const fetchPendingSubmissions = async (teacherId: string) => {
+  const fetchPendingSubmissions = async (
+    teacherId: string, 
+    classIdsOverride?: string[], 
+    rootedStudentsOverride?: any[]
+  ) => {
     try {
       setLoadingPendingSubmissions(true);
       let gotData = false;
@@ -196,6 +231,18 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         console.warn("RPC teacher_get_pending_submissions threw exception, running client-side fallback:", rpcErr);
       }
 
+      // Filter RPC submissions to rooted students if student roster is known
+      const activeStudents = rootedStudentsOverride || rootedStudents;
+      if (gotData && activeStudents.length > 0) {
+        const stIds = new Set(activeStudents.map((s: any) => s.id).filter(Boolean));
+        const stNames = new Set(activeStudents.map((s: any) => s.name?.toLowerCase().trim()).filter(Boolean));
+        submissionsList = submissionsList.filter((sub: any) => {
+          if (sub.student_id && stIds.has(sub.student_id)) return true;
+          if (sub.student_name && stNames.has(sub.student_name?.toLowerCase().trim())) return true;
+          return false;
+        });
+      }
+
       if (!gotData) {
         // Run robust client-side query fallback
         // 1. Get assignments for this teacher and their classes
@@ -204,7 +251,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           .select('id')
           .eq('teacher_id', teacherId);
 
-        const classIds = (classesData || []).map(c => c.id);
+        const classIds = classIdsOverride || (classesData || []).map(c => c.id);
 
         let assignQuery = supabase
           .from('assignments')
@@ -241,6 +288,18 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
               .in('status', ['submitted', 'pending']);
             if (!subsError2 && subsData2) rawSubmissions = subsData2;
+          }
+
+          // Strict student scoping: filter raw submissions to students rooted to this teacher
+          if (activeStudents.length > 0) {
+            const stIds = new Set(activeStudents.map((s: any) => s.id).filter(Boolean));
+            const stNames = new Set(activeStudents.map((s: any) => s.name?.toLowerCase().trim()).filter(Boolean));
+            rawSubmissions = rawSubmissions.filter((sub: any) => {
+              if (sub.student_id && stIds.has(sub.student_id)) return true;
+              if (sub.student_name && stNames.has(sub.student_name?.toLowerCase().trim())) return true;
+              if (sub.class_id && classIds.includes(sub.class_id)) return true;
+              return false;
+            });
           }
 
           // 3. Format into structure expected by UI
@@ -754,7 +813,6 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         supabase.rpc('teacher_get_classes', { p_teacher_id: teacherId })
       ]);
 
-      if (assignmentsResponse.error) throw assignmentsResponse.error;
       if (examsResponse.error) throw examsResponse.error;
       if (classesResponse.error) throw classesResponse.error;
 
@@ -779,6 +837,25 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       });
 
       setClasses(sortedClasses);
+
+      // Fetch all students rooted to this teacher's classes
+      const classIds = sortedClasses.map((c: any) => c.id).filter(Boolean);
+      let fetchedRootedStudents: any[] = [];
+      if (classIds.length > 0) {
+        try {
+          const { data: stData } = await supabase
+            .from('students')
+            .select('id, name, class_id, grade, parent_code')
+            .in('class_id', classIds);
+          if (stData) {
+            fetchedRootedStudents = stData;
+          }
+        } catch (stErr) {
+          console.warn("Could not load rooted students for classes:", stErr);
+        }
+      }
+      setRootedStudents(fetchedRootedStudents);
+
       let assignmentsData: any[] = [];
       if (assignmentsResponse.data) {
         if (assignmentsResponse.data.success && Array.isArray(assignmentsResponse.data.assignments)) {
@@ -790,6 +867,19 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           if (innerArray) {
             assignmentsData = innerArray as any[];
           }
+        }
+      } else if (assignmentsResponse.error) {
+        console.warn("teacher_get_assignments RPC had an issue, fallback fetching direct assignments:", assignmentsResponse.error);
+        try {
+          const { data: directAsgns } = await supabase
+            .from('assignments')
+            .select('*')
+            .eq('teacher_id', teacherId);
+          if (directAsgns) {
+            assignmentsData = directAsgns;
+          }
+        } catch (dErr) {
+          console.warn("Direct assignments query failed:", dErr);
         }
       }
 
@@ -805,58 +895,124 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         console.warn("Failed to load teacher_subjects:", e);
       }
 
-      // Defensive fallback: Fetch school-wide broadcast assignments for this school
-      try {
-        const teacherSchool = (examsResponse.data && examsResponse.data.length > 0 ? (examsResponse.data[0] as any).school_name : null) || 
-                              (sortedClasses && sortedClasses.length > 0 ? sortedClasses[0].school_name : null);
-        
-        let actualSchoolName = teacherSchool;
-        if (!actualSchoolName) {
+      // Comprehensive retrieval of Admin & Broadcast Assignments:
+      let actualSchoolName: string | null = 
+        teacherCheck?.school_name || 
+        teacher?.school_name || 
+        (examsResponse.data && examsResponse.data.length > 0 ? (examsResponse.data[0] as any).school_name : null) || 
+        (sortedClasses && sortedClasses.length > 0 ? sortedClasses[0].school_name : null);
+
+      if (!actualSchoolName) {
+        try {
           const { data: teacherProfile } = await supabase
             .from('teachers')
             .select('school_name')
             .eq('id', teacherId)
             .maybeSingle();
-          if (teacherProfile) {
+          if (teacherProfile?.school_name) {
             actualSchoolName = teacherProfile.school_name;
           }
+        } catch (e) {
+          console.warn("Teacher profile school check error:", e);
+        }
+      }
+
+      try {
+        // 1. Fetch broadcast and admin-created assignments from assignments table
+        const { data: broadcasts, error: bError } = await supabase
+          .from('assignments')
+          .select('*')
+          .or('is_broadcast.eq.true,class_name.eq.School Broadcast,created_by_admin.eq.true');
+
+        if (!bError && broadcasts && broadcasts.length > 0) {
+          broadcasts.forEach((b: any) => {
+            if (!assignmentsData.some((a: any) => a.id === b.id)) {
+              assignmentsData.push(b);
+            }
+          });
         }
 
-        if (actualSchoolName) {
-          // Fetch broadcast assignments with flexible matching
-          const { data: broadcasts, error: bError } = await supabase
-            .from('assignments')
+        // 2. Fetch admin assignments from admin_assignments table
+        try {
+          const { data: adminAsgns } = await supabase
+            .from('admin_assignments')
             .select('*')
-            .or('is_broadcast.eq.true,class_name.eq.School Broadcast');
+            .order('created_at', { ascending: false });
 
-          if (!bError && broadcasts && broadcasts.length > 0) {
-            // Filter broadcasts: teacher must teach the broadcast's grade & subject (via teacher_subjects)
-            const relevantBroadcasts = broadcasts.filter((b: any) => {
-              if (actualSchoolName && b.school_name && b.school_name.trim().toLowerCase() !== actualSchoolName.trim().toLowerCase()) {
-                return false;
-              }
-              return isTeacherLinkedToAssignment(b, tSubjectsList, sortedClasses);
-            });
-
-            // Append with no duplicates
-            relevantBroadcasts.forEach((rb: any) => {
-              if (!assignmentsData.some((a: any) => a.id === rb.id)) {
-                assignmentsData.push(rb);
+          if (adminAsgns && adminAsgns.length > 0) {
+            adminAsgns.forEach((adm: any) => {
+              const normalizedAdm = {
+                ...adm,
+                id: adm.id,
+                title: adm.title,
+                subject: adm.subject,
+                grade: adm.grade,
+                class_name: 'School Broadcast',
+                is_broadcast: true,
+                created_by_admin: true,
+                school_name: adm.target_school_name || actualSchoolName,
+                questions: adm.questions,
+                share_code: adm.share_code,
+                due_date: adm.due_date || adm.created_at,
+                created_at: adm.created_at
+              };
+              if (!assignmentsData.some((a: any) => a.id === adm.id || (adm.share_code && a.share_code === adm.share_code))) {
+                assignmentsData.push(normalizedAdm);
               }
             });
           }
+        } catch (admErr) {
+          console.warn("Optional admin_assignments query:", admErr);
         }
       } catch (fallbackErr) {
         console.warn("Broadcast fallback retrieval warning:", fallbackErr);
       }
 
-      setAssignments(assignmentsData);
+      // Authoritative scoping: teacher sees:
+      // 1. Assignments created by this teacher
+      // 2. Regular class assignments belonging to teacher's classes
+      // 3. School admin broadcast assignments from this teacher's school matching grades & subjects taught
+      const currentTeacherName = teacherCheck?.name || teacher?.name;
+      const scopedAssignments = assignmentsData.filter((a: any) => {
+        return isTeacherLinkedToAssignment(a, tSubjectsList, sortedClasses, teacherId, actualSchoolName, currentTeacherName);
+      });
+
+      setAssignments(scopedAssignments);
       setExams(examsResponse.data || []);
+
+      // Also refresh pending submissions with known rooted students and class IDs
+      fetchPendingSubmissions(teacherId, classIds, fetchedRootedStudents);
     } catch (err: any) {
       console.error("Dashboard Loading Error:", err);
       showToast("Failed to load data: " + (err.message || "Unknown error"), "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteAssignment = async (assignmentId: string) => {
+    const asgn = assignments.find(a => a.id === assignmentId);
+    if (!asgn) return;
+    if (isSchoolAdminAssignment(asgn)) {
+      showToast("School Admin assignments are managed centrally by your school administrator and cannot be deleted by teachers.", "info");
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete "${asgn.title}"? This will permanently remove it and any student submissions.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('assignments')
+        .delete()
+        .eq('id', assignmentId)
+        .eq('teacher_id', teacher?.id);
+
+      if (error) throw error;
+      showToast("Assignment deleted successfully", "success");
+      setAssignments(prev => prev.filter(a => a.id !== assignmentId));
+    } catch (err: any) {
+      showToast("Failed to delete assignment: " + err.message, "error");
     }
   };
 
@@ -1199,6 +1355,20 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {activeView === 'classes' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
             </button>
             <button
+              onClick={() => setActiveView('assignments')}
+              className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 pb-2 transition-all relative shrink-0 ${
+                activeView === 'assignments' ? 'text-brand-accent' : 'text-brand-muted'
+              }`}
+            >
+              <FileText size={12} /> Assignments
+              {assignments.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-brand-accent/10 text-brand-accent rounded-full text-[8px] font-black leading-none border border-brand-accent/20">
+                  {assignments.length}
+                </span>
+              )}
+              {activeView === 'assignments' && <motion.div layoutId="activeTabT" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-accent rounded-full" />}
+            </button>
+            <button
               onClick={() => setActiveView('exams')}
               className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 pb-2 transition-all relative shrink-0 ${
                 activeView === 'exams' ? 'text-brand-accent' : 'text-brand-muted'
@@ -1251,6 +1421,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <ActionBtn onClick={onExamsClick} icon={<Plus size={12} />} label="Assessment" />
                   <ActionBtn onClick={() => setShowImportModal(true)} icon={<Download size={12} />} label="Import" />
                   <ActionBtn onClick={() => setShowRequestModal(true)} icon={<MessageCircle size={12} />} label="Request" green />
+                </>
+              ) : activeView === 'assignments' ? (
+                <>
+                  <ActionBtn onClick={() => onCreateAssignment()} icon={<Plus size={12} />} label="New Assignment" accent />
+                  <ActionBtn onClick={() => setShowImportModal(true)} icon={<Download size={12} />} label="Import with Code" />
+                  <ActionBtn onClick={() => setActiveView('grading_queue')} icon={<School size={12} />} label="Marking Queue" green />
                 </>
               ) : activeView === 'exams' ? (
                 <>
@@ -1545,15 +1721,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <>
                       {classes.map((cls, index) => {
                         const classAssignments = assignments.filter(a => {
-                          if (a.class_id === cls.id) return true;
-                          if (a.class_name && cls.name && a.class_name.toLowerCase() === cls.name.toLowerCase()) return true;
-                          if (a.is_broadcast && a.grade && cls.grade && a.grade.toLowerCase().trim() === cls.grade.toLowerCase().trim()) {
-                            return teacherSubjects.some(ts => 
-                              ts.class_id === cls.id && 
-                              (ts.subject?.toLowerCase().trim() === a.subject?.toLowerCase().trim() || ts.subject?.toLowerCase().trim() === 'general')
-                            );
-                          }
-                          return false;
+                          return isAssignmentForClass(a, cls.id, cls.name, cls.grade, teacherSubjects);
                         });
                         return (
                           <motion.div 
@@ -1568,10 +1736,25 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               <div className={`p-3 rounded-2xl ${index % 3 === 0 ? 'bg-blue-500/10 text-blue-500' : index % 3 === 1 ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'} group-hover:scale-110 transition-transform`}>
                                 <Users size={24} />
                               </div>
-                              <div className="flex items-center gap-1.5 ms-2">
-                                <div className="bg-brand-bg border border-brand-border px-3 py-1.5 rounded-xl whitespace-nowrap">
-                                  <span className="text-[10px] font-black tracking-wider text-brand-muted uppercase">{classAssignments.length} Assignment{classAssignments.length !== 1 ? 's' : ''}</span>
-                                </div>
+                              <div className="flex items-center gap-1.5 ms-2 flex-wrap justify-end">
+                                {classAssignments.length > 0 ? (
+                                  <>
+                                    {classAssignments.filter(a => isTeacherCreatedAssignment(a, teacher?.id)).length > 0 && (
+                                      <span className="text-[9px] font-black tracking-wider text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20 whitespace-nowrap">
+                                        {classAssignments.filter(a => isTeacherCreatedAssignment(a, teacher?.id)).length} My
+                                      </span>
+                                    )}
+                                    {classAssignments.filter(a => isSchoolAdminAssignment(a)).length > 0 && (
+                                      <span className="text-[9px] font-black tracking-wider text-purple-600 bg-purple-500/10 px-2 py-0.5 rounded-lg border border-purple-500/20 whitespace-nowrap">
+                                        {classAssignments.filter(a => isSchoolAdminAssignment(a)).length} Admin
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-[9px] font-black tracking-wider text-brand-muted bg-brand-bg px-2 py-0.5 rounded-lg border border-brand-border whitespace-nowrap">
+                                    0 Work
+                                  </span>
+                                )}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1673,6 +1856,348 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               );
             })()}
           </>
+        ) : activeView === 'assignments' ? (
+          <div className="space-y-4">
+            {/* Header with quick stats and filter pills */}
+            <div className="bg-brand-surface border border-brand-border rounded-2xl p-4 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-black uppercase tracking-wider text-brand-text flex items-center gap-2">
+                    <FileText size={16} className="text-brand-accent" />
+                    Assignments Hub
+                  </h2>
+                  <p className="text-xs text-brand-muted mt-0.5">
+                    Manage assignments you created and assignments dispatched by your school administrator.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => onCreateAssignment()}
+                    className="px-3 py-1.5 bg-brand-accent text-white rounded-xl text-xs font-bold hover:bg-brand-accent/90 transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Plus size={14} /> New Assignment
+                  </button>
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="px-3 py-1.5 bg-brand-bg border border-brand-border text-brand-text rounded-xl text-xs font-bold hover:border-brand-accent transition-all flex items-center gap-1.5"
+                  >
+                    <Download size={14} /> Import Code
+                  </button>
+                </div>
+              </div>
+
+              {/* Scope filter pills */}
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-brand-border/60">
+                <button
+                  onClick={() => setAssignmentFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                    assignmentFilter === 'all'
+                      ? 'bg-brand-text text-brand-bg shadow-sm'
+                      : 'bg-brand-bg border border-brand-border text-brand-muted hover:text-brand-text'
+                  }`}
+                >
+                  All Assignments
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-black/10">
+                    {assignments.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setAssignmentFilter('my_assignments')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                    assignmentFilter === 'my_assignments'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'bg-brand-bg border border-brand-border text-brand-muted hover:text-emerald-600'
+                  }`}
+                >
+                  <UserCheck size={13} />
+                  Created by You
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-black/10">
+                    {assignments.filter(a => isTeacherCreatedAssignment(a, teacher?.id)).length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setAssignmentFilter('broadcast')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                    assignmentFilter === 'broadcast'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'bg-brand-bg border border-brand-border text-brand-muted hover:text-purple-600'
+                  }`}
+                >
+                  <School size={13} />
+                  School Admin Broadcasts
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-black/10">
+                    {assignments.filter(a => isSchoolAdminAssignment(a)).length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Search & Subject filter bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" />
+                  <input
+                    type="text"
+                    placeholder="Search by title, subject, grade, code..."
+                    value={assignmentSearch}
+                    onChange={(e) => setAssignmentSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs text-brand-text placeholder:text-brand-muted focus:outline-none focus:border-brand-accent transition-colors"
+                  />
+                  {assignmentSearch && (
+                    <button
+                      onClick={() => setAssignmentSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-text text-xs"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={assignmentGradeFilter}
+                    onChange={(e) => setAssignmentGradeFilter(e.target.value)}
+                    className="px-3 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-medium text-brand-text focus:outline-none focus:border-brand-accent"
+                  >
+                    <option value="all">All Grades</option>
+                    {grades.map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={assignmentSubjectFilter}
+                    onChange={(e) => setAssignmentSubjectFilter(e.target.value)}
+                    className="px-3 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-medium text-brand-text focus:outline-none focus:border-brand-accent"
+                  >
+                    <option value="all">All Subjects</option>
+                    {CANONICAL_SUBJECTS.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Assignments List */}
+            {(() => {
+              const filteredList = assignments.filter(a => {
+                // Scope filter
+                if (assignmentFilter === 'my_assignments' && !isTeacherCreatedAssignment(a, teacher?.id)) return false;
+                if (assignmentFilter === 'broadcast' && !isSchoolAdminAssignment(a)) return false;
+
+                // Grade filter
+                if (assignmentGradeFilter !== 'all' && !isGradeMatch(a.grade, assignmentGradeFilter)) {
+                  return false;
+                }
+
+                // Subject filter
+                if (assignmentSubjectFilter !== 'all' && !isSubjectMatch(a.subject, assignmentSubjectFilter)) {
+                  return false;
+                }
+
+                // Search query
+                if (assignmentSearch.trim()) {
+                  const q = assignmentSearch.toLowerCase().trim();
+                  const matchTitle = a.title?.toLowerCase().includes(q);
+                  const matchSubject = a.subject?.toLowerCase().includes(q);
+                  const matchGrade = a.grade?.toLowerCase().includes(q);
+                  const matchCode = a.share_code?.toLowerCase().includes(q);
+                  const matchClass = a.class_name?.toLowerCase().includes(q);
+                  if (!matchTitle && !matchSubject && !matchGrade && !matchCode && !matchClass) {
+                    return false;
+                  }
+                }
+
+                return true;
+              });
+
+              if (filteredList.length === 0) {
+                return (
+                  <div className="py-16 text-center space-y-3 bg-brand-surface border border-brand-border border-dashed rounded-3xl p-6">
+                    <div className="w-12 h-12 bg-brand-accent/5 rounded-full flex items-center justify-center mx-auto text-brand-accent/40">
+                      <FileText size={24} />
+                    </div>
+                    <div>
+                      <p className="text-brand-text font-bold text-sm">No assignments found</p>
+                      <p className="text-xs text-brand-muted mt-1 max-w-sm mx-auto">
+                        {assignmentFilter === 'broadcast'
+                          ? "No school administrator broadcasts match your current filter. Broadcast assignments are dispatched by your school admin for your subjects and grades."
+                          : assignmentFilter === 'my_assignments'
+                          ? "You haven't created any assignments yet. Click 'New Assignment' to create one for your class."
+                          : "Try adjusting your search query or grade/subject filters."}
+                      </p>
+                    </div>
+                    {assignmentFilter === 'my_assignments' && (
+                      <button
+                        onClick={() => onCreateAssignment()}
+                        className="px-4 py-2 bg-brand-accent text-white rounded-xl text-xs font-bold hover:bg-brand-accent/90 transition-all inline-flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Plus size={14} /> Create Assignment
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredList.map((assignment, idx) => {
+                    const isAdmin = isSchoolAdminAssignment(assignment);
+                    const isMy = isTeacherCreatedAssignment(assignment, teacher?.id);
+
+                    // Parse questions count
+                    let questionCount = 0;
+                    if (Array.isArray(assignment.questions)) {
+                      questionCount = assignment.questions.length;
+                    } else if (typeof assignment.questions === 'string') {
+                      try {
+                        const parsed = JSON.parse(assignment.questions);
+                        questionCount = Array.isArray(parsed) ? parsed.length : 0;
+                      } catch {
+                        questionCount = 0;
+                      }
+                    }
+
+                    // Count pending submissions for this assignment
+                    const assignmentPendingSubs = pendingSubmissions.filter(ps => ps.assignment_id === assignment.id);
+
+                    return (
+                      <motion.div
+                        key={assignment.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.03 }}
+                        className={`p-5 rounded-2xl border bg-brand-surface transition-all hover:shadow-md flex flex-col justify-between ${
+                          isAdmin
+                            ? 'border-purple-500/20 hover:border-purple-500/50 bg-gradient-to-br from-purple-500/[0.02] to-brand-surface'
+                            : 'border-brand-border hover:border-emerald-500/50'
+                        }`}
+                      >
+                        <div>
+                          {/* Card Header: Origin Badge & Tags */}
+                          <div className="flex items-start justify-between gap-2 mb-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isAdmin ? (
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-600 border border-purple-500/20 flex items-center gap-1.5">
+                                  <School size={11} /> School Admin Broadcast
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1.5">
+                                  <UserCheck size={11} /> Created by You
+                                </span>
+                              )}
+
+                              <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-brand-bg text-brand-muted border border-brand-border">
+                                {assignment.grade || 'All Grades'}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-brand-bg text-brand-muted border border-brand-border">
+                                {assignment.subject || 'General'}
+                              </span>
+                            </div>
+
+                            {/* Actions delete button for teacher's own assignment */}
+                            {isMy && (
+                              <button
+                                onClick={() => handleDeleteAssignment(assignment.id)}
+                                className="p-1.5 hover:bg-red-500/10 text-brand-muted hover:text-red-500 rounded-lg transition-colors shrink-0"
+                                title="Delete assignment"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Assignment Title */}
+                          <h3 className="text-base font-black text-brand-text tracking-tight mb-1 line-clamp-2">
+                            {assignment.title}
+                          </h3>
+
+                          {/* Origin Subtitle */}
+                          <p className="text-xs text-brand-muted mb-3 flex items-center gap-1.5">
+                            {isAdmin ? (
+                              <span className="text-purple-600/80 font-medium">
+                                Centrally assigned by School Administration
+                              </span>
+                            ) : (
+                              <span>
+                                {assignment.class_name ? `Class: ${assignment.class_name}` : 'Classroom Assignment'}
+                              </span>
+                            )}
+                            {assignment.due_date && (
+                              <>
+                                <span>•</span>
+                                <span>Due {new Date(assignment.due_date).toLocaleDateString()}</span>
+                              </>
+                            )}
+                          </p>
+
+                          {/* Share code pill for teacher-created assignment */}
+                          {assignment.share_code && (
+                            <div
+                              onClick={() => {
+                                navigator.clipboard.writeText(assignment.share_code || '');
+                                showToast(`Share code ${assignment.share_code} copied!`, "success");
+                              }}
+                              className="mb-3 px-3 py-1.5 bg-brand-bg hover:bg-brand-accent/5 border border-brand-border hover:border-brand-accent/30 rounded-xl cursor-pointer transition-all flex items-center justify-between group"
+                              title="Click to copy student share code"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-brand-muted">Share Code</span>
+                                <span className="text-xs font-black tracking-wider text-brand-accent">{assignment.share_code}</span>
+                              </div>
+                              <Copy size={12} className="text-brand-muted group-hover:text-brand-accent transition-colors" />
+                            </div>
+                          )}
+
+                          {/* Meta stats */}
+                          <div className="flex items-center gap-3 text-xs text-brand-muted font-medium mb-4">
+                            <span className="flex items-center gap-1">
+                              <FileText size={12} /> {questionCount} {questionCount === 1 ? 'Question' : 'Questions'}
+                            </span>
+                            {assignmentPendingSubs.length > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                                {assignmentPendingSubs.length} pending to mark
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Card Action Buttons */}
+                        <div className="flex items-center gap-2 pt-3 border-t border-brand-border/60">
+                          {assignment.questions && (
+                            <button
+                              onClick={() => setPreviewAssignment(assignment)}
+                              className="px-3 py-1.5 bg-brand-bg hover:bg-brand-border/50 border border-brand-border text-brand-text rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                            >
+                              <Eye size={13} /> Preview
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => setActiveView('grading_queue')}
+                            className="flex-1 px-3 py-1.5 bg-brand-accent/10 hover:bg-brand-accent/20 border border-brand-accent/20 text-brand-accent rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <School size={13} />
+                            {assignmentPendingSubs.length > 0 ? `Mark (${assignmentPendingSubs.length})` : 'Mark Submissions'}
+                          </button>
+
+                          {assignment.class_id && assignment.class_id !== 'dynamic-class' && (
+                            <button
+                              onClick={() => onViewClass(assignment.class_id!, assignment.class_name || 'Class')}
+                              className="px-3 py-1.5 bg-brand-bg hover:border-brand-accent border border-brand-border text-brand-muted hover:text-brand-text rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                              title="Go to class view"
+                            >
+                              Class <ChevronRight size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
         ) : activeView === 'exams' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {exams.length === 0 ? (
@@ -1843,6 +2368,145 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     Don't have a code? Use the <span className="text-brand-accent">"Request Admin"</span> button to ask the admin to create professional work for you.
                  </p>
               </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {previewAssignment && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-brand-surface border border-brand-border rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-brand-border flex items-start justify-between gap-4 bg-brand-bg/50">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  {isSchoolAdminAssignment(previewAssignment) ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-600 border border-purple-500/20 flex items-center gap-1.5">
+                      <School size={11} /> School Admin Broadcast
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1.5">
+                      <UserCheck size={11} /> Created by You
+                    </span>
+                  )}
+                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-brand-bg text-brand-muted border border-brand-border">
+                    {previewAssignment.grade}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-brand-bg text-brand-muted border border-brand-border">
+                    {previewAssignment.subject}
+                  </span>
+                </div>
+                <h3 className="text-lg font-black text-brand-text tracking-tight">
+                  {previewAssignment.title}
+                </h3>
+              </div>
+              <button
+                onClick={() => setPreviewAssignment(null)}
+                className="w-9 h-9 rounded-xl bg-brand-bg border border-brand-border flex items-center justify-center text-brand-muted hover:text-brand-text transition-colors shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Questions list */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {(() => {
+                let questionsList: any[] = [];
+                if (Array.isArray(previewAssignment.questions)) {
+                  questionsList = previewAssignment.questions;
+                } else if (typeof previewAssignment.questions === 'string') {
+                  try {
+                    questionsList = JSON.parse(previewAssignment.questions);
+                  } catch {
+                    questionsList = [];
+                  }
+                }
+
+                if (!questionsList || questionsList.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-brand-muted text-xs">
+                      No question details available for this assignment.
+                    </div>
+                  );
+                }
+
+                return questionsList.map((q: any, qIdx: number) => (
+                  <div
+                    key={q.id || qIdx}
+                    className="p-4 rounded-2xl bg-brand-bg border border-brand-border/80 space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-brand-accent/10 text-brand-accent font-black text-xs flex items-center justify-center">
+                          {qIdx + 1}
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
+                          {q.type === 'multiple_choice' ? 'Multiple Choice' : q.type === 'photo' ? 'Photo Submission' : 'Short Answer'}
+                        </span>
+                      </div>
+                      {q.max_marks && (
+                        <span className="text-[10px] font-bold text-brand-muted">
+                          {q.max_marks} marks
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-xs font-bold text-brand-text leading-relaxed">
+                      {q.text || q.question || 'Question prompt'}
+                    </p>
+
+                    {/* MCQ Options if available */}
+                    {q.options && Array.isArray(q.options) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                        {q.options.map((opt: string, optIdx: number) => {
+                          const isCorrect = q.correct_answer === opt;
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`px-3 py-2 rounded-xl text-xs flex items-center gap-2 border ${
+                                isCorrect
+                                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 font-bold'
+                                  : 'bg-brand-surface border-brand-border text-brand-muted'
+                              }`}
+                            >
+                              <span className="text-[10px] font-black">{String.fromCharCode(65 + optIdx)}.</span>
+                              <span className="flex-1">{opt}</span>
+                              {isCorrect && <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Correct answer or rubric display for teacher preview */}
+                    {q.correct_answer && q.type !== 'multiple_choice' && (
+                      <div className="pt-1 text-[11px] text-emerald-600 bg-emerald-500/5 border border-emerald-500/20 px-3 py-1.5 rounded-xl font-medium">
+                        <span className="font-bold">Correct Answer / Model:</span> {q.correct_answer}
+                      </div>
+                    )}
+                    {q.rubric && (
+                      <div className="pt-1 text-[11px] text-brand-muted bg-brand-surface border border-brand-border px-3 py-1.5 rounded-xl">
+                        <span className="font-bold text-brand-text">Grading Rubric:</span> {q.rubric}
+                      </div>
+                    )}
+                  </div>
+                ));
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-brand-border bg-brand-bg/50 flex items-center justify-end">
+              <button
+                onClick={() => setPreviewAssignment(null)}
+                className="px-4 py-2 bg-brand-accent text-white rounded-xl text-xs font-bold hover:bg-brand-accent/90 transition-colors"
+              >
+                Close Preview
+              </button>
             </div>
           </motion.div>
         </div>
