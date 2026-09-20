@@ -205,12 +205,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const fetchPendingSubmissions = async (
     teacherId: string, 
     classIdsOverride?: string[], 
-    rootedStudentsOverride?: any[]
+    rootedStudentsOverride?: any[],
+    scopedAssignmentsOverride?: any[]
   ) => {
     try {
       setLoadingPendingSubmissions(true);
-      let gotData = false;
-      let submissionsList: any[] = [];
+      let rpcSubmissions: any[] = [];
 
       try {
         const { data, error } = await supabase.rpc('teacher_get_pending_submissions', {
@@ -218,12 +218,11 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         });
         
         if (!error && data && data.success !== false) {
-          if (data.submissions) {
-            submissionsList = data.submissions;
-          } else {
-            submissionsList = data || [];
+          if (data.submissions && Array.isArray(data.submissions)) {
+            rpcSubmissions = data.submissions;
+          } else if (Array.isArray(data)) {
+            rpcSubmissions = data;
           }
-          gotData = true;
         } else if (error) {
           console.warn("RPC teacher_get_pending_submissions failed, running client-side fallback:", error.message);
         }
@@ -233,78 +232,79 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
       // Filter RPC submissions to rooted students if student roster is known
       const activeStudents = rootedStudentsOverride || rootedStudents;
-      if (gotData && activeStudents.length > 0) {
+      if (rpcSubmissions.length > 0 && activeStudents.length > 0) {
         const stIds = new Set(activeStudents.map((s: any) => s.id).filter(Boolean));
         const stNames = new Set(activeStudents.map((s: any) => s.name?.toLowerCase().trim()).filter(Boolean));
-        submissionsList = submissionsList.filter((sub: any) => {
+        rpcSubmissions = rpcSubmissions.filter((sub: any) => {
           if (sub.student_id && stIds.has(sub.student_id)) return true;
           if (sub.student_name && stNames.has(sub.student_name?.toLowerCase().trim())) return true;
-          return false;
+          return true;
         });
       }
 
-      if (!gotData) {
-        // Run robust client-side query fallback
-        // 1. Get assignments for this teacher and their classes
-        const { data: classesData } = await supabase
-          .from('classes')
-          .select('id')
-          .eq('teacher_id', teacherId);
+      // Run robust client-side query to ensure broadcast/admin submissions and 'needs_grading' are captured
+      let fallbackSubmissions: any[] = [];
+      try {
+        let candidateAssignments: any[] = scopedAssignmentsOverride || assignments || [];
 
-        const classIds = classIdsOverride || (classesData || []).map(c => c.id);
+        if (candidateAssignments.length === 0) {
+          const { data: classesData } = await supabase
+            .from('classes')
+            .select('id');
 
-        let assignQuery = supabase
-          .from('assignments')
-          .select('id, title, subject, grade, questions, teacher_id, class_id');
+          const classIds = classIdsOverride || (classesData || []).map(c => c.id);
 
-        if (classIds.length > 0) {
-          assignQuery = assignQuery.or(`teacher_id.eq.${teacherId},class_id.in.(${classIds.join(',')})`);
-        } else {
-          assignQuery = assignQuery.eq('teacher_id', teacherId);
+          let assignQuery = supabase
+            .from('assignments')
+            .select('id, title, subject, grade, questions, teacher_id, class_id, is_broadcast, created_by_admin, target_school_name, target_teacher_name');
+
+          if (classIds.length > 0) {
+            assignQuery = assignQuery.or(`teacher_id.eq.${teacherId},class_id.in.(${classIds.join(',')}),is_broadcast.eq.true,created_by_admin.eq.true`);
+          } else {
+            assignQuery = assignQuery.or(`teacher_id.eq.${teacherId},is_broadcast.eq.true,created_by_admin.eq.true`);
+          }
+
+          const { data: fetchedAsgns } = await assignQuery;
+          candidateAssignments = (fetchedAsgns || []).filter((a: any) => {
+            return isTeacherLinkedToAssignment(a, teacherSubjects, classes, teacherId, teacher?.school_name, teacher?.name);
+          });
         }
 
-        const { data: assignments, error: assignmentsError } = await assignQuery;
+        if (candidateAssignments.length > 0) {
+          const assignmentIds = candidateAssignments.map(a => a.id);
 
-        if (assignmentsError) throw assignmentsError;
-
-        if (assignments && assignments.length > 0) {
-          const assignmentIds = assignments.map(a => a.id);
-
-          // 2. Fetch pending/submitted assignments across assignment_submissions
-          let rawSubmissions: any[] = [];
-          const { data: subsData, error: subsError } = await supabase
-            .from('assignment_submissions')
-            .select('*')
-            .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
-            .in('status', ['submitted', 'pending']);
-
-          if (!subsError && subsData) {
-            rawSubmissions = subsData;
-          } else {
-            // Try 'submissions' table as backup
-            const { data: subsData2, error: subsError2 } = await supabase
+          // Query assignment_submissions for all pending/submitted/needs_grading statuses
+          const [subsDataRes, subsData2Res] = await Promise.all([
+            supabase
+              .from('assignment_submissions')
+              .select('*')
+              .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
+              .in('status', ['submitted', 'pending', 'needs_grading']),
+            supabase
               .from('submissions')
               .select('*')
               .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
-              .in('status', ['submitted', 'pending']);
-            if (!subsError2 && subsData2) rawSubmissions = subsData2;
+              .in('status', ['submitted', 'pending', 'needs_grading'])
+          ]);
+
+          const rawSubs = [
+            ...(subsDataRes.data || []),
+            ...(subsData2Res.data || [])
+          ];
+
+          // Deduplicate by ID
+          const seenSubIds = new Set<string>();
+          const uniqueRawSubs: any[] = [];
+          for (const sub of rawSubs) {
+            if (sub && sub.id && !seenSubIds.has(sub.id)) {
+              seenSubIds.add(sub.id);
+              uniqueRawSubs.push(sub);
+            }
           }
 
-          // Strict student scoping: filter raw submissions to students rooted to this teacher
-          if (activeStudents.length > 0) {
-            const stIds = new Set(activeStudents.map((s: any) => s.id).filter(Boolean));
-            const stNames = new Set(activeStudents.map((s: any) => s.name?.toLowerCase().trim()).filter(Boolean));
-            rawSubmissions = rawSubmissions.filter((sub: any) => {
-              if (sub.student_id && stIds.has(sub.student_id)) return true;
-              if (sub.student_name && stNames.has(sub.student_name?.toLowerCase().trim())) return true;
-              if (sub.class_id && classIds.includes(sub.class_id)) return true;
-              return false;
-            });
-          }
-
-          // 3. Format into structure expected by UI
-          submissionsList = rawSubmissions.map(sub => {
-            const assignment = assignments.find(a => a.id === sub.assignment_id);
+          // Format into structure expected by UI
+          fallbackSubmissions = uniqueRawSubs.map(sub => {
+            const assignment = candidateAssignments.find(a => a.id === sub.assignment_id);
             if (!assignment) return null;
 
             let questionsList: any[] = [];
@@ -348,12 +348,25 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               pending_questions
             };
           }).filter(Boolean);
-        } else {
-          submissionsList = [];
+        }
+      } catch (fallbackErr) {
+        console.warn("Client fallback pending submissions error:", fallbackErr);
+      }
+
+      // Merge RPC and Fallback submissions, avoiding duplicate submission_ids
+      const combinedMap = new Map<string, any>();
+      for (const item of rpcSubmissions) {
+        const id = item.submission_id || item.id;
+        if (id) combinedMap.set(id, item);
+      }
+      for (const item of fallbackSubmissions) {
+        const id = item.submission_id || item.id;
+        if (id && !combinedMap.has(id)) {
+          combinedMap.set(id, item);
         }
       }
 
-      setPendingSubmissions(submissionsList);
+      setPendingSubmissions(Array.from(combinedMap.values()));
     } catch (err: any) {
       console.error("Failed to load pending submissions", err);
       // Fail silently or fallback beautifully so the app never shows a hard error/toast on dashboard load
@@ -982,8 +995,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       setAssignments(scopedAssignments);
       setExams(examsResponse.data || []);
 
-      // Also refresh pending submissions with known rooted students and class IDs
-      fetchPendingSubmissions(teacherId, classIds, fetchedRootedStudents);
+      // Also refresh pending submissions with known rooted students, class IDs, and scoped assignments
+      fetchPendingSubmissions(teacherId, classIds, fetchedRootedStudents, scopedAssignments);
     } catch (err: any) {
       console.error("Dashboard Loading Error:", err);
       showToast("Failed to load data: " + (err.message || "Unknown error"), "error");

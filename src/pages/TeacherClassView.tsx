@@ -549,7 +549,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         const { data: broadcasts, error: bError } = await supabase
           .from('assignments')
           .select('*')
-          .or('is_broadcast.eq.true,class_name.eq.School Broadcast,created_by_admin.eq.true');
+          .or('is_broadcast.eq.true,class_name.eq.School Broadcast,created_by_admin.eq.true,target_school_name.not.is.null');
 
         let teacherClasses: any[] = [];
         try {
@@ -669,17 +669,42 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       const fetchSubmissionsAndAcks = [
         assignmentIds.length > 0 ? (async () => {
           try {
-            return await supabase
-              .from('assignment_submissions')
-              .select('*')
-              .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`);
+            const [res1, res2] = await Promise.all([
+              supabase
+                .from('assignment_submissions')
+                .select('*')
+                .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`),
+              supabase
+                .from('submissions')
+                .select('*')
+                .or(`teacher_id.eq.${teacherId},assignment_id.in.(${assignmentIds.join(',')})`)
+            ]);
+            const combined = [...(res1.data || []), ...(res2.data || [])];
+            const seen = new Set();
+            const unique = combined.filter((s: any) => {
+              if (!s || !s.id || seen.has(s.id)) return false;
+              seen.add(s.id);
+              return true;
+            });
+            return { data: unique, error: null };
           } catch (e: any) {
             console.warn("assignment_submissions fetch error in ClassView:", e);
             return { data: [], error: null };
           }
         })() : (async () => {
           try {
-            return await supabase.from('assignment_submissions').select('*').eq('teacher_id', teacherId);
+            const [res1, res2] = await Promise.all([
+              supabase.from('assignment_submissions').select('*').eq('teacher_id', teacherId),
+              supabase.from('submissions').select('*').eq('teacher_id', teacherId)
+            ]);
+            const combined = [...(res1.data || []), ...(res2.data || [])];
+            const seen = new Set();
+            const unique = combined.filter((s: any) => {
+              if (!s || !s.id || seen.has(s.id)) return false;
+              seen.add(s.id);
+              return true;
+            });
+            return { data: unique, error: null };
           } catch (e: any) {
             console.warn("assignment_submissions by teacher_id fetch error:", e);
             return { data: [], error: null };
@@ -1061,7 +1086,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               {(() => {
                 const broadcastSubs = submissions.filter(s => {
                   const asgn = assignments.find(a => a.id === s.assignment_id);
-                  const isBroadcast = s.is_broadcast === true || asgn?.is_broadcast === true || asgn?.class_name === 'School Broadcast' || !asgn?.class_id;
+                  const isBroadcast = s.is_broadcast === true || asgn?.is_broadcast === true || asgn?.class_name === 'School Broadcast' || !asgn?.class_id || asgn?.created_by_admin === true || Boolean(asgn?.target_school_name);
                   if (!isBroadcast) return false;
                   // Exclude pending status; treat all other statuses (submitted, needs_grading, graded, returned, etc.) as submitted
                   const status = (s.status || '').toLowerCase().trim();
@@ -1456,6 +1481,67 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                              <p className="text-xs font-bold text-brand-muted">No student list provided for this class.</p>
                           </div>
                         )}
+
+                        {/* Extra Submissions (from broadcast, other streams, or newly enrolled students) */}
+                        {(() => {
+                          const extraSubmissions = assignmentSubmissions.filter(sub => {
+                            return !students.some(st => 
+                              (sub.student_id && st.id && sub.student_id === st.id) ||
+                              (sub.student_name && st.name && sub.student_name.trim().toLowerCase() === st.name.trim().toLowerCase())
+                            );
+                          });
+
+                          if (extraSubmissions.length === 0) return null;
+
+                          return (
+                            <div className="mt-4 pt-4 border-t border-brand-border/60">
+                              <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-3 px-1 flex items-center gap-1.5">
+                                <span>📢 Broadcast & Additional Student Submissions ({extraSubmissions.length})</span>
+                              </h5>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {extraSubmissions.map(sub => (
+                                  <div 
+                                    key={sub.id}
+                                    className="flex items-center justify-between p-4 rounded-2xl border transition-all bg-indigo-500/5 border-indigo-500/20"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs bg-indigo-500/10 text-indigo-600">
+                                        <CheckCircle2 size={18} />
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <p className="font-bold text-sm text-brand-text">{sub.student_name || 'Student'}</p>
+                                          <span className="text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/15">
+                                            {sub.status || 'Submitted'}
+                                          </span>
+                                        </div>
+                                        <p className="text-[9px] font-black text-brand-muted uppercase tracking-widest mt-0.5">
+                                          Submitted: {sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : 'Recent'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button 
+                                        onClick={() => openSubmissionDetails(sub)}
+                                        className="px-3 py-1.5 bg-brand-accent text-white rounded-lg text-xs font-black shadow-sm hover:opacity-90 transition-all active:scale-95 flex items-center gap-1.5"
+                                      >
+                                        <FileText size={13} />
+                                        <span>View & Mark</span>
+                                      </button>
+                                      {((sub.percentage !== null && sub.percentage !== undefined) || sub.score !== null) && (
+                                        <GradeBadge 
+                                          percentage={sub.percentage ?? sub.score} 
+                                          gradeLabel={sub.grade_label} 
+                                          size="xs" 
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </motion.div>
                   )}

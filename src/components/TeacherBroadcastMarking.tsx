@@ -263,12 +263,14 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
         assignmentsRpcRes,
         teacherCreatedRes,
         broadcastsRes,
+        adminAsgnsRes,
         directSubsRes,
         legacySubsRes
       ] = await Promise.all([
         supabase.rpc('teacher_get_assignments', { p_teacher_id: teacher.id }),
         supabase.from('assignments').select('*').eq('teacher_id', teacher.id).order('created_at', { ascending: false }),
-        supabase.from('assignments').select('*').or('is_broadcast.eq.true,class_name.eq.School Broadcast,created_by_admin.eq.true').order('created_at', { ascending: false }),
+        supabase.from('assignments').select('*').or('is_broadcast.eq.true,class_name.eq.School Broadcast,created_by_admin.eq.true,target_school_name.not.is.null').order('created_at', { ascending: false }),
+        supabase.from('admin_assignments').select('*').order('created_at', { ascending: false }),
         supabase.from('assignment_submissions').select('*').order('submitted_at', { ascending: false }),
         supabase.from('submissions').select('*').order('submitted_at', { ascending: false })
       ]);
@@ -301,6 +303,32 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
         relevantBroadcasts.forEach((rb: any) => {
           if (rb && rb.id) assignmentMap.set(rb.id, rb);
+        });
+      }
+
+      // D. Process admin_assignments table
+      if (adminAsgnsRes.data && adminAsgnsRes.data.length > 0) {
+        adminAsgnsRes.data.forEach((adm: any) => {
+          const normalizedAdm: any = {
+            ...adm,
+            id: adm.id,
+            title: adm.title,
+            subject: adm.subject,
+            grade: adm.grade,
+            class_name: 'School Broadcast',
+            is_broadcast: true,
+            created_by_admin: true,
+            target_school_name: adm.target_school_name || teacherSchool,
+            questions: adm.questions,
+            share_code: adm.share_code,
+            due_date: adm.due_date || adm.created_at,
+            created_at: adm.created_at
+          };
+          if (isTeacherLinkedToAssignment(normalizedAdm, teacherSubjectsRef.current, classesRef.current, teacher.id, teacherSchool, teacher.name)) {
+            if (!assignmentMap.has(normalizedAdm.id)) {
+              assignmentMap.set(normalizedAdm.id, normalizedAdm);
+            }
+          }
         });
       }
 
@@ -359,26 +387,46 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
       // Strict assignment scoping: only assignments this teacher is linked to
       const finalAssignments = Array.from(assignmentMap.values()).filter((a: any) => {
-        return isTeacherLinkedToAssignment(a, teacherSubjectsRef.current, classesRef.current, teacher.id, teacherSchool);
+        return isTeacherLinkedToAssignment(a, teacherSubjectsRef.current, classesRef.current, teacher.id, teacherSchool, teacher.name);
       });
       const assignmentIdSet = new Set(finalAssignments.map(a => a.id));
 
-      // Strict submission scoping: submissions must belong to teacher's assignments AND rooted students
+      // Submission scoping: submissions for linked assignments are always included
       const stIds = new Set(rootedStudents.map((s: any) => s.id).filter(Boolean));
       const stNames = new Set(rootedStudents.map((s: any) => s.name?.toLowerCase().trim()).filter(Boolean));
 
       const relevantSubmissions = normalizedSubs.filter(s => {
-        if (!assignmentIdSet.has(s.assignment_id) && s.teacher_id !== teacher.id) {
-          return false;
+        // 1. If submission belongs to an assignment this teacher is linked to, ALWAYS include it
+        if (assignmentIdSet.has(s.assignment_id)) {
+          return true;
         }
+        // 2. If submission is assigned directly to this teacher
+        if (s.teacher_id === teacher.id) {
+          return true;
+        }
+        // 3. If student is rooted to one of teacher's classes
         if (rootedStudents.length > 0) {
           if (s.student_id && stIds.has(s.student_id)) return true;
           if (s.student_name && stNames.has(s.student_name?.toLowerCase().trim())) return true;
-          if (s.teacher_id === teacher.id) return true;
-          return false;
         }
-        return true;
+        return false;
       });
+
+      // Auto-associate broadcast submissions with teacher if currently unassigned
+      const unassignedSubs = relevantSubmissions.filter(s => !s.teacher_id && assignmentIdSet.has(s.assignment_id));
+      if (unassignedSubs.length > 0) {
+        const unassignedIds = unassignedSubs.map(s => s.id);
+        void (async () => {
+          try {
+            await supabase
+              .from('assignment_submissions')
+              .update({ teacher_id: teacher.id })
+              .in('id', unassignedIds);
+          } catch (e) {
+            console.warn("Could not auto-link teacher_id to submissions:", e);
+          }
+        })();
+      }
 
       setAssignments(finalAssignments);
       setSubmissions(relevantSubmissions);

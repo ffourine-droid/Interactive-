@@ -62,7 +62,8 @@ export const isSchoolAdminAssignment = (asgn: any): boolean => {
     Boolean(asgn.broadcast_id) ||
     Boolean(asgn.target_school_name) ||
     Boolean(asgn.target_teacher_name) ||
-    (!asgn.class_id && asgn.school_name && !asgn.teacher_id)
+    Boolean(asgn.target_teacher_id) ||
+    (!asgn.class_id && (asgn.school_name || asgn.target_school_name) && !asgn.teacher_id)
   );
 };
 
@@ -105,8 +106,12 @@ export const isTeacherLinkedToAssignment = (
   if (teacherId && asgn.target_teacher_id && asgn.target_teacher_id === teacherId) {
     return true;
   }
-  if (teacherName && asgn.target_teacher_name && teacherName.toLowerCase().trim() === asgn.target_teacher_name.toLowerCase().trim()) {
-    return true;
+  if (teacherName && asgn.target_teacher_name) {
+    const tName = teacherName.toLowerCase().trim();
+    const asgnTName = asgn.target_teacher_name.toLowerCase().trim();
+    if (tName === asgnTName || tName.includes(asgnTName) || asgnTName.includes(tName)) {
+      return true;
+    }
   }
 
   const isAdminBroadcast = isSchoolAdminAssignment(asgn);
@@ -114,8 +119,9 @@ export const isTeacherLinkedToAssignment = (
   // 3. Handling for School Admin Broadcast assignments
   if (isAdminBroadcast) {
     // School Name validation (if both school names are available)
-    if (teacherSchoolName && asgn.school_name) {
-      if (!isSchoolMatch(teacherSchoolName, asgn.school_name)) {
+    const asgnSchool = asgn.school_name || asgn.target_school_name;
+    if (teacherSchoolName && asgnSchool) {
+      if (!isSchoolMatch(teacherSchoolName, asgnSchool)) {
         return false;
       }
     }
@@ -178,6 +184,11 @@ export const isTeacherLinkedToAssignment = (
     // If assignment is general / all grades
     if (!asgnGrade || asgnGrade.toLowerCase().trim() === 'all' || asgnGrade.toLowerCase().trim() === 'all grades' || asgnGrade.toLowerCase().trim() === 'general') {
       return true;
+    }
+
+    // If the teacher belongs to the school and has matching grade in classes or subjects
+    if (teacherSchoolName && asgnSchool && isSchoolMatch(teacherSchoolName, asgnSchool)) {
+      if (matchingGradeClasses.length > 0) return true;
     }
 
     return false;
