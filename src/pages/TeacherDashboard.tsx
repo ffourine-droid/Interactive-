@@ -363,15 +363,9 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   };
 
-  const handleGradeQuestion = async (submissionId: string, questionId: string, maxMarks: number) => {
+  const handleGradeQuestion = async (submissionId: string, questionId: string, isCorrect: boolean, comment?: string) => {
     const key = `${submissionId}-${questionId}`;
-    const enteredMarks = gradingMarks[key] ?? 0;
-    const enteredComment = gradingComments[key] || '';
-
-    if (enteredMarks < 0 || enteredMarks > maxMarks) {
-      showToast(`Marks must be between 0 and ${maxMarks}`, "error");
-      return;
-    }
+    const enteredComment = comment || gradingComments[key] || '';
 
     setSubmittingGrades(prev => ({ ...prev, [key]: true }));
 
@@ -384,7 +378,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           p_teacher_id: teacher?.id,
           p_submission_id: submissionId,
           p_question_id: questionId,
-          p_marks_awarded: enteredMarks,
+          p_correct: isCorrect,
           p_comment: enteredComment || null
         });
 
@@ -422,14 +416,18 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           throw new Error("Submission not found");
         }
 
-        // Calculate new score
-        const updatedScore = (sub.score || 0) + enteredMarks;
+        const currentGrading = { ...(sub.grading || {}) };
+        currentGrading[questionId] = {
+          correct: isCorrect,
+          marks_awarded: isCorrect ? 10 : 0,
+          comment: enteredComment || null
+        };
 
         // Update the database directly
         const { error: updateError } = await supabase
           .from(submissionTable)
           .update({
-            score: updatedScore,
+            grading: currentGrading,
             status: 'graded',
             graded_at: new Date().toISOString(),
             teacher_id: teacher?.id || sub.teacher_id,
@@ -443,10 +441,14 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         rpcResult = { success: true, fully_graded: true };
       }
 
-      showToast("Question graded successfully!", "success");
+      const isFullyGraded = rpcResult?.fully_graded ?? true;
+      if (isFullyGraded && rpcResult?.percentage !== undefined && rpcResult?.grade_label) {
+        showToast(`Graded! ${rpcResult.percentage}% — ${rpcResult.grade_label}`, "success");
+      } else {
+        showToast("Question marked successfully!", "success");
+      }
 
       // Update state based on fully_graded
-      const isFullyGraded = rpcResult?.fully_graded ?? true;
       setPendingSubmissions(prev => {
         if (isFullyGraded) {
           // Remove the entire submission card

@@ -4,12 +4,14 @@ import {
   ShieldCheck, 
   ArrowLeft, 
   Loader2, 
-  HelpCircle,
   ChevronRight,
   GraduationCap,
-  Lock,
   LockKeyhole,
-  LogOut
+  LogOut,
+  User,
+  Building2,
+  Hash,
+  BookOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -47,7 +49,7 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
     e.preventDefault();
     
     if (!formData.studentName.trim() || !formData.schoolName.trim() || !formData.grade || !formData.indexNumber.trim()) {
-      showToast("Please fill in all details", "error");
+      showToast("Please fill in all student details", "error");
       return;
     }
 
@@ -86,7 +88,7 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
 
       if (data.pin_set === false) {
         setStep('set_pin');
-        showToast("Student found! Please set a 4-digit access PIN.", "success");
+        showToast("Student found! Create your 4-digit parent PIN.", "success");
       } else {
         setStep('enter_pin');
         showToast("Student found! Enter your 4-digit PIN.", "success");
@@ -163,7 +165,7 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
       const isSuccess = data === true || data?.success === true;
       if (!isSuccess) {
         if (data?.attempts_left !== undefined) {
-          showToast(`Incorrect PIN. ${data.attempts_left} attempts left before account lockout.`, "error");
+          showToast(`Incorrect PIN. ${data.attempts_left} attempts left.`, "error");
         } else {
           showToast("Incorrect PIN. Please try again.", "error");
         }
@@ -249,23 +251,21 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
   const grades = Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`);
 
   return (
-    <div className="min-h-screen bg-brand-bg text-brand-text p-4 pb-12">
-      <main className={`${student ? 'max-w-4xl' : 'max-w-md'} mx-auto py-6`}>
+    <div className="min-h-screen bg-brand-bg text-brand-text p-4 sm:p-6 pb-16">
+      <div className={`${student ? 'max-w-5xl' : 'max-w-md'} mx-auto`}>
         
         {/* Navigation / Back Header */}
         {!student && onBack && (
-          <button 
-            type="button"
-            onClick={step === 'lookup' ? onBack : handleResetToLookup}
-            className="inline-flex items-center gap-2 text-brand-muted hover:text-brand-accent transition-colors mb-6 group"
-          >
-            <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border flex items-center justify-center group-hover:border-brand-accent group-hover:bg-brand-accent/5">
-              <ArrowLeft size={14} />
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              {step === 'lookup' ? 'Go Back' : 'Back to Search'}
-            </span>
-          </button>
+          <div className="mb-6">
+            <button 
+              type="button"
+              onClick={step === 'lookup' ? onBack : handleResetToLookup}
+              className="inline-flex items-center gap-2 text-xs font-semibold text-brand-muted hover:text-brand-text transition-colors py-2 px-3 rounded-lg hover:bg-brand-surface border border-transparent hover:border-brand-border"
+            >
+              <ArrowLeft size={16} />
+              <span>{step === 'lookup' ? 'Back to Portals' : 'Back to Search'}</span>
+            </button>
+          </div>
         )}
 
         {/* Transition forms layout */}
@@ -273,38 +273,37 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
           {!student ? (
             <div className="space-y-6">
               
-              {/* Logo / Brand Header */}
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="w-16 h-16 bg-[#FF6B2C] rounded-[2rem] flex items-center justify-center text-white shadow-xl shadow-[#FF6B2C]/20 transform rotate-12">
-                  <GraduationCap size={32} />
+              {/* Clean Brand Header */}
+              <div className="text-center space-y-2">
+                <div className="inline-flex w-12 h-12 rounded-2xl bg-brand-accent/10 border border-brand-accent/20 items-center justify-center text-brand-accent mb-1 shadow-sm">
+                  <GraduationCap size={26} />
                 </div>
-                <div className="space-y-1">
-                  <h1 className="text-2xl font-black tracking-tight leading-none">AziLearn</h1>
-                  <p className="text-brand-muted text-[10px] font-bold uppercase tracking-[0.2em]">Parent Progress Check</p>
-                </div>
+                <h1 className="text-2xl font-bold tracking-tight text-brand-text">Parent Portal</h1>
+                <p className="text-xs text-brand-muted max-w-xs mx-auto leading-relaxed">
+                  View your child's assignments, test scores, study progress, and teacher remarks.
+                </p>
               </div>
 
               {/* Form container card */}
-              <div className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-2xl shadow-brand-accent/5 backdrop-blur-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-[#FF6B2C]/5 rounded-full -mr-12 -mt-12 blur-3xl" />
-                
+              <div className="bg-brand-surface border border-brand-border rounded-2xl p-6 sm:p-8 shadow-sm">
                 {step === 'lookup' && (
                   <motion.div
                     key="lookup"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
                     className="space-y-5"
                   >
-                    <div className="space-y-2 text-center pb-1">
-                      <h2 className="text-lg font-black tracking-tight">Parent Access</h2>
-                      <p className="text-brand-muted text-[10px] font-medium px-4">Enter details as registered in school.</p>
+                    <div className="pb-1 border-b border-brand-border/60">
+                      <h2 className="text-sm font-bold text-brand-text">Student Search</h2>
+                      <p className="text-xs text-brand-muted mt-0.5">Enter details as registered with the school</p>
                     </div>
 
-                    <form onSubmit={handleLookup} className="space-y-5 relative z-10">
+                    <form onSubmit={handleLookup} className="space-y-4">
                       {/* Name input */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                        <label className="flex items-center gap-1.5 text-xs font-semibold text-brand-text">
+                          <User size={14} className="text-brand-muted" />
                           Child's Full Name
                         </label>
                         <input 
@@ -312,13 +311,14 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                           value={formData.studentName}
                           onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
                           placeholder="e.g. John Mwangi"
-                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none transition-all placeholder:text-brand-muted/30"
+                          className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 px-3.5 text-sm font-medium text-brand-text focus:border-brand-accent focus:bg-brand-surface outline-none transition-all placeholder:text-brand-muted/40"
                         />
                       </div>
 
                       {/* School Name input */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                        <label className="flex items-center gap-1.5 text-xs font-semibold text-brand-text">
+                          <Building2 size={14} className="text-brand-muted" />
                           School Name
                         </label>
                         <input 
@@ -326,40 +326,44 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                           value={formData.schoolName}
                           onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
                           placeholder="e.g. Starehe Boys"
-                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none transition-all placeholder:text-brand-muted/30"
+                          className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 px-3.5 text-sm font-medium text-brand-text focus:border-brand-accent focus:bg-brand-surface outline-none transition-all placeholder:text-brand-muted/40"
                         />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         {/* Grade selection dropdown */}
                         <div className="space-y-1.5">
-                          <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
-                            Grade
+                          <label className="flex items-center gap-1.5 text-xs font-semibold text-brand-text">
+                            <BookOpen size={14} className="text-brand-muted" />
+                            Grade / Level
                           </label>
                           <select 
                             value={formData.grade}
                             onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
-                            className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-4 font-bold text-sm text-brand-text focus:border-[#FF6B2C] outline-none appearance-none transition-all"
+                            className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 px-3 text-sm font-medium text-brand-text focus:border-brand-accent focus:bg-brand-surface outline-none transition-all cursor-pointer"
                           >
-                            <option value="">Select...</option>
+                            <option value="">Select Grade</option>
                             {grades.map(g => (
                               <option key={g} value={g}>{g}</option>
                             ))}
-                            <option value="KCSE Revision">KCSE</option>
+                            <option value="KCSE Revision">KCSE Revision</option>
                           </select>
                         </div>
 
                         {/* Student index number input */}
                         <div className="space-y-1.5">
-                          <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2 text-right">
-                            Index Number
+                          <label className="flex items-center justify-between text-xs font-semibold text-brand-text">
+                            <span className="flex items-center gap-1.5">
+                              <Hash size={14} className="text-brand-muted" />
+                              Index No.
+                            </span>
                           </label>
                           <input 
                             type="text"
                             value={formData.indexNumber}
                             onChange={(e) => setFormData({ ...formData, indexNumber: e.target.value.replace(/\s/g, '') })}
                             placeholder="e.g. 042"
-                            className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-4 font-black text-sm text-brand-text focus:border-[#FF6B2C] outline-none transition-all text-center"
+                            className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 px-3.5 text-sm font-semibold text-brand-text focus:border-brand-accent focus:bg-brand-surface outline-none transition-all text-center tracking-wider"
                           />
                         </div>
                       </div>
@@ -367,27 +371,25 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                       <button 
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-[#FF6B2C] text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[#FF6B2C]/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-2 cursor-pointer"
+                        className="w-full mt-2 bg-brand-accent text-white py-3 px-4 rounded-xl font-semibold text-sm shadow-sm hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                       >
                         {loading ? (
-                          <Loader2 size={20} className="animate-spin" />
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            <span>Locating Student...</span>
+                          </>
                         ) : (
                           <>
-                            Check Progress
-                            <ChevronRight size={18} />
+                            <span>Find Progress Records</span>
+                            <ChevronRight size={16} />
                           </>
                         )}
                       </button>
                     </form>
 
-                    <div className="mt-6 p-5 bg-brand-bg/50 rounded-2xl border border-brand-border/50 border-dashed flex items-start gap-4">
-                      <HelpCircle className="text-brand-muted shrink-0" size={18} />
-                      <div>
-                        <h4 className="text-[9px] font-black uppercase tracking-widest text-brand-muted mb-0.5">Dual-layer Access</h4>
-                        <p className="text-[10px] font-medium text-brand-muted/80 leading-relaxed">
-                          Enter your child's index number to lookup their profile, then authenticate with your secure parent PIN.
-                        </p>
-                      </div>
+                    <div className="pt-3 border-t border-brand-border/60 flex items-center justify-center gap-2 text-xs text-brand-muted">
+                      <ShieldCheck size={14} className="text-emerald-500 shrink-0" />
+                      <span>Protected with 4-digit Parent Security PIN</span>
                     </div>
                   </motion.div>
                 )}
@@ -395,25 +397,24 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                 {step === 'set_pin' && (
                   <motion.div
                     key="set_pin"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
                     className="space-y-5"
                   >
-                    <div className="space-y-2 text-center pb-2">
-                      <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-2">
-                        <ShieldCheck size={24} />
+                    <div className="text-center pb-2">
+                      <div className="mx-auto w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 mb-2">
+                        <ShieldCheck size={20} />
                       </div>
-                      <h2 className="text-lg font-black tracking-tight text-emerald-500 leading-tight">PIN Setup Required</h2>
-                      <p className="text-brand-muted text-[10px] font-medium px-2">
-                        First-time parent detected. Create a 4-digit PIN to secure future access to {formData.studentName}'s records.
+                      <h2 className="text-base font-bold text-brand-text">Create Access PIN</h2>
+                      <p className="text-xs text-brand-muted mt-1 max-w-xs mx-auto">
+                        Choose a 4-digit PIN to secure future access to {formData.studentName}'s records.
                       </p>
                     </div>
 
-                    <form onSubmit={handleSetPin} className="space-y-5 relative z-10">
-                      {/* PIN Selection */}
+                    <form onSubmit={handleSetPin} className="space-y-4">
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                        <label className="block text-xs font-semibold text-brand-text text-center">
                           Choose 4-Digit PIN
                         </label>
                         <input 
@@ -424,13 +425,13 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                           value={pinValue}
                           onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ''))}
                           placeholder="••••"
-                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-black text-center text-xl tracking-[0.3em] text-[#FF6B2C] focus:border-[#FF6B2C] outline-none transition-all"
+                          autoFocus
+                          className="w-full max-w-[200px] mx-auto block bg-brand-bg border-2 border-brand-border rounded-xl py-2.5 text-center text-xl font-bold tracking-[0.4em] text-brand-accent focus:border-brand-accent focus:bg-brand-surface outline-none transition-all"
                         />
                       </div>
 
-                      {/* PIN Confirmation */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
+                        <label className="block text-xs font-semibold text-brand-text text-center">
                           Confirm 4-Digit PIN
                         </label>
                         <input 
@@ -441,21 +442,21 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                           value={confirmPinValue}
                           onChange={(e) => setConfirmPinValue(e.target.value.replace(/\D/g, ''))}
                           placeholder="••••"
-                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-black text-center text-xl tracking-[0.3em] text-[#FF6B2C] focus:border-[#FF6B2C] outline-none transition-all"
+                          className="w-full max-w-[200px] mx-auto block bg-brand-bg border-2 border-brand-border rounded-xl py-2.5 text-center text-xl font-bold tracking-[0.4em] text-brand-accent focus:border-brand-accent focus:bg-brand-surface outline-none transition-all"
                         />
                       </div>
 
                       <div className="space-y-2 pt-2">
                         <button 
                           type="submit"
-                          disabled={loading}
-                          className="w-full bg-[#FF6B2C] text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[#FF6B2C]/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                          disabled={loading || pinValue.length !== 4 || confirmPinValue.length !== 4}
+                          className="w-full bg-brand-accent text-white py-3 px-4 rounded-xl font-semibold text-sm shadow-sm hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                         >
                           {loading ? (
-                            <Loader2 size={18} className="animate-spin" />
+                            <Loader2 size={16} className="animate-spin" />
                           ) : (
                             <>
-                              Save PIN & View progress
+                              <span>Save PIN & Open Dashboard</span>
                               <ChevronRight size={16} />
                             </>
                           )}
@@ -464,9 +465,9 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                         <button 
                           type="button"
                           onClick={handleResetToLookup}
-                          className="w-full bg-transparent border border-brand-border text-brand-muted py-3 rounded-xl font-bold uppercase tracking-wider text-[10px] hover:text-brand-text transition-all mt-1 cursor-pointer"
+                          className="w-full bg-transparent text-brand-muted hover:text-brand-text py-2 text-xs font-medium transition-colors"
                         >
-                          Cancel
+                          Cancel & return to search
                         </button>
                       </div>
                     </form>
@@ -476,27 +477,23 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                 {step === 'enter_pin' && (
                   <motion.div
                     key="enter_pin"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
                     className="space-y-5"
                   >
-                    <div className="space-y-2 text-center pb-2">
-                      <div className="mx-auto w-12 h-12 rounded-full bg-[#FF6B2C]/10 flex items-center justify-center text-[#FF6B2C] mb-2">
-                        <LockKeyhole size={22} />
+                    <div className="text-center pb-2">
+                      <div className="mx-auto w-10 h-10 rounded-xl bg-brand-accent/10 border border-brand-accent/20 flex items-center justify-center text-brand-accent mb-2">
+                        <LockKeyhole size={20} />
                       </div>
-                      <h2 className="text-lg font-black tracking-tight text-brand-text leading-tight">Secure Access Required</h2>
-                      <p className="text-brand-muted text-[10px] font-medium px-4">
-                        Please enter your secure 4-digit parent PIN to authorize viewing {formData.studentName}'s records.
+                      <h2 className="text-base font-bold text-brand-text">Enter Security PIN</h2>
+                      <p className="text-xs text-brand-muted mt-1 max-w-xs mx-auto">
+                        Enter your 4-digit parent PIN for <span className="font-semibold text-brand-text">{formData.studentName}</span>
                       </p>
                     </div>
 
-                    <form onSubmit={handleVerifyPin} className="space-y-5 relative z-10">
-                      {/* Enter PIN */}
+                    <form onSubmit={handleVerifyPin} className="space-y-4">
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] font-black uppercase tracking-widest text-brand-muted px-2">
-                          Enter 4-Digit Parent PIN
-                        </label>
                         <input 
                           type="password"
                           name="pin_verify"
@@ -505,21 +502,22 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                           value={pinValue}
                           onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ''))}
                           placeholder="••••"
-                          className="w-full bg-brand-bg border-2 border-brand-border rounded-xl py-3 px-5 font-black text-center text-xl tracking-[0.3em] text-[#FF6B2C] focus:border-[#FF6B2C] outline-none transition-all"
+                          autoFocus
+                          className="w-full max-w-[200px] mx-auto block bg-brand-bg border-2 border-brand-border rounded-xl py-2.5 text-center text-xl font-bold tracking-[0.4em] text-brand-accent focus:border-brand-accent focus:bg-brand-surface outline-none transition-all"
                         />
                       </div>
 
                       <div className="space-y-2 pt-2">
                         <button 
                           type="submit"
-                          disabled={loading}
-                          className="w-full bg-[#FF6B2C] text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[#FF6B2C]/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                          disabled={loading || pinValue.length !== 4}
+                          className="w-full bg-brand-accent text-white py-3 px-4 rounded-xl font-semibold text-sm shadow-sm hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                         >
                           {loading ? (
-                            <Loader2 size={18} className="animate-spin" />
+                            <Loader2 size={16} className="animate-spin" />
                           ) : (
                             <>
-                              Verify PIN & View
+                              <span>Verify & Open Records</span>
                               <ChevronRight size={16} />
                             </>
                           )}
@@ -528,14 +526,14 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
                         <button 
                           type="button"
                           onClick={handleResetToLookup}
-                          className="w-full bg-transparent border border-brand-border text-brand-muted py-3 rounded-xl font-bold uppercase tracking-wider text-[10px] hover:text-brand-text transition-all mt-1 cursor-pointer"
+                          className="w-full bg-transparent text-brand-muted hover:text-brand-text py-2 text-xs font-medium transition-colors"
                         >
                           Find another student
                         </button>
                       </div>
 
-                      <p className="text-[10px] text-center font-semibold text-brand-muted leading-relaxed pt-2 border-t border-brand-border/30">
-                        Forgot your parent PIN? Please contact {formData.studentName}'s class teacher to reset your parent security credentials.
+                      <p className="text-[11px] text-center text-brand-muted pt-3 border-t border-brand-border/60">
+                        Forgot PIN? Contact the student's class teacher to reset your credentials.
                       </p>
                     </form>
                   </motion.div>
@@ -546,43 +544,42 @@ const ParentPage: React.FC<ParentPageProps> = ({ onBack }) => {
           ) : (
             <motion.div
               key="dashboard"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
-              <div className="flex items-center justify-between mb-2 px-2">
+              {/* Top Navigation Bar */}
+              <div className="flex items-center justify-between py-2 border-b border-brand-border">
                 <button 
                   type="button"
                   onClick={() => setStudent(null)}
-                  className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-muted hover:text-brand-accent transition-all group cursor-pointer"
+                  className="inline-flex items-center gap-2 text-xs font-semibold text-brand-muted hover:text-brand-accent transition-colors py-1.5 px-3 rounded-lg hover:bg-brand-surface"
                 >
-                  <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border flex items-center justify-center group-hover:border-brand-accent group-hover:bg-brand-accent/5">
-                    <ArrowLeft size={14} />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-widest">Switch Student</span>
+                  <ArrowLeft size={15} />
+                  <span>Switch Student</span>
                 </button>
 
                 {onBack && (
                   <button 
                     type="button"
                     onClick={onBack}
-                    className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-muted hover:text-brand-accent transition-all group cursor-pointer"
+                    className="inline-flex items-center gap-2 text-xs font-semibold text-brand-muted hover:text-brand-text transition-colors py-1.5 px-3 rounded-lg hover:bg-brand-surface"
                   >
-                    <span className="text-[10px] font-black uppercase tracking-widest">Exit Portal</span>
-                    <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border flex items-center justify-center group-hover:border-brand-accent group-hover:bg-brand-accent/5">
-                      <LogOut size={14} />
-                    </div>
+                    <span>Exit Portal</span>
+                    <LogOut size={15} />
                   </button>
                 )}
               </div>
+
               <ParentStudentDashboard student={student} parentPin={pinValue} />
             </motion.div>
           )}
         </AnimatePresence>
-      </main>
+      </div>
     </div>
   );
 };
 
 export default ParentPage;
+

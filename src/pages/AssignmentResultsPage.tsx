@@ -3,11 +3,12 @@ import {
   ArrowLeft, Clock, CheckCircle2, XCircle, AlertCircle, 
   Loader2, Filter, Download, User, BarChart3, Star,
   Search, ExternalLink, Calendar, Save, MessageCircle,
-  FileText, Camera, Check, School
+  FileText, Camera, Check, School, Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { GradeBadge, getGradeLabel, getGradeColors } from '../utils/grading';
 
 interface AssignmentResultsPageProps {
   assignmentId: string;
@@ -27,7 +28,8 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
   const [score, setScore] = useState<number | ''>('');
   const [saving, setSaving] = useState(false);
   const [savingReply, setSavingReply] = useState(false);
-  const [questionGrades, setQuestionGrades] = useState<Record<string, { score: number | '', comment: string }>>({});
+  const [questionGrades, setQuestionGrades] = useState<Record<string, { score: number | '', comment: string; is_correct?: boolean }>>({});
+  const [gradingQuestionId, setGradingQuestionId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -57,7 +59,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       setTeacherReply(selectedSubmission.teacher_reply || '');
       setScore((selectedSubmission.score === null || isNaN(selectedSubmission.score)) ? '' : selectedSubmission.score);
 
-      const initialGrades: Record<string, { score: number | '', comment: string }> = {};
+      const initialGrades: Record<string, { score: number | '', comment: string; is_correct?: boolean }> = {};
       if (assignment && assignment.questions) {
         assignment.questions.forEach((q: any) => {
           if (q.type !== 'mcq') {
@@ -66,8 +68,12 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
               ? gradingEntry.marks_awarded 
               : '';
             const existingComment = (gradingEntry && gradingEntry.comment) ? gradingEntry.comment : '';
+            const isCorrect = gradingEntry?.correct !== undefined
+              ? Boolean(gradingEntry.correct)
+              : (existingScore !== '' ? Number(existingScore) > 0 : undefined);
             initialGrades[q.id] = {
               score: existingScore,
+              is_correct: isCorrect,
               comment: existingComment
             };
           }
@@ -76,6 +82,102 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       setQuestionGrades(initialGrades);
     }
   }, [selectedSubmission, assignment]);
+
+  const handleGradeSingleQuestion = async (questionId: string | number, isCorrect: boolean) => {
+    if (!selectedSubmission) return;
+    const qIdStr = questionId.toString();
+    const teacherData = localStorage.getItem('azilearn_teacher');
+    const teacherId = teacherData ? JSON.parse(teacherData).id : null;
+    if (!teacherId) {
+      showToast("Teacher profile not found", "error");
+      return;
+    }
+
+    const currentComment = questionGrades[qIdStr]?.comment || '';
+    setGradingQuestionId(qIdStr);
+
+    const q = assignment?.questions?.find((x: any) => x.id?.toString() === qIdStr);
+    const maxMarks = q?.max_marks || q?.marks || q?.points || 10;
+    const marksAwarded = isCorrect ? maxMarks : 0;
+
+    // Optimistically update question grades state
+    setQuestionGrades(prev => ({
+      ...prev,
+      [qIdStr]: {
+        score: marksAwarded,
+        is_correct: isCorrect,
+        comment: currentComment
+      }
+    }));
+
+    try {
+      const { data, error } = await supabase.rpc('teacher_grade_question', {
+        p_teacher_id: teacherId,
+        p_submission_id: selectedSubmission.id,
+        p_question_id: qIdStr,
+        p_correct: isCorrect,
+        p_comment: currentComment || null
+      });
+
+      if (error) {
+        console.warn("RPC teacher_grade_question fallback:", error.message);
+        const updatedGrading = {
+          ...(selectedSubmission.grading || {}),
+          [qIdStr]: {
+            correct: isCorrect,
+            marks_awarded: marksAwarded,
+            comment: currentComment || null
+          }
+        };
+        await supabase
+          .from('assignment_submissions')
+          .update({ grading: updatedGrading })
+          .eq('id', selectedSubmission.id);
+
+        showToast(isCorrect ? "Marked Correct" : "Marked Incorrect", "info");
+      } else {
+        const fullyGraded = data?.fully_graded === true;
+        const returnedPct = data?.percentage !== undefined && data?.percentage !== null ? Number(data.percentage) : null;
+        const returnedLabel = data?.grade_label || (returnedPct !== null ? getGradeLabel(returnedPct) : null);
+
+        setSelectedSubmission((prev: any) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            percentage: returnedPct !== null ? returnedPct : prev.percentage,
+            grade_label: returnedLabel || prev.grade_label,
+            status: fullyGraded ? 'graded' : prev.status,
+            grading: {
+              ...(prev.grading || {}),
+              [qIdStr]: {
+                correct: isCorrect,
+                marks_awarded: marksAwarded,
+                comment: currentComment || null
+              }
+            }
+          };
+        });
+
+        setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? {
+          ...s,
+          percentage: returnedPct !== null ? returnedPct : s.percentage,
+          grade_label: returnedLabel || s.grade_label,
+          status: fullyGraded ? 'graded' : s.status
+        } : s));
+
+        if (fullyGraded && returnedPct !== null) {
+          showToast(`All questions graded! ${returnedPct}% — ${returnedLabel || 'Complete'}`, 'success');
+        } else {
+          showToast(isCorrect ? "Marked as Correct ✓" : "Marked as Incorrect ✗", "info");
+        }
+      }
+    } catch (err: any) {
+      console.error("Error in handleGradeSingleQuestion:", err);
+      showToast("Error updating question grade: " + err.message, "error");
+    } finally {
+      setGradingQuestionId(null);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -153,15 +255,21 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       Object.entries(questionGrades).forEach(([qId, qg]: [string, any]) => {
         if (qg && qg.score !== '') {
           updatedGrading[qId] = {
+            correct: qg.is_correct ?? (Number(qg.score) > 0),
             marks_awarded: Number(qg.score),
             comment: qg.comment || null
           };
         }
       });
 
+      const computedPercentage = maxTotalMarks > 0 ? Math.round((runningTotal / maxTotalMarks) * 100) : 0;
+      const computedGradeLabel = getGradeLabel(computedPercentage);
+
       // 2. Perform atomic single update to assignment_submissions
       const updatePayload: any = {
         score: runningTotal,
+        percentage: computedPercentage,
+        grade_label: computedGradeLabel,
         status: 'graded',
         grading: updatedGrading,
         graded_at: new Date().toISOString(),
@@ -179,21 +287,6 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
 
       // 3. Secondary RPC calls
       try {
-        for (const q of assignment.questions) {
-          if (q.type !== 'mcq') {
-            const qg = questionGrades[q.id];
-            if (qg && qg.score !== '') {
-              await supabase.rpc('teacher_grade_question', {
-                p_teacher_id: teacherId,
-                p_submission_id: selectedSubmission.id,
-                p_question_id: q.id.toString(),
-                p_marks_awarded: Number(qg.score),
-                p_comment: qg.comment || null
-              });
-            }
-          }
-        }
-
         await supabase.rpc('teacher_grade_submission', {
           p_teacher_id: teacherId,
           p_submission_id: selectedSubmission.id,
@@ -210,7 +303,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
         ...updatePayload
       } : s));
 
-      showToast('Marks and remarks updated!', 'success');
+      showToast(`Marks updated: ${computedPercentage}% — ${computedGradeLabel}`, 'success');
       setSelectedSubmission(null);
       await fetchData();
     } catch (err: any) {
@@ -259,7 +352,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
     setFeedback(freshSub.teacher_comment || '');
     setTeacherReply(freshSub.teacher_reply || '');
     
-    const initialGrades: Record<string, { score: number | '', comment: string }> = {};
+    const initialGrades: Record<string, { score: number | '', comment: string; is_correct?: boolean }> = {};
     if (assignment && assignment.questions) {
       assignment.questions.forEach((q: any) => {
         if (q.type !== 'mcq') {
@@ -267,9 +360,14 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
           const existingScore = (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) 
             ? gradingEntry.marks_awarded 
             : '';
+          const existingComment = (gradingEntry && gradingEntry.comment) ? gradingEntry.comment : '';
+          const isCorrect = gradingEntry?.correct !== undefined
+            ? Boolean(gradingEntry.correct)
+            : (existingScore !== '' ? Number(existingScore) > 0 : undefined);
           initialGrades[q.id] = {
             score: existingScore,
-            comment: gradingEntry?.comment || ''
+            is_correct: isCorrect,
+            comment: existingComment
           };
         }
       });
@@ -389,7 +487,15 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                               <span className="text-xs text-brand-muted font-bold">{new Date(sub.submitted_at).toLocaleDateString()}</span>
                             </td>
                             <td className="px-6 py-4">
-                              <span className="font-black text-brand-accent">{sub.score !== null ? `${sub.score}%` : '—'}</span>
+                              {((sub.percentage !== null && sub.percentage !== undefined) || sub.score !== null) ? (
+                                <GradeBadge 
+                                  percentage={sub.percentage ?? sub.score} 
+                                  gradeLabel={sub.grade_label} 
+                                  size="xs" 
+                                />
+                              ) : (
+                                <span className="font-black text-brand-muted text-xs">—</span>
+                              )}
                             </td>
                             <td className="px-6 py-4">
                               <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${
@@ -497,11 +603,23 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                     <span className="text-[10px] font-black text-brand-muted uppercase">Score:</span>
                     <span className="font-black text-sm text-brand-accent">{runningTotal}</span>
                     <span className="text-[10px] font-black text-brand-muted uppercase">/ {maxTotalMarks} Pts</span>
+                    {maxTotalMarks > 0 && (
+                      <span className="text-[10px] font-black text-brand-accent ml-1 bg-brand-accent/10 px-1.5 py-0.5 rounded">
+                        {Math.round((runningTotal / maxTotalMarks) * 100)}%
+                      </span>
+                    )}
                   </div>
+                  {selectedSubmission?.grade_label && (
+                    <GradeBadge 
+                      percentage={selectedSubmission.percentage ?? (maxTotalMarks > 0 ? Math.round((runningTotal / maxTotalMarks) * 100) : 0)} 
+                      gradeLabel={selectedSubmission.grade_label} 
+                      size="sm" 
+                    />
+                  )}
                   <button 
                     onClick={saveFeedback}
                     disabled={saving}
-                    className="bg-brand-accent px-4 py-2 rounded-xl text-white font-black uppercase text-[10px] tracking-widest flex items-center gap-2"
+                    className="bg-brand-accent px-4 py-2 rounded-xl text-white font-black uppercase text-[10px] tracking-widest flex items-center gap-2 shadow-sm"
                   >
                     {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                     Save
@@ -510,6 +628,31 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-brand-bg">
+                  {/* Overall Grade Banner if available */}
+                  {(selectedSubmission?.grade_label || selectedSubmission?.percentage !== undefined) && (
+                    <div className="p-4 bg-white dark:bg-brand-card rounded-2xl border-2 border-brand-accent/20 shadow-sm flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-brand-accent/10 text-brand-accent flex items-center justify-center">
+                          <Award size={20} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Performance Assessment</p>
+                          <p className="font-black text-base text-brand-text">
+                            {selectedSubmission.percentage !== undefined && selectedSubmission.percentage !== null 
+                              ? `${selectedSubmission.percentage}% — ` 
+                              : ''}
+                            {selectedSubmission.grade_label || getGradeLabel(selectedSubmission.percentage ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                      <GradeBadge 
+                        percentage={selectedSubmission.percentage ?? (maxTotalMarks > 0 ? Math.round((runningTotal / maxTotalMarks) * 100) : 0)} 
+                        gradeLabel={selectedSubmission.grade_label} 
+                        size="md" 
+                      />
+                    </div>
+                  )}
+
                   {/* Teacher Remarks */}
                   <div className="bg-white dark:bg-brand-card p-6 rounded-[2rem] border-2 border-brand-accent/10 shadow-lg space-y-4">
                     <div className="flex items-center gap-3">
@@ -570,6 +713,11 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                   {assignment.questions.map((q: any, idx: number) => {
                     const submissionAnswers = selectedSubmission?.answers || {};
                     const qAnswer = submissionAnswers[q.id];
+                    const currentGrade = questionGrades[q.id];
+                    const isQuestionGrading = gradingQuestionId === q.id.toString();
+                    const isMarkedCorrect = currentGrade?.is_correct === true || Number(currentGrade?.score) === (q.max_marks || q.marks || q.points || 10);
+                    const isMarkedIncorrect = currentGrade?.is_correct === false || currentGrade?.score === 0;
+
                     return (
                       <div key={idx} className="bg-white dark:bg-brand-card p-6 rounded-3xl border border-brand-accent/5 space-y-4 shadow-sm">
                         <div className="flex items-start justify-between gap-4">
@@ -628,75 +776,55 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                           {q.type !== 'mcq' && (
                             <div className="mt-6 pt-4 border-t border-brand-border/30 space-y-4">
                               <div className="flex flex-wrap items-center justify-between gap-4">
-                                {/* Quick Toggle Buttons */}
-                                <div className="flex gap-2">
+                                {/* Single tap Correct / Incorrect Toggles */}
+                                <div className="flex items-center gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setQuestionGrades(prev => ({
-                                        ...prev,
-                                        [q.id]: {
-                                          score: q.max_marks || q.marks || q.points || 10,
-                                          comment: prev[q.id]?.comment || ''
-                                        }
-                                      }));
-                                    }}
-                                    className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-all ${
-                                      Number(questionGrades[q.id]?.score) === (q.max_marks || q.marks || q.points || 10)
-                                        ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/15'
-                                        : 'bg-brand-surface border border-brand-border hover:bg-brand-bg text-brand-text'
+                                    disabled={isQuestionGrading}
+                                    onClick={() => handleGradeSingleQuestion(q.id, true)}
+                                    className={`px-4 py-2.5 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
+                                      isMarkedCorrect
+                                        ? 'bg-emerald-500 text-white ring-2 ring-emerald-500/30 shadow-emerald-500/20'
+                                        : 'bg-brand-surface border border-brand-border hover:bg-emerald-50 text-brand-text hover:text-emerald-600'
                                     }`}
                                   >
-                                    <CheckCircle2 size={12} />
-                                    Correct
+                                    {isQuestionGrading && isMarkedCorrect ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <CheckCircle2 size={14} className={isMarkedCorrect ? 'text-white' : 'text-emerald-500'} />
+                                    )}
+                                    Correct (+{q.max_marks || q.marks || q.points || 10})
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setQuestionGrades(prev => ({
-                                        ...prev,
-                                        [q.id]: {
-                                          score: 0,
-                                          comment: prev[q.id]?.comment || ''
-                                        }
-                                      }));
-                                    }}
-                                    className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-all ${
-                                      questionGrades[q.id]?.score === 0
-                                        ? 'bg-red-500 text-white shadow-md shadow-red-500/15'
-                                        : 'bg-brand-surface border border-brand-border hover:bg-brand-bg text-brand-text'
+                                    disabled={isQuestionGrading}
+                                    onClick={() => handleGradeSingleQuestion(q.id, false)}
+                                    className={`px-4 py-2.5 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
+                                      isMarkedIncorrect
+                                        ? 'bg-red-500 text-white ring-2 ring-red-500/30 shadow-red-500/20'
+                                        : 'bg-brand-surface border border-brand-border hover:bg-red-50 text-brand-text hover:text-red-600'
                                     }`}
                                   >
-                                    <XCircle size={12} />
-                                    Incorrect
+                                    {isQuestionGrading && isMarkedIncorrect ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <XCircle size={14} className={isMarkedIncorrect ? 'text-white' : 'text-red-500'} />
+                                    )}
+                                    Incorrect (0)
                                   </button>
                                 </div>
 
-                                {/* Numeric Score Input */}
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Score:</span>
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max={q.max_marks || q.marks || q.points || 10}
-                                      value={questionGrades[q.id]?.score ?? ''}
-                                      onChange={e => {
-                                        const val = e.target.value;
-                                        const maxVal = q.max_marks || q.marks || q.points || 10;
-                                        setQuestionGrades(prev => ({
-                                          ...prev,
-                                          [q.id]: {
-                                            score: val === '' ? '' : Math.min(Math.max(0, Number(val)), maxVal),
-                                            comment: prev[q.id]?.comment || ''
-                                          }
-                                        }));
-                                      }}
-                                      className="w-16 text-center bg-brand-surface border border-brand-accent/20 rounded-xl py-1.5 px-2 font-black text-brand-accent outline-none focus:ring-2 focus:ring-brand-accent/20 transition-all text-sm"
-                                      placeholder="--"
-                                    />
-                                    <span className="text-xs font-bold text-brand-muted">/ {q.max_marks || q.marks || q.points || 10}</span>
-                                  </div>
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Marks Awarded:</span>
+                                  <span className={`text-sm font-black px-2.5 py-1 rounded-lg ${
+                                    isMarkedCorrect 
+                                      ? 'bg-emerald-500/10 text-emerald-600' 
+                                      : isMarkedIncorrect 
+                                      ? 'bg-red-500/10 text-red-600' 
+                                      : 'bg-brand-surface text-brand-muted border border-brand-border'
+                                  }`}>
+                                    {isMarkedCorrect ? (q.max_marks || q.marks || q.points || 10) : isMarkedIncorrect ? 0 : '—'} / {q.max_marks || q.marks || q.points || 10}
+                                  </span>
                                 </div>
                               </div>
 
@@ -713,6 +841,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                                       ...prev,
                                       [q.id]: {
                                         score: prev[q.id]?.score ?? '',
+                                        is_correct: prev[q.id]?.is_correct,
                                         comment: val
                                       }
                                     }));

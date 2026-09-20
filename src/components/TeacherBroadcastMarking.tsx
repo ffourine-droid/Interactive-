@@ -33,6 +33,7 @@ import {
 import { supabase, setTeacherConfig } from '../lib/supabase';
 import { isTeacherLinkedToAssignment, isSchoolAdminAssignment, isTeacherCreatedAssignment } from '../utils/teacherScoping';
 import { useToast } from './Toast';
+import { GradeBadge, getGradeLabel, getGradeColors } from '../utils/grading';
 
 interface Teacher {
   id: string;
@@ -76,8 +77,10 @@ interface SubmissionItem {
   teacher_id?: string;
   answers: Record<string, any>;
   score: number | null;
+  percentage?: number | null;
+  grade_label?: string | null;
   status: 'submitted' | 'pending' | 'graded' | string;
-  grading?: Record<string, { marks_awarded?: number; comment?: string }>;
+  grading?: Record<string, { marks_awarded?: number; comment?: string; correct?: boolean }>;
   teacher_comment?: string;
   parent_feedback?: string;
   teacher_reply?: string;
@@ -186,6 +189,8 @@ export const normalizeSubmission = (raw: any): SubmissionItem => {
     teacher_id: raw.teacher_id,
     answers: answersObj,
     score: raw.score !== undefined && raw.score !== null ? Number(raw.score) : null,
+    percentage: raw.percentage !== undefined && raw.percentage !== null ? Number(raw.percentage) : null,
+    grade_label: raw.grade_label || null,
     status: raw.status || (raw.score !== null && raw.score !== undefined ? 'graded' : 'pending'),
     grading: gradingObj,
     teacher_comment: raw.teacher_comment || raw.feedback || '',
@@ -233,7 +238,8 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
   const [activeAssignmentForModal, setActiveAssignmentForModal] = useState<AssignmentItem | null>(null);
   
   // Grading form state inside modal
-  const [questionGrades, setQuestionGrades] = useState<Record<string, { score: number | ''; comment: string }>>({});
+  const [questionGrades, setQuestionGrades] = useState<Record<string, { score: number | ''; comment: string; is_correct?: boolean }>>({});
+  const [gradingQuestionId, setGradingQuestionId] = useState<string | null>(null);
   const [overallFeedback, setOverallFeedback] = useState('');
   const [parentReply, setParentReply] = useState('');
   const [savingGrade, setSavingGrade] = useState(false);
@@ -605,7 +611,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
     const parsedQuestions = parseQuestions(assignment.questions);
     const existingGrading = submission.grading || {};
-    const initialGrades: Record<string, { score: number | ''; comment: string }> = {};
+    const initialGrades: Record<string, { score: number | ''; comment: string; is_correct?: boolean }> = {};
 
     parsedQuestions.forEach((q, idx) => {
       const qId = q.id || `q_${idx}`;
@@ -619,12 +625,19 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
         
         initialGrades[qId] = {
           score: (existingGrading[qId]?.marks_awarded !== undefined && existingGrading[qId]?.marks_awarded !== null) ? existingGrading[qId].marks_awarded! : autoScore,
+          is_correct: existingGrading[qId]?.correct !== undefined ? Boolean(existingGrading[qId].correct) : isCorrect,
           comment: existingGrading[qId]?.comment || ''
         };
       } else {
         // Short Answer / Photo subjective grading
+        const existingScore = (existingGrading[qId]?.marks_awarded !== undefined && existingGrading[qId]?.marks_awarded !== null) ? existingGrading[qId].marks_awarded! : '';
+        const isCorrect = existingGrading[qId]?.correct !== undefined
+          ? Boolean(existingGrading[qId].correct)
+          : (existingScore !== '' ? Number(existingScore) > 0 : undefined);
+
         initialGrades[qId] = {
-          score: (existingGrading[qId]?.marks_awarded !== undefined && existingGrading[qId]?.marks_awarded !== null) ? existingGrading[qId].marks_awarded! : '',
+          score: existingScore,
+          is_correct: isCorrect,
           comment: existingGrading[qId]?.comment || ''
         };
       }
@@ -633,6 +646,97 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
     setQuestionGrades(initialGrades);
     setOverallFeedback(submission.teacher_comment || '');
     setParentReply(submission.teacher_reply || '');
+  };
+
+  // Grade a single question using the boolean correct toggle
+  const handleGradeSingleQuestion = async (qId: string, isCorrect: boolean) => {
+    if (!activeSubmission || !activeAssignmentForModal || !teacher?.id) return;
+
+    const parsedQuestions = parseQuestions(activeAssignmentForModal.questions);
+    const q = parsedQuestions.find((x, idx) => (x.id || `q_${idx}`) === qId);
+    const maxMarks = q?.max_marks || q?.marks || q?.points || 10;
+    const marksAwarded = isCorrect ? maxMarks : 0;
+    const currentComment = questionGrades[qId]?.comment || '';
+
+    setGradingQuestionId(qId);
+
+    // Optimistically update local question state
+    setQuestionGrades(prev => ({
+      ...prev,
+      [qId]: {
+        score: marksAwarded,
+        is_correct: isCorrect,
+        comment: currentComment
+      }
+    }));
+
+    try {
+      const { data, error } = await supabase.rpc('teacher_grade_question', {
+        p_teacher_id: teacher.id,
+        p_submission_id: activeSubmission.id,
+        p_question_id: qId,
+        p_correct: isCorrect,
+        p_comment: currentComment || null
+      });
+
+      if (error) {
+        console.warn("RPC teacher_grade_question fallback:", error.message);
+        const updatedGrading = {
+          ...(activeSubmission.grading || {}),
+          [qId]: {
+            correct: isCorrect,
+            marks_awarded: marksAwarded,
+            comment: currentComment || null
+          }
+        };
+        await supabase
+          .from('assignment_submissions')
+          .update({ grading: updatedGrading })
+          .eq('id', activeSubmission.id);
+
+        showToast(isCorrect ? "Marked Correct" : "Marked Incorrect", "info");
+      } else {
+        const fullyGraded = data?.fully_graded === true;
+        const returnedPct = data?.percentage !== undefined && data?.percentage !== null ? Number(data.percentage) : null;
+        const returnedLabel = data?.grade_label || (returnedPct !== null ? getGradeLabel(returnedPct) : null);
+
+        setActiveSubmission(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            percentage: returnedPct !== null ? returnedPct : prev.percentage,
+            grade_label: returnedLabel || prev.grade_label,
+            status: fullyGraded ? 'graded' : prev.status,
+            grading: {
+              ...(prev.grading || {}),
+              [qId]: {
+                correct: isCorrect,
+                marks_awarded: marksAwarded,
+                comment: currentComment || null
+              }
+            }
+          };
+        });
+
+        setSubmissions(prev => prev.map(s => s.id === activeSubmission.id ? {
+          ...s,
+          percentage: returnedPct !== null ? returnedPct : s.percentage,
+          grade_label: returnedLabel || s.grade_label,
+          status: fullyGraded ? 'graded' : s.status
+        } : s));
+
+        if (fullyGraded && returnedPct !== null) {
+          showToast(`All questions graded! ${returnedPct}% — ${returnedLabel || 'Complete'}`, 'success');
+        } else {
+          showToast(isCorrect ? "Marked as Correct ✓" : "Marked as Incorrect ✗", "info");
+        }
+      }
+    } catch (err: any) {
+      console.error("Error in handleGradeSingleQuestion:", err);
+      showToast("Error updating question grade: " + err.message, "error");
+    } finally {
+      setGradingQuestionId(null);
+    }
   };
 
   // Calculate live score in marking modal
@@ -665,8 +769,9 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
     setSavingGrade(true);
     try {
       const parsedQuestions = parseQuestions(activeAssignmentForModal.questions);
-      const finalScore = modalCalculations.percentage; // Store percentage (0-100)
-      const gradingRecord: Record<string, { marks_awarded: number; comment: string }> = {};
+      const computedPercentage = modalCalculations.percentage;
+      const computedGradeLabel = getGradeLabel(computedPercentage);
+      const gradingRecord: Record<string, { marks_awarded: number; comment: string; correct?: boolean }> = {};
 
       parsedQuestions.forEach((q, idx) => {
         const qId = q.id || `q_${idx}`;
@@ -675,13 +780,16 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
         const scoreVal = (entry && entry.score !== '') ? Number(entry.score) : 0;
         
         gradingRecord[qId] = {
+          correct: entry?.is_correct ?? (scoreVal > 0),
           marks_awarded: Math.min(Math.max(0, scoreVal), defaultMax),
           comment: entry?.comment || ''
         };
       });
 
       const updatePayload: any = {
-        score: finalScore,
+        score: computedPercentage,
+        percentage: computedPercentage,
+        grade_label: computedGradeLabel,
         status: 'graded',
         grading: gradingRecord,
         teacher_comment: overallFeedback.trim() || null,
@@ -710,14 +818,14 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
         await supabase.rpc('teacher_grade_submission', {
           p_teacher_id: teacher.id,
           p_submission_id: activeSubmission.id,
-          p_score: finalScore,
-          p_feedback: overallFeedback.trim() || null
+          p_score: modalCalculations.totalScore,
+          p_comment: overallFeedback.trim() || null
         });
       } catch {
         // Safe to ignore RPC missing
       }
 
-      showToast(`Marks saved for ${activeSubmission.student_name}! (${finalScore}%)`, 'success');
+      showToast(`Marks saved for ${activeSubmission.student_name}! (${computedPercentage}% — ${computedGradeLabel})`, 'success');
 
       // Update local state immediately
       setSubmissions(prev => prev.map(s => {
@@ -1112,9 +1220,13 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                                       </span>
                                       <span>•</span>
                                       {isGraded ? (
-                                        <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1">
-                                          <CheckCircle2 size={10} /> Score: {sub.score !== null ? `${sub.score}%` : 'Graded'}
-                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                          <GradeBadge 
+                                            percentage={sub.percentage ?? sub.score} 
+                                            gradeLabel={sub.grade_label} 
+                                            size="xs" 
+                                          />
+                                        </div>
                                       ) : (
                                         <span className="text-[9px] font-black text-amber-600 flex items-center gap-1">
                                           <Clock size={10} /> Needs Marking
@@ -1200,12 +1312,19 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  {/* Running Total Badge */}
-                  <div className="hidden sm:flex flex-col items-end bg-brand-bg border border-brand-border px-4 py-2 rounded-2xl">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Running Score</span>
-                    <span className="text-base font-black text-brand-accent">
-                      {modalCalculations.totalScore} / {modalCalculations.maxScore} ({modalCalculations.percentage}%)
-                    </span>
+                  {/* Running Total Badge & GradeBadge */}
+                  <div className="hidden sm:flex items-center gap-3 bg-brand-bg border border-brand-border px-4 py-2 rounded-2xl">
+                    <div className="flex flex-col items-end">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Running Score</span>
+                      <span className="text-base font-black text-brand-accent">
+                        {modalCalculations.totalScore} / {modalCalculations.maxScore} ({modalCalculations.percentage}%)
+                      </span>
+                    </div>
+                    <GradeBadge 
+                      percentage={activeSubmission.percentage ?? modalCalculations.percentage} 
+                      gradeLabel={activeSubmission.grade_label} 
+                      size="sm" 
+                    />
                   </div>
 
                   <button
@@ -1219,6 +1338,31 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
               {/* Modal Content - Questions & Answers to Mark */}
               <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
+                {/* Performance Assessment Banner */}
+                {(activeSubmission.grade_label || activeSubmission.percentage !== undefined || modalCalculations.totalScore > 0) && (
+                  <div className="p-4 bg-brand-surface rounded-2xl border border-brand-border/80 shadow-sm flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-brand-accent/10 text-brand-accent flex items-center justify-center shrink-0">
+                        <Award size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Performance Assessment</p>
+                        <p className="font-black text-sm text-brand-text">
+                          {activeSubmission.percentage !== undefined && activeSubmission.percentage !== null 
+                            ? `${activeSubmission.percentage}% — ` 
+                            : `${modalCalculations.percentage}% — `}
+                          {activeSubmission.grade_label || getGradeLabel(activeSubmission.percentage ?? modalCalculations.percentage)}
+                        </p>
+                      </div>
+                    </div>
+                    <GradeBadge 
+                      percentage={activeSubmission.percentage ?? modalCalculations.percentage} 
+                      gradeLabel={activeSubmission.grade_label} 
+                      size="md" 
+                    />
+                  </div>
+                )}
+
                 {/* Parent Feedback Alert (if any) */}
                 {activeSubmission.parent_feedback && (
                   <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl space-y-2">
@@ -1251,6 +1395,9 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                     const qMax = q.max_marks || q.marks || q.points || 10;
                     const studentAns = extractStudentAnswer(activeSubmission.answers, q, qIdx);
                     const currentGrade = questionGrades[qId] || { score: '', comment: '' };
+                    const isMarkedCorrect = currentGrade.is_correct === true || (currentGrade.is_correct === undefined && currentGrade.score !== '' && Number(currentGrade.score) > 0);
+                    const isMarkedIncorrect = currentGrade.is_correct === false || (currentGrade.is_correct === undefined && currentGrade.score === 0);
+                    const isQuestionGrading = gradingQuestionId === qId;
 
                     return (
                       <div 
@@ -1340,82 +1487,58 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                           {/* Marking Toolbar */}
                           <div className="pt-3 border-t border-brand-border/40 space-y-3">
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                              {/* Quick Mark Buttons */}
-                              <div className="flex items-center gap-1.5">
+                              {/* Single tap Correct / Incorrect Toggles */}
+                              <div className="flex items-center gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setQuestionGrades(prev => ({
-                                      ...prev,
-                                      [qId]: { score: qMax, comment: prev[qId]?.comment || '' }
-                                    }));
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all ${
-                                    Number(currentGrade.score) === qMax 
-                                      ? 'bg-emerald-600 text-white shadow-sm' 
-                                      : 'bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-text'
+                                  disabled={isQuestionGrading}
+                                  onClick={() => handleGradeSingleQuestion(qId, true)}
+                                  className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                                    isMarkedCorrect 
+                                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/30 shadow-emerald-600/20' 
+                                      : 'bg-brand-surface border border-brand-border text-brand-text hover:bg-emerald-50 hover:text-emerald-600'
                                   }`}
                                 >
-                                  <Check size={11} /> Full Marks ({qMax})
+                                  {isQuestionGrading && isMarkedCorrect ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 size={13} className={isMarkedCorrect ? 'text-white' : 'text-emerald-500'} />
+                                  )}
+                                  Correct (+{qMax})
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setQuestionGrades(prev => ({
-                                      ...prev,
-                                      [qId]: { score: Math.round(qMax / 2), comment: prev[qId]?.comment || '' }
-                                    }));
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all ${
-                                    Number(currentGrade.score) === Math.round(qMax / 2) && currentGrade.score !== ''
-                                      ? 'bg-amber-600 text-white shadow-sm' 
-                                      : 'bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-text'
+                                  disabled={isQuestionGrading}
+                                  onClick={() => handleGradeSingleQuestion(qId, false)}
+                                  className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                                    isMarkedIncorrect 
+                                      ? 'bg-red-600 text-white ring-2 ring-red-500/30 shadow-red-600/20' 
+                                      : 'bg-brand-surface border border-brand-border text-brand-text hover:bg-red-50 hover:text-red-600'
                                   }`}
                                 >
-                                  Half ({Math.round(qMax / 2)})
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setQuestionGrades(prev => ({
-                                      ...prev,
-                                      [qId]: { score: 0, comment: prev[qId]?.comment || '' }
-                                    }));
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all ${
-                                    currentGrade.score === 0 
-                                      ? 'bg-red-600 text-white shadow-sm' 
-                                      : 'bg-brand-surface border border-brand-border text-brand-muted hover:text-brand-text'
-                                  }`}
-                                >
-                                  <X size={11} /> 0 Marks
+                                  {isQuestionGrading && isMarkedIncorrect ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <XCircle size={13} className={isMarkedIncorrect ? 'text-white' : 'text-red-500'} />
+                                  )}
+                                  Incorrect (0)
                                 </button>
                               </div>
 
-                              {/* Manual Numeric Score Input */}
+                              {/* Awarded Marks Indicator */}
                               <div className="flex items-center gap-2">
-                                <label className="text-[9px] font-black uppercase tracking-wider text-brand-muted">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">
                                   Marks:
-                                </label>
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={qMax}
-                                    value={currentGrade.score ?? ''}
-                                    placeholder="0"
-                                    onChange={(e) => {
-                                      const val = e.target.value === '' ? '' : parseInt(e.target.value);
-                                      const sanitized = val === '' ? '' : isNaN(val) ? 0 : Math.min(Math.max(0, val), qMax);
-                                      setQuestionGrades(prev => ({
-                                        ...prev,
-                                        [qId]: { score: sanitized, comment: prev[qId]?.comment || '' }
-                                      }));
-                                    }}
-                                    className="w-16 px-2.5 py-1.5 bg-brand-surface border border-brand-border rounded-xl text-xs font-black text-center text-brand-text outline-none focus:border-brand-accent"
-                                  />
-                                  <span className="text-xs font-bold text-brand-muted">/ {qMax}</span>
-                                </div>
+                                </span>
+                                <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${
+                                  isMarkedCorrect 
+                                    ? 'bg-emerald-500/10 text-emerald-600' 
+                                    : isMarkedIncorrect 
+                                    ? 'bg-red-500/10 text-red-600' 
+                                    : 'bg-brand-surface text-brand-muted border border-brand-border'
+                                }`}>
+                                  {isMarkedCorrect ? qMax : isMarkedIncorrect ? 0 : '—'} / {qMax}
+                                </span>
                               </div>
                             </div>
 

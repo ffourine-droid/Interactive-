@@ -12,6 +12,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { triggerConfetti } from '../../utils/confetti';
+import { GradeBadge } from '../../utils/grading';
 
 interface AssignmentSuccessCelebrationProps {
   assignment: any;
@@ -34,8 +35,9 @@ export const AssignmentSuccessCelebration: React.FC<AssignmentSuccessCelebration
     triggerConfetti();
   }, []);
 
-  const score = submission?.score;
-  const isScorePresent = score !== undefined && score !== null && !isNaN(score);
+  const percentage = submission?.percentage ?? submission?.score;
+  const gradeLabel = submission?.grade_label;
+  const isScorePresent = percentage !== undefined && percentage !== null && !isNaN(percentage);
   const questions = assignment?.questions || [];
   const answers = submission?.answers || {};
 
@@ -65,18 +67,19 @@ export const AssignmentSuccessCelebration: React.FC<AssignmentSuccessCelebration
 
         {/* Score Card if Available */}
         {isScorePresent && (
-          <div className="mt-5 p-4 rounded-2xl bg-brand-bg/80 border border-brand-border/60">
-            <div className="flex items-center justify-center gap-2 mb-1">
+          <div className="mt-5 p-4 rounded-2xl bg-brand-bg/80 border border-brand-border/60 flex flex-col items-center gap-2">
+            <div className="flex items-center justify-center gap-2 mb-0.5">
               <Star size={16} className="text-amber-500 fill-amber-500" />
               <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">
-                Immediate Objective Score
+                Performance Assessment
               </span>
             </div>
             <div className="text-4xl font-black text-brand-accent tracking-tight">
-              {score}%
+              {percentage}%
             </div>
-            <p className="text-[11px] text-brand-muted mt-1 font-medium">
-              Based on auto-scored multiple-choice exercises.
+            <GradeBadge percentage={percentage} gradeLabel={gradeLabel} size="md" />
+            <p className="text-[11px] text-brand-muted mt-0.5 font-medium">
+              {gradeLabel ? `Status: ${gradeLabel}` : 'Based on auto-scored exercises.'}
             </p>
           </div>
         )}

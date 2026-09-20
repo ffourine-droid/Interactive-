@@ -34,6 +34,7 @@ import { StudentManager } from '../components/StudentManager';
 import { TeacherCompetitionManager } from '../components/TeacherCompetitionManager';
 import { TeacherMaterialsUpload } from '../components/TeacherMaterialsUpload';
 import { MaterialsList } from '../components/MaterialsList';
+import { GradeBadge, getGradeLabel, getGradeColors } from '../utils/grading';
 
 interface Assignment {
   id: string;
@@ -51,6 +52,8 @@ interface Submission {
   student_name: string;
   submitted_at: string;
   score: number | null;
+  percentage?: number | null;
+  grade_label?: string | null;
   status: 'pending' | 'graded';
   answers: Record<string, any>;
   teacher_comment?: string;
@@ -108,7 +111,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
   const [gradeInput, setGradeInput] = useState<string>('');
   const [feedbackInput, setFeedbackInput] = useState<string>('');
   const [replyInput, setReplyInput] = useState<string>('');
-  const [questionGrades, setQuestionGrades] = useState<Record<string, { score: number | '', comment: string }>>({});
+  const [questionGrades, setQuestionGrades] = useState<Record<string, { score: number | '', comment: string; is_correct?: boolean }>>({});
+  const [gradingQuestionId, setGradingQuestionId] = useState<string | null>(null);
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'my' | 'broadcast'>('all');
 
   useEffect(() => {
@@ -150,6 +154,105 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
   const [classGrade, setClassGrade] = useState<string>('');
 
+  const handleGradeSingleQuestion = async (questionId: string | number, isCorrect: boolean) => {
+    if (!selectedSubmission) return;
+    const qIdStr = questionId.toString();
+    const teacherData = localStorage.getItem('azilearn_teacher');
+    const teacherId = teacher?.id || (teacherData ? JSON.parse(teacherData).id : null);
+    if (!teacherId) {
+      showToast("Teacher profile not found", "error");
+      return;
+    }
+
+    const currentComment = questionGrades[qIdStr]?.comment || '';
+    setGradingQuestionId(qIdStr);
+
+    const assignment = assignments.find(a => a.id === selectedSubmission.assignment_id);
+    const q = assignment?.questions?.find((x: any) => x.id?.toString() === qIdStr);
+    const maxMarks = q?.max_marks || q?.marks || q?.points || 10;
+    const marksAwarded = isCorrect ? maxMarks : 0;
+
+    // Optimistically update local question state
+    setQuestionGrades(prev => ({
+      ...prev,
+      [qIdStr]: {
+        score: marksAwarded,
+        is_correct: isCorrect,
+        comment: currentComment
+      }
+    }));
+
+    try {
+      const { data, error } = await supabase.rpc('teacher_grade_question', {
+        p_teacher_id: teacherId,
+        p_submission_id: selectedSubmission.id,
+        p_question_id: qIdStr,
+        p_correct: isCorrect,
+        p_comment: currentComment || null
+      });
+
+      if (error) {
+        console.warn("RPC teacher_grade_question warning:", error.message);
+        // Fallback: direct update to assignment_submissions
+        const updatedGrading = {
+          ...(selectedSubmission.grading || {}),
+          [qIdStr]: {
+            correct: isCorrect,
+            marks_awarded: marksAwarded,
+            comment: currentComment || null
+          }
+        };
+        await supabase
+          .from('assignment_submissions')
+          .update({ grading: updatedGrading })
+          .eq('id', selectedSubmission.id);
+
+        showToast(isCorrect ? "Marked Correct" : "Marked Incorrect", "info");
+      } else {
+        const fullyGraded = data?.fully_graded === true;
+        const returnedPct = data?.percentage !== undefined && data?.percentage !== null ? Number(data.percentage) : null;
+        const returnedLabel = data?.grade_label || (returnedPct !== null ? getGradeLabel(returnedPct) : null);
+
+        setSelectedSubmission(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            percentage: returnedPct !== null ? returnedPct : prev.percentage,
+            grade_label: returnedLabel || prev.grade_label,
+            status: fullyGraded ? 'graded' : prev.status,
+            grading: {
+              ...(prev.grading || {}),
+              [qIdStr]: {
+                correct: isCorrect,
+                marks_awarded: marksAwarded,
+                comment: currentComment || null
+              }
+            }
+          };
+        });
+
+        // Also update the submission in the main list
+        setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? {
+          ...s,
+          percentage: returnedPct !== null ? returnedPct : s.percentage,
+          grade_label: returnedLabel || s.grade_label,
+          status: fullyGraded ? 'graded' : s.status
+        } : s));
+
+        if (fullyGraded && returnedPct !== null) {
+          showToast(`All questions marked! ${returnedPct}% — ${returnedLabel || 'Complete'}`, 'success');
+        } else {
+          showToast(isCorrect ? "Marked as Correct ✓" : "Marked as Incorrect ✗", "info");
+        }
+      }
+    } catch (err: any) {
+      console.error("Error in handleGradeSingleQuestion:", err);
+      showToast("Error saving question grade: " + err.message, "error");
+    } finally {
+      setGradingQuestionId(null);
+    }
+  };
+
   const handleGradeSubmission = async () => {
     if (!selectedSubmission) return;
 
@@ -171,6 +274,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       Object.entries(questionGrades).forEach(([qId, qg]: [string, any]) => {
         if (qg && qg.score !== '') {
           updatedGrading[qId] = {
+            correct: qg.is_correct ?? (Number(qg.score) > 0),
             marks_awarded: Number(qg.score),
             comment: qg.comment || null
           };
@@ -194,9 +298,15 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         }
       }, 0);
 
-      // Single atomic database update setting score, status, grading, graded_at, teacher_comment, teacher_reply, teacher_id
+      const maxTotalMarks = assignment.questions.reduce((sum: number, q: any) => sum + (q.max_marks || q.marks || q.points || 10), 0);
+      const computedPercentage = maxTotalMarks > 0 ? Math.round((runningTotal / maxTotalMarks) * 100) : 0;
+      const computedGradeLabel = getGradeLabel(computedPercentage);
+
+      // Single atomic database update setting score, percentage, grade_label, status, grading, graded_at, teacher_comment, teacher_reply, teacher_id
       const updatePayload: any = {
         score: runningTotal,
+        percentage: computedPercentage,
+        grade_label: computedGradeLabel,
         status: 'graded',
         grading: updatedGrading,
         graded_at: new Date().toISOString(),
@@ -214,21 +324,6 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
       // Secondary RPC calls if supported by backend schema
       try {
-        for (const q of assignment.questions) {
-          if (q.type !== 'mcq') {
-            const qg = questionGrades[q.id];
-            if (qg && qg.score !== '') {
-              await supabase.rpc('teacher_grade_question', {
-                p_teacher_id: teacherId,
-                p_submission_id: selectedSubmission.id,
-                p_question_id: q.id.toString(),
-                p_marks_awarded: Number(qg.score),
-                p_comment: qg.comment || null
-              });
-            }
-          }
-        }
-
         await supabase.rpc('teacher_grade_submission', {
           p_teacher_id: teacherId,
           p_submission_id: selectedSubmission.id,
@@ -245,7 +340,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         ...updatePayload
       } : s));
 
-      showToast("Submission graded successfully!", "success");
+      showToast(`Submission graded: ${computedPercentage}% — ${computedGradeLabel}`, "success");
       setSelectedSubmission(null);
       await fetchInitialData(); // Refresh list fresh from DB
     } catch (err: any) {
@@ -281,7 +376,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     setFeedbackInput(freshSub.teacher_comment || '');
     setReplyInput((freshSub as any).teacher_reply || '');
 
-    const initialGrades: Record<string, { score: number | '', comment: string }> = {};
+    const initialGrades: Record<string, { score: number | '', comment: string; is_correct?: boolean }> = {};
     if (assignment && assignment.questions) {
       assignment.questions.forEach((q: any) => {
         if (q.type !== 'mcq') {
@@ -290,8 +385,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
             ? gradingEntry.marks_awarded 
             : '';
           const existingComment = (gradingEntry && gradingEntry.comment) ? gradingEntry.comment : '';
+          const isCorrect = gradingEntry?.correct !== undefined
+            ? Boolean(gradingEntry.correct)
+            : (existingScore !== '' ? Number(existingScore) > 0 : undefined);
           initialGrades[q.id] = {
             score: existingScore,
+            is_correct: isCorrect,
             comment: existingComment
           };
         }
@@ -1023,11 +1122,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                           </div>
                           
                           <div className="flex items-center gap-3 self-end md:self-auto">
-                            {sub.score !== null && (
-                              <div className="bg-emerald-500 text-white px-3 py-1.5 rounded-xl flex items-center gap-1">
-                                <Award size={12} />
-                                <span className="text-xs font-black">{sub.score}%</span>
-                              </div>
+                            {((sub.percentage !== null && sub.percentage !== undefined) || sub.score !== null) && (
+                              <GradeBadge 
+                                percentage={sub.percentage ?? sub.score} 
+                                gradeLabel={sub.grade_label} 
+                                size="xs" 
+                              />
                             )}
                             <button
                               onClick={() => openSubmissionDetails(sub)}
@@ -1339,11 +1439,12 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                                       <FileText size={14} />
                                     </button>
                                   )}
-                                  {submission && submission.score !== null && (
-                                    <div className="bg-emerald-500 text-white px-2 py-1.5 rounded-lg flex items-center gap-1 min-w-[48px] justify-center">
-                                      <Award size={10} />
-                                      <span className="text-[9px] font-black">{submission.score}%</span>
-                                    </div>
+                                  {submission && ((submission.percentage !== null && submission.percentage !== undefined) || submission.score !== null) && (
+                                    <GradeBadge 
+                                      percentage={submission.percentage ?? submission.score} 
+                                      gradeLabel={submission.grade_label} 
+                                      size="xs" 
+                                    />
                                   )}
                                 </div>
                               </div>
@@ -1523,6 +1624,13 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                         </span>
                       )}
                       <h2 className="text-2xl font-black tracking-tight">{selectedSubmission.student_name}</h2>
+                      {((selectedSubmission.percentage !== null && selectedSubmission.percentage !== undefined) || selectedSubmission.score !== null) && (
+                        <GradeBadge 
+                          percentage={selectedSubmission.percentage ?? selectedSubmission.score} 
+                          gradeLabel={selectedSubmission.grade_label} 
+                          size="sm" 
+                        />
+                      )}
                       {selectedSubmission.is_broadcast && (
                         <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-1.5 py-0.5 rounded-full border border-indigo-500/15">
                           <School size={8} />
@@ -1542,6 +1650,28 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
               </header>
 
               <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                {/* Prominent Grade Banner when graded or marked */}
+                {(selectedSubmission.grade_label || (selectedSubmission.percentage !== null && selectedSubmission.percentage !== undefined)) && (
+                  <div className={`p-5 rounded-3xl border flex flex-wrap items-center justify-between gap-4 shadow-sm ${getGradeColors(selectedSubmission.grade_label || selectedSubmission.percentage).bg} ${getGradeColors(selectedSubmission.grade_label || selectedSubmission.percentage).border}`}>
+                    <div className="flex items-center gap-3.5">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${getGradeColors(selectedSubmission.grade_label || selectedSubmission.percentage).solidBg} text-white font-black text-xl shadow-md`}>
+                        <Award size={24} />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-brand-muted">
+                          Overall Performance Grade
+                        </div>
+                        <div className="text-xl font-black tracking-tight text-brand-text">
+                          {selectedSubmission.percentage ?? selectedSubmission.score}% — {selectedSubmission.grade_label || getGradeLabel(selectedSubmission.percentage ?? selectedSubmission.score)}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider border shadow-xs ${getGradeColors(selectedSubmission.grade_label || selectedSubmission.percentage).pill}`}>
+                      {selectedSubmission.grade_label || getGradeLabel(selectedSubmission.percentage ?? selectedSubmission.score)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="space-y-6">
                   {assignments.find(a => a.id === selectedSubmission.assignment_id)?.questions.map((q: any, idx: number) => {
                     const submissionAnswers = selectedSubmission.answers || {};
@@ -1598,78 +1728,46 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                                 <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{qAnswer || 'No answer provided'}</p>
                               )}
 
-                              {/* Grading controls for short_answer and photo questions */}
+                              {/* Single Correct / Incorrect toggle control */}
                               <div className="mt-4 pt-4 border-t border-brand-border/30 space-y-4">
                                 <div className="flex flex-wrap items-center justify-between gap-4">
-                                  {/* Quick Toggle Buttons */}
-                                  <div className="flex gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted mr-1">Mark:</span>
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setQuestionGrades(prev => ({
-                                          ...prev,
-                                          [q.id]: {
-                                            score: q.max_marks || q.marks || q.points || 10,
-                                            comment: prev[q.id]?.comment || ''
-                                          }
-                                        }));
-                                      }}
-                                      className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-all ${
-                                        Number(questionGrades[q.id]?.score) === (q.max_marks || q.marks || q.points || 10)
-                                          ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/15'
-                                          : 'bg-brand-surface border border-brand-border hover:bg-brand-bg text-brand-text'
+                                      disabled={gradingQuestionId === q.id.toString()}
+                                      onClick={() => handleGradeSingleQuestion(q.id, true)}
+                                      className={`px-4 py-2.5 rounded-xl font-black uppercase tracking-wider text-xs flex items-center gap-2 transition-all shadow-sm ${
+                                        questionGrades[q.id]?.is_correct === true || (questionGrades[q.id]?.is_correct === undefined && Number(questionGrades[q.id]?.score) > 0)
+                                          ? 'bg-emerald-600 text-white shadow-emerald-500/25 ring-2 ring-emerald-500/40'
+                                          : 'bg-brand-surface border border-brand-border/80 hover:border-emerald-500/50 hover:bg-emerald-500/5 text-brand-text'
                                       }`}
                                     >
-                                      <CheckCircle2 size={12} />
+                                      {gradingQuestionId === q.id.toString() ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                      ) : (
+                                        <CheckCircle2 size={15} className={questionGrades[q.id]?.is_correct === true || (questionGrades[q.id]?.is_correct === undefined && Number(questionGrades[q.id]?.score) > 0) ? 'text-white' : 'text-emerald-500'} />
+                                      )}
                                       Correct
                                     </button>
+
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setQuestionGrades(prev => ({
-                                          ...prev,
-                                          [q.id]: {
-                                            score: 0,
-                                            comment: prev[q.id]?.comment || ''
-                                          }
-                                        }));
-                                      }}
-                                      className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-all ${
-                                        questionGrades[q.id]?.score === 0
-                                          ? 'bg-red-500 text-white shadow-md shadow-red-500/15'
-                                          : 'bg-brand-surface border border-brand-border hover:bg-brand-bg text-brand-text'
+                                      disabled={gradingQuestionId === q.id.toString()}
+                                      onClick={() => handleGradeSingleQuestion(q.id, false)}
+                                      className={`px-4 py-2.5 rounded-xl font-black uppercase tracking-wider text-xs flex items-center gap-2 transition-all shadow-sm ${
+                                        questionGrades[q.id]?.is_correct === false || (questionGrades[q.id]?.is_correct === undefined && questionGrades[q.id]?.score === 0)
+                                          ? 'bg-rose-600 text-white shadow-rose-500/25 ring-2 ring-rose-500/40'
+                                          : 'bg-brand-surface border border-brand-border/80 hover:border-rose-500/50 hover:bg-rose-500/5 text-brand-text'
                                       }`}
                                     >
-                                      <XCircle size={12} />
+                                      {gradingQuestionId === q.id.toString() ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                      ) : (
+                                        <XCircle size={15} className={questionGrades[q.id]?.is_correct === false || (questionGrades[q.id]?.is_correct === undefined && questionGrades[q.id]?.score === 0) ? 'text-white' : 'text-rose-500'} />
+                                      )}
                                       Incorrect
                                     </button>
-                                  </div>
-
-                                  {/* Numeric Score Input */}
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Score:</span>
-                                    <div className="flex items-center gap-1">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max={q.max_marks || q.marks || q.points || 10}
-                                        value={questionGrades[q.id]?.score ?? ''}
-                                        onChange={e => {
-                                          const val = e.target.value;
-                                          const maxVal = q.max_marks || q.marks || q.points || 10;
-                                          setQuestionGrades(prev => ({
-                                            ...prev,
-                                            [q.id]: {
-                                              score: val === '' ? '' : Math.min(Math.max(0, Number(val)), maxVal),
-                                              comment: prev[q.id]?.comment || ''
-                                            }
-                                          }));
-                                        }}
-                                        className="w-16 text-center bg-brand-surface border border-brand-accent/20 rounded-xl py-1.5 px-2 font-black text-brand-accent outline-none focus:ring-2 focus:ring-brand-accent/20 transition-all text-sm"
-                                        placeholder="--"
-                                      />
-                                      <span className="text-xs font-bold text-brand-muted">/ {q.max_marks || q.marks || q.points || 10}</span>
-                                    </div>
                                   </div>
                                 </div>
 
@@ -1685,6 +1783,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                                       setQuestionGrades(prev => ({
                                         ...prev,
                                         [q.id]: {
+                                          ...prev[q.id],
                                           score: prev[q.id]?.score ?? '',
                                           comment: val
                                         }
@@ -1736,11 +1835,15 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="md:col-span-1 bg-brand-surface border border-brand-border rounded-2xl p-6 flex flex-col justify-center items-center">
                       <label className="block text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2 text-center">Running Score Total</label>
-                      <div className="text-4xl font-black text-brand-accent tracking-tight">
-                        {runningTotal}
+                      <div className="text-3xl font-black text-brand-accent tracking-tight flex items-baseline gap-1">
+                        <span>{runningTotal}</span>
+                        <span className="text-sm text-brand-muted font-bold">/ {maxTotalMarks}</span>
                       </div>
-                      <div className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-2">
-                        out of {maxTotalMarks} marks
+                      <div className="mt-2.5">
+                        <GradeBadge 
+                          percentage={maxTotalMarks > 0 ? Math.round((runningTotal / maxTotalMarks) * 100) : 0} 
+                          size="sm" 
+                        />
                       </div>
                     </div>
                     <div className="md:col-span-2">

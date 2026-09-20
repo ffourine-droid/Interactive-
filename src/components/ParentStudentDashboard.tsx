@@ -14,10 +14,17 @@ import {
   MessageCircle,
   User,
   Save,
-  School
+  School,
+  X,
+  GraduationCap,
+  BookOpen,
+  Sparkles,
+  Check,
+  Filter
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
+import { GradeBadge, getGradeLabel } from '../utils/grading';
 
 interface Student {
   id: string;
@@ -38,6 +45,7 @@ interface Assignment {
   subject: string;
   due_date: string;
   questions?: any[];
+  total_marks?: number;
 }
 
 interface Exam {
@@ -50,12 +58,15 @@ interface Submission {
   id: string;
   assignment_id: string;
   score: number | null;
+  percentage?: number | null;
+  grade_label?: string | null;
   teacher_comment?: string;
   parent_feedback?: string;
   teacher_reply?: string;
   status: 'pending' | 'graded';
   submitted_at: string;
   answers: Record<string, any>;
+  grading?: Record<string, any>;
 }
 
 interface ExamAttempt {
@@ -98,6 +109,11 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const [modalFeedbackText, setModalFeedbackText] = useState('');
   const [examData, setExamData] = useState<any | null>(null);
   const [loadingExamDetails, setLoadingExamDetails] = useState(false);
+
+  // Tab and filter controls for uncluttered experience
+  const [activeTab, setActiveTab] = useState<'all' | 'assignments' | 'exams' | 'notes'>('all');
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'pending' | 'graded'>('all');
+  const [modalTab, setModalTab] = useState<'questions' | 'feedback'>('questions');
 
   // Live polling and synchronization state
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
@@ -664,914 +680,823 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
   const displayIndexNumber = fetchedStudent?.index_number || student.parent_code || 'N/A';
   const displayClassName = fetchedStudent?.class_name || (Array.isArray(student.classes) ? student.classes[0]?.name : student.classes?.name) || 'Assigned Class';
 
-  return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <header className="bg-brand-surface border border-brand-border rounded-[2.5rem] p-8 shadow-sm">
-        <div className="flex items-center gap-6">
-          <div className="w-20 h-20 bg-brand-accent rounded-[2rem] flex items-center justify-center text-white text-3xl font-black shadow-xl shadow-brand-accent/20">
-            {(displayName || '').charAt(0)}
-          </div>
-          <div>
-            <h1 className="text-3xl font-black tracking-tight text-brand-text">{displayName || 'Student'}</h1>
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span className="px-3 py-1 bg-brand-bg border border-brand-border rounded-full text-[10px] font-black uppercase tracking-widest text-brand-muted">
-                {displayGrade || 'No Grade'}
-              </span>
-              <span className="px-3 py-1 bg-brand-surface border border-brand-accent/30 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-accent font-mono">
-                Index: {displayIndexNumber}
-              </span>
-              <span className="px-3 py-1 bg-brand-accent/10 border border-brand-accent/20 rounded-full text-[10px] font-black uppercase tracking-widest text-brand-accent">
-                {displayClassName}
-              </span>
+  // Derived progress statistics for quick overview
+  const completedSubmissionsCount = submissions.filter(s => (s.percentage !== undefined && s.percentage !== null) || s.score !== null || (s.answers && Object.keys(s.answers).length > 0)).length;
+  
+  const assignmentScores = submissions
+    .map(s => s.percentage ?? s.score)
+    .filter((score): score is number => typeof score === 'number');
+  
+  const examScores = examAttempts
+    .map(e => e.score !== null ? Math.round(((e.score || 0) / (e.total_marks || 1)) * 100) : null)
+    .filter((score): score is number => typeof score === 'number');
+  
+  const allScores = [...assignmentScores, ...examScores];
+  const averageScore = allScores.length > 0 
+    ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length) 
+    : null;
 
-              {/* Dynamic live indicator badge */}
-              {isTabVisible ? (
-                consecutiveFailures >= 2 ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-amber-500">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    Offline • Sync Error
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-emerald-500">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping duration-1000" />
-                    Live • {secondsSinceUpdate === 0 ? 'just now' : `${secondsSinceUpdate}s ago`}
-                  </span>
-                )
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-bg border border-brand-border rounded-full text-[10px] font-black uppercase tracking-widest text-brand-muted">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-muted" />
-                  Paused
+  // Filtered assignments
+  const filteredAssignments = assignments.filter(assignment => {
+    const submission = submissions.find(s => s.assignment_id === assignment.id);
+    const acknowledgement = acknowledgements.find(a => a.assignment_id === assignment.id);
+    if (assignmentFilter === 'pending') {
+      return !acknowledgement || !submission;
+    }
+    if (assignmentFilter === 'graded') {
+      return submission && ((submission.percentage !== undefined && submission.percentage !== null) || submission.score !== null);
+    }
+    return true;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Student Overview Profile Header */}
+      <header className="bg-brand-surface border border-brand-border rounded-2xl p-5 sm:p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-brand-accent/10 border border-brand-accent/20 flex items-center justify-center text-brand-accent font-black text-xl shrink-0">
+              {(displayName || 'S').charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-brand-text">{displayName}</h1>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs">
+                <span className="px-2.5 py-0.5 bg-brand-bg border border-brand-border rounded-md font-semibold text-brand-text">
+                  {displayGrade}
                 </span>
-              )}
+                <span className="px-2.5 py-0.5 bg-brand-bg border border-brand-border rounded-md font-mono text-brand-muted">
+                  Index: {displayIndexNumber}
+                </span>
+                <span className="px-2.5 py-0.5 bg-brand-accent/10 text-brand-accent rounded-md font-medium">
+                  {displayClassName}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sync status indicator */}
+          <div className="flex items-center sm:self-start">
+            {isTabVisible ? (
+              consecutiveFailures >= 2 ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs font-semibold text-amber-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Reconnecting sync...
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-semibold text-emerald-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live Sync Active
+                </span>
+              )
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-bg border border-brand-border rounded-full text-xs font-medium text-brand-muted">
+                Paused
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Metrics Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-brand-border/60">
+          <div className="bg-brand-bg/60 p-3 rounded-xl border border-brand-border/40">
+            <span className="text-[11px] font-semibold text-brand-muted block">Assignments</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-lg font-bold text-brand-text">{completedSubmissionsCount}</span>
+              <span className="text-xs text-brand-muted font-normal">/ {assignments.length} done</span>
+            </div>
+          </div>
+
+          <div className="bg-brand-bg/60 p-3 rounded-xl border border-brand-border/40">
+            <span className="text-[11px] font-semibold text-brand-muted block">Average Grade</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-lg font-bold text-brand-accent">
+                {averageScore !== null ? `${averageScore}%` : 'Pending'}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-brand-bg/60 p-3 rounded-xl border border-brand-border/40">
+            <span className="text-[11px] font-semibold text-brand-muted block">Assessments</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-lg font-bold text-brand-text">{examAttempts.length}</span>
+              <span className="text-xs text-brand-muted font-normal">completed</span>
+            </div>
+          </div>
+
+          <div className="bg-brand-bg/60 p-3 rounded-xl border border-brand-border/40">
+            <span className="text-[11px] font-semibold text-brand-muted block">Study Notes</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-lg font-bold text-brand-text">{noteSessions.length}</span>
+              <span className="text-xs text-brand-muted font-normal">topics tracked</span>
             </div>
           </div>
         </div>
       </header>
 
-      {consecutiveFailures >= 2 && (
-        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 px-6 py-4 rounded-[2rem] flex items-start gap-3.5 text-xs font-bold animate-in fade-in slide-in-from-top-2 duration-300">
-          <AlertTriangle size={18} className="shrink-0 text-amber-500 mt-0.5 animate-bounce" />
-          <div className="space-y-0.5">
-            <h4 className="font-black uppercase tracking-wider text-[10px] text-amber-500">Live Syncing Interrupted</h4>
-            <p className="opacity-90 font-medium leading-relaxed">
-              We couldn't refresh the progress records in the last few attempts. Please check your internet connection. AZILearn is automatically attempting to reconnect...
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Tabs Navigation */}
+      <div className="flex items-center gap-1.5 p-1 bg-brand-surface border border-brand-border rounded-xl overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+            activeTab === 'all'
+              ? 'bg-brand-accent text-white shadow-sm'
+              : 'text-brand-muted hover:text-brand-text hover:bg-brand-bg'
+          }`}
+        >
+          <span>All Overview</span>
+        </button>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between px-2">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
-            <Award size={14} />
-            Assessment Results
-          </h2>
-          <span className="text-[10px] font-black text-brand-muted shrink-0">{examAttempts.length} completed</span>
-        </div>
+        <button
+          onClick={() => setActiveTab('assignments')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+            activeTab === 'assignments'
+              ? 'bg-brand-accent text-white shadow-sm'
+              : 'text-brand-muted hover:text-brand-text hover:bg-brand-bg'
+          }`}
+        >
+          <FileText size={14} />
+          <span>Assignments</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeTab === 'assignments' ? 'bg-white/20 text-white' : 'bg-brand-bg text-brand-muted'}`}>
+            {assignments.length}
+          </span>
+        </button>
 
-        {examAttempts.length === 0 ? (
-          <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-8 text-center text-brand-muted">
-            <p className="text-xs font-bold uppercase tracking-widest opacity-50">No assessment scores yet</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {examAttempts.map((attempt) => (
-              <div key={attempt.id} className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{attempt.exam?.subject || 'Assessment'}</span>
-                      <div className="w-1 h-1 bg-brand-border rounded-full" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-brand-muted">
-                        Completed {new Date(attempt.submitted_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <h3 className="text-xl font-black text-brand-text mb-4 leading-tight">{attempt.exam?.title}</h3>
+        <button
+          onClick={() => setActiveTab('exams')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+            activeTab === 'exams'
+              ? 'bg-brand-accent text-white shadow-sm'
+              : 'text-brand-muted hover:text-brand-text hover:bg-brand-bg'
+          }`}
+        >
+          <Award size={14} />
+          <span>Assessments & Exams</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeTab === 'exams' ? 'bg-white/20 text-white' : 'bg-brand-bg text-brand-muted'}`}>
+            {examAttempts.length}
+          </span>
+        </button>
 
-                    <div className="flex items-center gap-3 mb-4">
-                       <button 
-                         onClick={() => setSelectedExam(attempt)}
-                         className="px-4 py-2 bg-brand-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
-                       >
-                         <FileText size={14} />
-                         View Detailed Assessment Answers
-                       </button>
-                    </div>
+        <button
+          onClick={() => setActiveTab('notes')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+            activeTab === 'notes'
+              ? 'bg-brand-accent text-white shadow-sm'
+              : 'text-brand-muted hover:text-brand-text hover:bg-brand-bg'
+          }`}
+        >
+          <BookOpen size={14} />
+          <span>Study & Revision</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeTab === 'notes' ? 'bg-white/20 text-white' : 'bg-brand-bg text-brand-muted'}`}>
+            {noteSessions.length}
+          </span>
+        </button>
+      </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                      {attempt.teacher_feedback && (
-                        <div className="p-4 bg-brand-accent/5 border border-brand-accent/10 rounded-2xl">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Award size={14} className="text-brand-accent" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</span>
+      {/* Main Tab Content */}
+      <div className="space-y-6">
+
+        {/* 1. ASSIGNMENTS TAB OR PART OF ALL */}
+        {(activeTab === 'all' || activeTab === 'assignments') && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-brand-accent" />
+                <h2 className="text-sm font-bold text-brand-text">Class Assignments</h2>
+                <span className="text-xs font-medium text-brand-muted">({assignments.length})</span>
+              </div>
+
+              {activeTab === 'assignments' && (
+                <div className="flex items-center gap-1 bg-brand-bg p-0.5 rounded-lg border border-brand-border text-xs">
+                  <button
+                    onClick={() => setAssignmentFilter('all')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors ${assignmentFilter === 'all' ? 'bg-brand-surface text-brand-text shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setAssignmentFilter('pending')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors ${assignmentFilter === 'pending' ? 'bg-brand-surface text-brand-text shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                  >
+                    Needs Attention
+                  </button>
+                  <button
+                    onClick={() => setAssignmentFilter('graded')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors ${assignmentFilter === 'graded' ? 'bg-brand-surface text-brand-text shadow-sm' : 'text-brand-muted hover:text-brand-text'}`}
+                  >
+                    Graded
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {filteredAssignments.length === 0 ? (
+              <div className="bg-brand-surface border border-brand-border border-dashed rounded-2xl p-8 text-center text-brand-muted">
+                <p className="text-xs font-medium">No assignments found matching this filter.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {filteredAssignments.map((assignment) => {
+                  const submission = submissions.find(s => s.assignment_id === assignment.id);
+                  const acknowledgement = acknowledgements.find(a => a.assignment_id === assignment.id);
+                  const isOverdue = !submission && new Date(assignment.due_date) < new Date();
+
+                  return (
+                    <div 
+                      key={assignment.id} 
+                      className="bg-brand-surface border border-brand-border rounded-xl p-4 sm:p-5 shadow-sm hover:border-brand-border/90 transition-all"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2 py-0.5 bg-brand-accent/10 text-brand-accent text-xs font-semibold rounded-md">
+                              {assignment.subject}
+                            </span>
+                            {assignment.is_broadcast && (
+                              <span className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 bg-indigo-500/10 px-2 py-0.5 rounded-md">
+                                <School size={12} />
+                                School-wide
+                              </span>
+                            )}
+                            <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-500 font-semibold' : 'text-brand-muted'}`}>
+                              <Calendar size={12} />
+                              Due {new Date(assignment.due_date).toLocaleDateString()}
+                            </span>
                           </div>
-                          <p className="text-xs font-bold text-brand-text italic leading-relaxed">
-                            "{attempt.teacher_feedback}"
-                          </p>
-                        </div>
-                      )}
 
-                      {attempt.parent_feedback ? (
-                        <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle2 size={14} className="text-emerald-600" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">My Response to Teacher</span>
+                          <h3 className="text-base font-bold text-brand-text leading-snug">{assignment.title}</h3>
+
+                          {/* Status pill & Teacher's brief remark */}
+                          <div className="pt-1 flex flex-wrap items-center gap-2 text-xs">
+                            {submission ? (
+                              ((submission.percentage !== undefined && submission.percentage !== null) || submission.score !== null) ? (
+                                <GradeBadge 
+                                  percentage={submission.percentage ?? submission.score} 
+                                  gradeLabel={submission.grade_label} 
+                                  size="xs" 
+                                />
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-700 font-medium border border-amber-500/20">
+                                  <Hourglass size={13} className="animate-pulse" />
+                                  Submitted • Awaiting grading
+                                </span>
+                              )
+                            ) : (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium border ${isOverdue ? 'bg-red-500/10 text-red-600 border-red-500/20' : 'bg-brand-bg text-brand-muted border-brand-border'}`}>
+                                <AlertTriangle size={13} />
+                                {isOverdue ? 'Past Due Date' : 'Not submitted yet'}
+                              </span>
+                            )}
+
+                            {submission?.teacher_comment && (
+                              <span className="text-xs text-brand-muted italic max-w-md truncate">
+                                Teacher: "{submission.teacher_comment}"
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs font-bold text-brand-text italic leading-relaxed">
-                            "{attempt.parent_feedback}"
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="p-4 bg-brand-bg border-2 border-dashed border-brand-border rounded-2xl">
-                          {activeFeedbackId === attempt.id ? (
-                            <div className="space-y-3">
-                              <textarea 
-                                value={feedbackText}
-                                onChange={(e) => setFeedbackText(e.target.value)}
-                                placeholder="Response to assessment results..."
-                                className="w-full bg-brand-surface border border-brand-accent/20 rounded-xl p-3 text-xs font-bold outline-none focus:border-brand-accent"
-                                rows={2}
-                              />
-                              <div className="flex gap-2">
-                                <button 
-                                  onClick={() => handleSaveParentFeedback(attempt.id, 'exam')}
-                                  disabled={savingFeedback}
-                                  className="flex-1 bg-brand-accent text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest"
-                                >
-                                  Send Response
-                                </button>
-                                <button 
-                                  onClick={() => {
-                                    setActiveFeedbackId(null);
-                                    setFeedbackText('');
-                                  }}
-                                  className="px-3 bg-brand-bg border border-brand-border rounded-lg text-[10px] font-black uppercase"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
+
+                          {/* Parent note preview if already added */}
+                          {submission?.parent_feedback && (
+                            <div className="mt-2 text-xs text-brand-muted bg-brand-bg/80 p-2 rounded-lg border border-brand-border/60">
+                              <span className="font-semibold text-brand-text">Your note: </span>
+                              <span className="italic">"{submission.parent_feedback}"</span>
                             </div>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 sm:self-center shrink-0 pt-2 sm:pt-0">
+                          {/* Review Work button */}
+                          <button 
+                            onClick={() => {
+                              setSelectedSubmission({ 
+                                assignment, 
+                                submission: submission || {
+                                  id: '', 
+                                  assignment_id: assignment.id, 
+                                  score: null, 
+                                  status: 'pending', 
+                                  submitted_at: '', 
+                                  answers: {} 
+                                } 
+                              });
+                              setModalTab('questions');
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-bg hover:bg-brand-surface text-brand-text border border-brand-border rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            <FileText size={13} />
+                            <span>Review Work</span>
+                          </button>
+
+                          {/* Acknowledgement Status / Button */}
+                          {acknowledgement ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-500/20">
+                              <CheckCircle2 size={13} />
+                              <span>Seen ✓</span>
+                            </span>
                           ) : (
                             <button 
-                              onClick={() => setActiveFeedbackId(attempt.id)}
-                              className="w-full py-4 text-brand-muted hover:text-brand-accent transition-colors text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                              onClick={() => handleAcknowledge(assignment.id)}
+                              disabled={ackLoading === assignment.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
                             >
-                              Respond to Results +
+                              {ackLoading === assignment.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                              <span>Acknowledge</span>
                             </button>
                           )}
                         </div>
-                      )}
-
-                      {attempt.teacher_reply && (
-                        <div className="p-4 bg-brand-accent/10 border border-brand-accent/20 rounded-2xl md:col-span-2">
-                          <div className="flex items-center gap-2 mb-2">
-                            <FileText size={14} className="text-brand-accent" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Teacher's Reply</span>
-                          </div>
-                          <p className="text-xs font-bold text-brand-text leading-relaxed">
-                            "{attempt.teacher_reply}"
-                          </p>
-                        </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="flex flex-col items-center justify-center p-6 bg-brand-bg rounded-2xl border border-brand-border min-w-[100px]">
-                    <Trophy className="text-brand-accent mb-1" size={24} />
-                    <span className="text-2xl font-black text-brand-text">
-                      {Math.round(((attempt.score || 0) / (attempt.total_marks || 1)) * 100)}%
-                    </span>
-                    <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Final Grade</span>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            )}
+          </section>
         )}
-      </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between px-2">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
-            <FileText size={14} />
-            Assessments & Progress
-          </h2>
-          <span className="text-[10px] font-black text-brand-muted">{assignments.length} total</span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4">
-          {assignments.length === 0 ? (
-            <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-12 text-center text-brand-muted">
-              <p className="font-bold">No assignments found for this class.</p>
+        {/* 2. ASSESSMENTS / EXAMS TAB OR PART OF ALL */}
+        {(activeTab === 'all' || activeTab === 'exams') && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Award size={16} className="text-brand-accent" />
+                <h2 className="text-sm font-bold text-brand-text">Assessments & Formal Tests</h2>
+                <span className="text-xs font-medium text-brand-muted">({examAttempts.length})</span>
+              </div>
             </div>
-          ) : (
-            assignments.map((assignment) => {
-              const submission = submissions.find(s => s.assignment_id === assignment.id);
-              const acknowledgement = acknowledgements.find(a => a.assignment_id === assignment.id);
-              const isOverdue = !submission && new Date(assignment.due_date) < new Date();
 
-              return (
-                <div 
-                  key={assignment.id} 
-                  className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all group"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        {assignment.is_broadcast && (
-                          <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/15">
-                            <School size={10} />
-                            School-wide
-                          </span>
-                        )}
-                        <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">{assignment.subject}</span>
-                        <div className="w-1 h-1 bg-brand-border rounded-full" />
-                        <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${isOverdue ? 'text-red-500' : 'text-brand-muted'}`}>
-                          <Calendar size={10} />
-                          Due {new Date(assignment.due_date).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <h3 className="text-xl font-black text-brand-text mb-4 leading-tight">{assignment.title}</h3>
-                      
-                      <div className="flex flex-wrap items-center gap-3">
-                        {submission ? (
-                          <div className="flex flex-col gap-3 w-full">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${submission.score !== null ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-600' : 'bg-brand-accent/5 border-brand-accent/10 text-brand-accent'}`}>
-                                {submission.score !== null ? <CheckCircle2 size={14} /> : <Hourglass size={14} className="animate-pulse" />}
-                                <span className="text-[10px] font-black uppercase tracking-widest">
-                                  {submission.score !== null ? `Submitted • ${submission.score}%` : 'Submitted • Awaiting Grade'}
-                                </span>
-                              </div>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedSubmission({ assignment, submission });
-                                }}
-                                className="px-3 py-1.5 rounded-xl border-2 border-brand-accent bg-brand-accent text-white text-[10px] font-black uppercase tracking-widest hover:bg-brand-accent/90 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-brand-accent/20"
-                              >
-                                <FileText size={12} />
-                                View My Full Work
-                              </button>
-                            </div>
+            {examAttempts.length === 0 ? (
+              <div className="bg-brand-surface border border-brand-border border-dashed rounded-2xl p-8 text-center text-brand-muted">
+                <p className="text-xs font-medium">No assessment results recorded yet.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {examAttempts.map((attempt) => {
+                  const pct = Math.round(((attempt.score || 0) / (attempt.total_marks || 1)) * 100);
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {(submission.score === null || submission.status === 'pending') && submission.answers && Object.keys(submission.answers).length > 0 && (
-                                <div className="p-4 bg-brand-bg/40 border border-brand-border/40 rounded-2xl md:col-span-2 space-y-3">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <FileText size={14} className="text-brand-accent animate-pulse" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Submitted Answers Preview</span>
-                                  </div>
-                                  <div className="space-y-2.5">
-                                    {(() => {
-                                      const answersEntries = Object.entries(submission.answers);
-                                      if (assignment.questions && assignment.questions.length > 0) {
-                                        return assignment.questions.map((q: any, qIdx: number) => {
-                                          const qAnswer = submission.answers[q.id] !== undefined
-                                            ? submission.answers[q.id]
-                                            : (submission.answers[qIdx] !== undefined ? submission.answers[qIdx] : submission.answers[String(qIdx)]);
-                                          
-                                          if (qAnswer === undefined || qAnswer === null || qAnswer === '') return null;
-
-                                          let displayAnswer = "";
-                                          if (q.type === 'mcq') {
-                                            const ansIdx = parseInt(qAnswer);
-                                            displayAnswer = q.options?.[ansIdx] || qAnswer;
-                                          } else {
-                                            displayAnswer = qAnswer;
-                                          }
-
-                                          return (
-                                            <div key={q.id || qIdx} className="bg-brand-surface p-3 rounded-xl border border-brand-border/20 flex flex-col gap-1">
-                                              <div className="flex items-start gap-2">
-                                                <span className="text-[9px] font-black text-brand-accent bg-brand-accent/5 px-1.5 py-0.5 rounded">{qIdx + 1}</span>
-                                                <p className="text-xs font-bold text-brand-text leading-snug">{q.text}</p>
-                                              </div>
-                                              <div className="pl-6">
-                                                {q.type === 'photo' ? (
-                                                  <img 
-                                                    src={qAnswer} 
-                                                    alt="Submitted work" 
-                                                    className="rounded-lg border border-brand-border max-h-32 object-cover"
-                                                    referrerPolicy="no-referrer"
-                                                  />
-                                                ) : (
-                                                  <p className="text-xs font-medium text-brand-muted italic">"{displayAnswer}"</p>
-                                                )}
-                                              </div>
-                                            </div>
-                                          );
-                                        }).filter(Boolean);
-                                      }
-
-                                      return answersEntries.map(([key, val], idx) => (
-                                        <div key={key} className="bg-brand-surface p-3 rounded-xl border border-brand-border/20">
-                                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Question ID/Index: {key}</p>
-                                          <p className="text-xs font-bold text-brand-text italic">"{String(val)}"</p>
-                                        </div>
-                                      ));
-                                    })()}
-                                  </div>
-                                </div>
-                              )}
-
-                              {submission.teacher_comment && (
-                                <div className="p-4 bg-brand-accent/5 border border-brand-accent/10 rounded-2xl">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Award size={14} className="text-brand-accent" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Teacher's Remark</span>
-                                  </div>
-                                  <p className="text-xs font-bold text-brand-text italic leading-relaxed">
-                                    "{submission.teacher_comment}"
-                                  </p>
-                                </div>
-                              )}
-
-                              {submission.parent_feedback ? (
-                                <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <CheckCircle2 size={14} className="text-emerald-600" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">My Feedback to Teacher</span>
-                                  </div>
-                                  <p className="text-xs font-bold text-brand-text italic leading-relaxed">
-                                    "{submission.parent_feedback}"
-                                  </p>
-                                </div>
-                              ) : submission.score !== null && (
-                                <div className="p-4 bg-brand-bg border-2 border-dashed border-brand-border rounded-2xl">
-                                  {activeFeedbackId === submission.id ? (
-                                    <div className="space-y-3">
-                                      <textarea 
-                                        value={feedbackText}
-                                        onChange={(e) => setFeedbackText(e.target.value)}
-                                        placeholder="Write feedback to the teacher..."
-                                        className="w-full bg-brand-surface border border-brand-accent/20 rounded-xl p-3 text-xs font-bold outline-none focus:border-brand-accent"
-                                        rows={2}
-                                      />
-                                      <div className="flex gap-2">
-                                        <button 
-                                          onClick={() => handleSaveParentFeedback(submission.id, 'assignment')}
-                                          disabled={savingFeedback}
-                                          className="flex-1 bg-brand-accent text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest"
-                                        >
-                                          Send Feedback
-                                        </button>
-                                        <button 
-                                          onClick={() => {
-                                            setActiveFeedbackId(null);
-                                            setFeedbackText('');
-                                          }}
-                                          className="px-3 bg-brand-bg border border-brand-border rounded-lg text-[10px] font-black uppercase"
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <button 
-                                      onClick={() => setActiveFeedbackId(submission.id)}
-                                      className="w-full py-4 text-brand-muted hover:text-brand-accent transition-colors text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
-                                    >
-                                      Add Feedback for Teacher +
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-
-                              {submission.teacher_reply && (
-                                <div className="p-4 bg-brand-accent/10 border border-brand-accent/20 rounded-2xl md:col-span-2">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <FileText size={14} className="text-brand-accent" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-accent">Teacher's Reply</span>
-                                  </div>
-                                  <p className="text-xs font-bold text-brand-text leading-relaxed">
-                                    "{submission.teacher_reply}"
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-3">
-                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${isOverdue ? 'bg-red-500/5 border-red-500/10 text-red-600' : 'bg-brand-muted/5 border-brand-border text-brand-muted'}`}>
-                              <AlertTriangle size={14} />
-                              <span className="text-[10px] font-black uppercase tracking-widest">
-                                {isOverdue ? 'Missed Work' : 'Not Submitted Yet'}
-                              </span>
-                            </div>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedSubmission({ 
-                                  assignment, 
-                                  submission: { 
-                                    id: '', 
-                                    assignment_id: assignment.id, 
-                                    score: null, 
-                                    status: 'pending', 
-                                    submitted_at: '', 
-                                    answers: {} 
-                                  } 
-                                });
-                              }}
-                              className="px-3 py-1.5 rounded-xl border-2 border-brand-accent/30 hover:border-brand-accent bg-transparent text-brand-accent text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-1.5"
-                            >
-                              <FileText size={12} />
-                              View Full Work Sent
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="mt-6 flex flex-wrap items-center gap-3">
-                        {acknowledgement ? (
-                          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20">
-                            <CheckCircle2 size={14} />
-                            <span className="text-[10px] font-black uppercase tracking-widest">
-                              Confirmed {new Date(acknowledgement.acknowledged_at).toLocaleDateString()}
+                  return (
+                    <div 
+                      key={attempt.id} 
+                      className="bg-brand-surface border border-brand-border rounded-xl p-4 sm:p-5 shadow-sm hover:border-brand-border/90 transition-all"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="px-2 py-0.5 bg-brand-accent/10 text-brand-accent font-semibold rounded-md">
+                              {attempt.exam?.subject || 'Assessment'}
+                            </span>
+                            <span className="text-brand-muted">
+                              Completed {new Date(attempt.submitted_at).toLocaleDateString()}
                             </span>
                           </div>
-                        ) : (
+
+                          <h3 className="text-base font-bold text-brand-text leading-snug">{attempt.exam?.title}</h3>
+
+                          {attempt.teacher_feedback && (
+                            <p className="text-xs text-brand-muted italic mt-1">
+                              Teacher feedback: "{attempt.teacher_feedback}"
+                            </p>
+                          )}
+
+                          {attempt.parent_feedback && (
+                            <div className="text-xs text-brand-muted bg-brand-bg/80 p-2 rounded-lg border border-brand-border/60 mt-1">
+                              <span className="font-semibold text-brand-text">Your response: </span>
+                              <span className="italic">"{attempt.parent_feedback}"</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Score & Actions */}
+                        <div className="flex items-center gap-4 sm:self-center shrink-0">
+                          <div className="text-right">
+                            <span className="text-lg font-bold text-brand-text">{pct}%</span>
+                            <span className="text-[11px] text-brand-muted block font-mono">
+                              {attempt.score || 0} / {attempt.total_marks || 1} pts
+                            </span>
+                          </div>
+
                           <button 
-                            onClick={() => handleAcknowledge(assignment.id)}
-                            disabled={ackLoading === assignment.id}
-                            className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-600/10"
+                            onClick={() => {
+                              setSelectedExam(attempt);
+                              setModalTab('questions');
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-accent text-white rounded-lg text-xs font-semibold hover:opacity-95 transition-all cursor-pointer shadow-sm"
                           >
-                            {ackLoading === assignment.id ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
-                            <span className="text-[10px] font-black uppercase tracking-widest">I Have Seen This ✓</span>
+                            <FileText size={13} />
+                            <span>View Breakdown</span>
                           </button>
-                        )}
+                        </div>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
 
-                    {submission && submission.score !== null && (
-                      <div className="flex flex-col items-center justify-center p-6 bg-brand-bg rounded-2xl border border-brand-border min-w-[100px]">
-                        <Award className="text-brand-accent mb-1" size={24} />
-                        <span className="text-2xl font-black text-brand-text">{submission.score}%</span>
-                        <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">Grade</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
+        {/* 3. STUDY & REVISION SESSIONS */}
+        {(activeTab === 'all' || activeTab === 'notes') && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen size={16} className="text-brand-accent" />
+                <h2 className="text-sm font-bold text-brand-text">Curriculum Study & Revisions</h2>
+                <span className="text-xs font-medium text-brand-muted">({noteSessions.length})</span>
+              </div>
+            </div>
 
-      {/* Curriculum Study & Revisions Progress Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between px-2">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-muted flex items-center gap-2">
-            <CheckCircle2 size={14} className="text-brand-accent px-0" />
-            Curriculum Study & Revision Progress
-          </h2>
-          <span className="text-[10px] font-black text-brand-muted shrink-0">
-            {noteSessions.length} active {noteSessions.length === 1 ? 'session' : 'sessions'}
-          </span>
-        </div>
-
-        {noteSessions.length === 0 ? (
-          <div className="bg-brand-surface border border-brand-border border-dashed rounded-[2.5rem] p-8 text-center text-brand-muted">
-            <p className="text-xs font-bold uppercase tracking-widest opacity-50">No study sessions logged yet</p>
-            <p className="text-[10px] text-brand-muted mt-1 leading-relaxed max-w-sm mx-auto">
-              When {student.name || 'the student'} opens, reads, and practices revision package topics, their dynamic progress and XP logs will show up here in real-time!
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {noteSessions.map((session) => (
-              <div key={session.id} className="bg-brand-surface border border-brand-border rounded-[2rem] p-6 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-[#F97316]">
+            {noteSessions.length === 0 ? (
+              <div className="bg-brand-surface border border-brand-border border-dashed rounded-2xl p-8 text-center text-brand-muted">
+                <p className="text-xs font-medium">No revision study sessions logged yet.</p>
+                <p className="text-[11px] text-brand-muted/70 mt-1">
+                  When the student studies topic packages, their real-time reading progress and XP show here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {noteSessions.map((session) => (
+                  <div 
+                    key={session.id} 
+                    className="bg-brand-surface border border-brand-border rounded-xl p-4 shadow-sm space-y-3"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="px-2 py-0.5 bg-brand-accent/10 text-brand-accent font-semibold rounded-md">
                         {session.subject}
                       </span>
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-border" />
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-brand-muted">
+                      <span className="text-brand-muted font-medium">
                         Grade {session.grade}
                       </span>
-                      {session.version && (
-                        <>
-                          <div className="w-1.5 h-1.5 rounded-full bg-brand-border" />
-                          <span className="text-[10px] font-extrabold text-brand-muted">
-                            Version: {session.version}
-                          </span>
-                        </>
-                      )}
                     </div>
 
-                    <h3 className="text-xl font-black text-brand-text mb-2 leading-tight">
-                      {session.topic}
-                    </h3>
-
-                    <div className="flex flex-wrap items-center gap-3 text-[10px]">
-                      {session.completed || session.progress_pct >= 100 ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-full font-black uppercase tracking-wider">
-                          <CheckCircle2 size={11} /> Completed ✓
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-full font-black uppercase tracking-wider">
-                          <Hourglass size={11} className="animate-pulse" /> Studying ({session.progress_pct || 0}%)
-                        </span>
-                      )}
-
-                      <span className="text-brand-muted font-bold">
-                        Last Active: {new Date(session.updated_at || session.started_at).toLocaleString()}
+                    <div>
+                      <h4 className="text-sm font-bold text-brand-text leading-snug">{session.topic}</h4>
+                      <span className="text-[11px] text-brand-muted block mt-0.5">
+                        Last active: {new Date(session.updated_at || session.started_at).toLocaleDateString()}
                       </span>
+                    </div>
+
+                    {/* Progress Slider */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-brand-text">{session.progress_pct || 0}% completed</span>
+                        <span className="font-semibold text-brand-accent">+{session.xp_earned || 0} XP</span>
+                      </div>
+                      <div className="w-full bg-brand-bg rounded-full h-2 overflow-hidden border border-brand-border/60">
+                        <div 
+                          className="bg-brand-accent h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, session.progress_pct || 0)}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
-
-                  {/* Circular progress or score badge right side */}
-                  <div className="flex flex-wrap items-center gap-3 shrink-0">
-                    <div className="flex flex-col items-center justify-center p-4 bg-brand-bg rounded-2xl border border-brand-border min-w-[90px]">
-                      <span className="text-xl font-black text-brand-text font-mono">
-                        {session.progress_pct || 0}%
-                      </span>
-                      <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">
-                        Study Progress
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col items-center justify-center p-4 bg-brand-bg rounded-2xl border border-brand-border min-w-[90px]">
-                      <span className="text-xl font-black text-[#FF6B2C] font-mono">
-                        +{session.xp_earned || 0}
-                      </span>
-                      <span className="text-[8px] font-black uppercase tracking-widest text-brand-muted">
-                        XP Gained
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </section>
         )}
+
       </div>
 
-      {/* Detailed Work Modal */}
+      {/* Detailed Work Modal (Selected Submission or Exam) */}
       <AnimatePresence>
         {(selectedSubmission || selectedExam) && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-brand-bg/80 backdrop-blur-md p-4 flex items-center justify-center"
+            className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center"
           >
             <motion.div 
-              initial={{ scale: 0.95, y: 20 }}
+              initial={{ scale: 0.96, y: 15 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              className="bg-brand-surface border border-brand-border rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
+              exit={{ scale: 0.96, y: 15 }}
+              className="bg-brand-surface border border-brand-border rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-xl flex flex-col"
             >
-              <header className="p-8 border-b border-brand-border flex items-center justify-between shrink-0">
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight">{selectedSubmission?.assignment.title || selectedExam?.exam?.title}</h2>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">{selectedSubmission?.assignment.subject || selectedExam?.exam?.subject} • Student Review</p>
+              {/* Modal Header */}
+              <header className="px-6 py-4 border-b border-brand-border flex items-center justify-between shrink-0 bg-brand-surface">
+                <div className="min-w-0 pr-4">
+                  <span className="text-[11px] font-semibold text-brand-accent uppercase tracking-wider block">
+                    {selectedSubmission?.assignment.subject || selectedExam?.exam?.subject}
+                  </span>
+                  <h2 className="text-lg font-bold text-brand-text truncate">
+                    {selectedSubmission?.assignment.title || selectedExam?.exam?.title}
+                  </h2>
                 </div>
-                <button 
-                  onClick={() => {
-                    setSelectedSubmission(null);
-                    setSelectedExam(null);
-                  }}
-                  className="p-3 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-brand-accent transition-colors"
-                >
-                  <ChevronRight size={18} className="rotate-180" />
-                </button>
+                <div className="flex items-center gap-3 shrink-0">
+                  {selectedSubmission?.submission && ((selectedSubmission.submission.percentage !== undefined && selectedSubmission.submission.percentage !== null) || selectedSubmission.submission.score !== null) && (
+                    <GradeBadge 
+                      percentage={selectedSubmission.submission.percentage ?? selectedSubmission.submission.score} 
+                      gradeLabel={selectedSubmission.submission.grade_label} 
+                      size="sm" 
+                    />
+                  )}
+                  {selectedExam && selectedExam.score !== null && (
+                    <GradeBadge 
+                      percentage={Math.round(((selectedExam.score || 0) / (selectedExam.total_marks || 1)) * 100)} 
+                      size="sm" 
+                    />
+                  )}
+                  <button 
+                    onClick={() => {
+                      setSelectedSubmission(null);
+                      setSelectedExam(null);
+                    }}
+                    className="p-2 rounded-lg text-brand-muted hover:text-brand-text hover:bg-brand-bg transition-colors cursor-pointer"
+                    title="Close"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </header>
 
-              <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                {/* Remarks Section */}
-                {selectedSubmission && selectedSubmission.submission?.id ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     {/* Teacher's Feedback (Read Only) */}
-                     {selectedSubmission.submission.teacher_comment ? (
-                      <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-6 space-y-3">
-                        <div className="flex items-center gap-3">
-                          <Award className="text-brand-accent" size={20} />
-                          <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</h3>
-                        </div>
-                        <p className="text-sm font-bold text-brand-text leading-relaxed">
-                          "{selectedSubmission.submission.teacher_comment}"
-                        </p>
-                        
-                        {selectedSubmission.submission.teacher_reply && (
-                          <div className="mt-4 pt-4 border-t border-brand-accent/10">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-brand-accent mb-2">Teacher's Reply to your Remarks</p>
-                            <p className="font-bold text-xs text-brand-text italic">
-                              "{selectedSubmission.submission.teacher_reply}"
-                            </p>
-                          </div>
-                        )}
-                      </section>
-                     ) : (
-                      <div className="bg-brand-bg border border-brand-border border-dashed rounded-[2rem] p-6 flex items-center justify-center text-brand-muted text-[10px] font-black uppercase tracking-widest">
-                        No teacher comments yet
-                      </div>
-                     )}
-
-                     {/* Parent's Remarks (Editable) */}
-                     <section className="bg-emerald-500/5 border border-emerald-500/20 rounded-[2rem] p-6 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <User className="text-emerald-600" size={20} />
-                          <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600">My Remarks</h3>
-                        </div>
-                        <textarea 
-                          placeholder="Add your notes or questions for the teacher..."
-                          value={modalFeedbackText}
-                          onChange={(e) => setModalFeedbackText(e.target.value)}
-                          className="w-full bg-white dark:bg-brand-card border-none rounded-2xl p-4 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 min-h-[100px] resize-none transition-all"
-                        />
-                        <button 
-                          onClick={() => handleSaveParentFeedback(selectedSubmission.submission.id, 'assignment', true)}
-                          disabled={savingFeedback}
-                          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
-                        >
-                          {savingFeedback ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                          {savingFeedback ? 'Saving...' : 'Save Remarks'}
-                        </button>
-                     </section>
-                  </div>
-                ) : selectedExam ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     {/* Teacher's Feedback (Read Only) */}
-                     {selectedExam.teacher_feedback ? (
-                      <section className="bg-brand-accent/5 border border-brand-accent/20 rounded-[2rem] p-6 space-y-3">
-                        <div className="flex items-center gap-3">
-                          <Award className="text-brand-accent" size={20} />
-                          <h3 className="text-sm font-black uppercase tracking-widest text-brand-accent">Teacher's Feedback</h3>
-                        </div>
-                        <p className="text-sm font-bold text-brand-text leading-relaxed">
-                          "{selectedExam.teacher_feedback}"
-                        </p>
-                        
-                        {selectedExam.teacher_reply && (
-                          <div className="mt-4 pt-4 border-t border-brand-accent/10">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-brand-accent mb-2">Teacher's Reply to your Remarks</p>
-                            <p className="font-bold text-xs text-brand-text italic">
-                              "{selectedExam.teacher_reply}"
-                            </p>
-                          </div>
-                        )}
-                      </section>
-                     ) : (
-                      <div className="bg-brand-bg border border-brand-border border-dashed rounded-[2rem] p-6 flex items-center justify-center text-brand-muted text-[10px] font-black uppercase tracking-widest">
-                        No teacher comments yet
-                      </div>
-                     )}
-
-                     {/* Parent's Remarks (Editable) */}
-                     <section className="bg-emerald-500/5 border border-emerald-500/20 rounded-[2rem] p-6 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <User className="text-emerald-600" size={20} />
-                          <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600">My Remarks</h3>
-                        </div>
-                        <textarea 
-                          placeholder="Add your notes or questions for the teacher..."
-                          value={modalFeedbackText}
-                          onChange={(e) => setModalFeedbackText(e.target.value)}
-                          className="w-full bg-white dark:bg-brand-card border-none rounded-2xl p-4 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 min-h-[100px] resize-none transition-all"
-                        />
-                        <button 
-                          onClick={() => handleSaveParentFeedback(selectedExam.id, 'exam', true)}
-                          disabled={savingFeedback}
-                          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
-                        >
-                          {savingFeedback ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                          {savingFeedback ? 'Saving...' : 'Save Remarks'}
-                        </button>
-                     </section>
-                  </div>
-                ) : (
-                  <div className="bg-amber-500/5 border border-amber-500/20 rounded-[2rem] p-6 text-center">
-                    <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">Work Not Yet Submitted</p>
-                    <p className="text-[11px] text-brand-muted leading-relaxed">
-                      This assignment has not been completed by the student yet. Direct parent feedback and teacher grading remarks will become available once the student submits their answers.
-                    </p>
-                  </div>
-                )}
-
-                <div className="space-y-6">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-muted ml-2">Questions & Answers</h4>
-                  
-                  {loadingExamDetails && (
-                    <div className="flex items-center justify-center py-10">
-                      <Loader2 className="animate-spin text-brand-accent" size={32} />
-                    </div>
+              {/* Modal Navigation Segment */}
+              <div className="flex items-center gap-2 px-6 py-2.5 border-b border-brand-border/60 bg-brand-bg/40 text-xs">
+                <button
+                  onClick={() => setModalTab('questions')}
+                  className={`px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
+                    modalTab === 'questions' ? 'bg-brand-surface text-brand-text shadow-sm border border-brand-border' : 'text-brand-muted hover:text-brand-text'
+                  }`}
+                >
+                  Questions & Answers
+                </button>
+                <button
+                  onClick={() => setModalTab('feedback')}
+                  className={`px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    modalTab === 'feedback' ? 'bg-brand-surface text-brand-text shadow-sm border border-brand-border' : 'text-brand-muted hover:text-brand-text'
+                  }`}
+                >
+                  <span>Teacher & Parent Notes</span>
+                  {(selectedSubmission?.submission?.teacher_comment || selectedExam?.teacher_feedback) && (
+                    <span className="w-2 h-2 rounded-full bg-brand-accent" />
                   )}
+                </button>
+              </div>
 
-                  {selectedSubmission && selectedSubmission.assignment.questions?.map((q: any, idx: number) => {
-                    const isSubmissionSubmitted = !!selectedSubmission.submission?.id;
-                    const submissionAnswers = selectedSubmission.submission?.answers || {};
-                    const qAnswer = submissionAnswers[q.id] !== undefined
-                      ? submissionAnswers[q.id]
-                      : (submissionAnswers[idx] !== undefined ? submissionAnswers[idx] : submissionAnswers[String(idx)]);
-                    return (
-                      <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
-                        <div className="flex items-start justify-between gap-4 mb-4">
-                          <div className="flex items-start gap-4">
-                            <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
-                            <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+                {/* TAB: Questions & Answers */}
+                {modalTab === 'questions' && (
+                  <div className="space-y-4">
+                    {/* Performance Assessment summary banner */}
+                    {selectedSubmission?.submission && ((selectedSubmission.submission.percentage !== undefined && selectedSubmission.submission.percentage !== null) || selectedSubmission.submission.score !== null) && (
+                      <div className="p-4 bg-brand-surface rounded-xl border border-brand-border flex items-center justify-between gap-4 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-brand-accent/10 text-brand-accent flex items-center justify-center shrink-0">
+                            <Award size={20} />
                           </div>
-                          <span className="text-xs font-black text-brand-muted shrink-0 bg-brand-bg px-2.5 py-1 rounded-lg border border-brand-border/30 font-mono">
-                            {q.max_marks || q.marks || q.points || 10} Pts
-                          </span>
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted">Performance Assessment</p>
+                            <p className="font-bold text-sm text-brand-text">
+                              {selectedSubmission.submission.percentage !== undefined && selectedSubmission.submission.percentage !== null
+                                ? `${selectedSubmission.submission.percentage}% — `
+                                : `${selectedSubmission.submission.score}% — `}
+                              {selectedSubmission.submission.grade_label || getGradeLabel(selectedSubmission.submission.percentage ?? selectedSubmission.submission.score)}
+                            </p>
+                          </div>
                         </div>
-                        <div className="pl-10">
-                          {isSubmissionSubmitted ? (
-                            <>
-                              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Submitted Answer Detail</p>
-                              {q.type === 'mcq' ? (
-                                <div className="flex items-center gap-2">
-                                   <div className={`px-4 py-2 rounded-xl text-sm font-bold border ${parseInt(qAnswer) === q.correct_option ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
-                                     {q.options?.[parseInt(qAnswer)] || 'No choice selected'}
-                                   </div>
-                                   {parseInt(qAnswer) === q.correct_option ? (
-                                     <CheckCircle2 size={16} className="text-emerald-500" />
-                                   ) : (
-                                     <AlertTriangle size={16} className="text-red-500" />
-                                   )}
+                        <GradeBadge 
+                          percentage={selectedSubmission.submission.percentage ?? selectedSubmission.submission.score} 
+                          gradeLabel={selectedSubmission.submission.grade_label} 
+                          size="md" 
+                        />
+                      </div>
+                    )}
+
+                    {loadingExamDetails && (
+                      <div className="flex items-center justify-center py-8 text-brand-muted">
+                        <Loader2 className="animate-spin mr-2" size={20} />
+                        <span className="text-xs">Loading assessment details...</span>
+                      </div>
+                    )}
+
+                    {/* Assignment questions */}
+                    {selectedSubmission && (
+                      selectedSubmission.assignment.questions && selectedSubmission.assignment.questions.length > 0 ? (
+                        selectedSubmission.assignment.questions.map((q: any, idx: number) => {
+                          const isSubmitted = !!selectedSubmission.submission?.id;
+                          const answers = selectedSubmission.submission?.answers || {};
+                          const qAnswer = answers[q.id] !== undefined
+                            ? answers[q.id]
+                            : (answers[idx] !== undefined ? answers[idx] : answers[String(idx)]);
+                          
+                          const gradingEntry = selectedSubmission?.submission?.grading?.[q.id];
+                          const isMcq = q.type === 'mcq';
+                          let marksAwarded: number | null = null;
+                          if (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) {
+                            marksAwarded = Number(gradingEntry.marks_awarded);
+                          } else if (gradingEntry && gradingEntry.correct !== undefined && gradingEntry.correct !== null) {
+                            marksAwarded = gradingEntry.correct ? (q.max_marks || q.marks || 10) : 0;
+                          } else if (isMcq && isSubmitted) {
+                            marksAwarded = parseInt(qAnswer) === q.correct_option ? (q.max_marks || q.marks || 10) : 0;
+                          }
+
+                          return (
+                            <div key={q.id || idx} className="bg-brand-bg/50 rounded-xl p-4 border border-brand-border space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2.5">
+                                  <span className="w-5 h-5 rounded-md bg-brand-accent/10 text-brand-accent text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                    {idx + 1}
+                                  </span>
+                                  <p className="text-sm font-semibold text-brand-text leading-snug">{q.text}</p>
                                 </div>
-                              ) : q.type === 'photo' ? (
-                                <div className="space-y-2">
-                                  {qAnswer ? (
+                                <span className="text-xs font-mono text-brand-muted shrink-0 bg-brand-surface px-2 py-0.5 rounded border border-brand-border">
+                                  {q.max_marks || q.marks || 10} pts
+                                </span>
+                              </div>
+
+                              <div className="pl-7 space-y-2">
+                                <span className="text-[11px] font-semibold text-brand-muted block">Student's Response:</span>
+                                {isSubmitted ? (
+                                  q.type === 'photo' ? (
+                                    qAnswer ? (
+                                      <img 
+                                        src={qAnswer} 
+                                        alt="Work photo" 
+                                        className="rounded-lg border border-brand-border max-h-64 object-contain bg-brand-surface"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    ) : (
+                                      <p className="text-xs text-brand-muted italic">No photo submitted</p>
+                                    )
+                                  ) : q.type === 'mcq' ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className={`px-3 py-1 rounded-md text-xs font-semibold border ${
+                                        parseInt(qAnswer) === q.correct_option 
+                                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700' 
+                                          : 'bg-red-500/10 border-red-500/20 text-red-700'
+                                      }`}>
+                                        {q.options?.[parseInt(qAnswer)] || 'No option selected'}
+                                      </span>
+                                      {parseInt(qAnswer) === q.correct_option ? (
+                                        <CheckCircle2 size={16} className="text-emerald-500" />
+                                      ) : (
+                                        <AlertTriangle size={16} className="text-red-500" />
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs font-medium text-brand-text bg-brand-surface p-3 rounded-lg border border-brand-border">
+                                      {qAnswer || 'No answer provided'}
+                                    </p>
+                                  )
+                                ) : (
+                                  <p className="text-xs text-brand-muted italic">Assignment not yet submitted by student</p>
+                                )}
+
+                                {/* Marks & Question Feedback */}
+                                {marksAwarded !== null && (
+                                  <div className="pt-2 flex items-center gap-2 text-xs">
+                                    <span className={`px-2 py-0.5 rounded font-semibold ${marksAwarded > 0 ? 'bg-emerald-500/10 text-emerald-700' : 'bg-red-500/10 text-red-700'}`}>
+                                      Awarded: {marksAwarded} / {q.max_marks || q.marks || 10} pts
+                                    </span>
+                                    {gradingEntry?.comment && (
+                                      <span className="text-brand-muted italic">
+                                        "{gradingEntry.comment}"
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-xs text-brand-muted text-center py-6">No individual question breakdown available for this task.</p>
+                      )
+                    )}
+
+                    {/* Exam questions */}
+                    {selectedExam && examData && (
+                      examData.questions && examData.questions.length > 0 ? (
+                        examData.questions.map((q: any, idx: number) => {
+                          const studentAnswer = (selectedExam as any).answers?.[idx] !== undefined
+                            ? (selectedExam as any).answers?.[idx]
+                            : (selectedExam as any).answers?.[String(idx)];
+                          
+                          const gradingEntry = selectedExam.grading?.[idx] !== undefined
+                            ? selectedExam.grading[idx]
+                            : selectedExam.grading?.[String(idx)];
+                          
+                          const isCorrect = q.type === 'mcq'
+                            ? studentAnswer === q.correct_answer
+                            : (typeof gradingEntry === 'object' && gradingEntry !== null ? (gradingEntry.correct === true || gradingEntry.correct === 'true') : false);
+
+                          return (
+                            <div key={idx} className="bg-brand-bg/50 rounded-xl p-4 border border-brand-border space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2.5">
+                                  <span className="w-5 h-5 rounded-md bg-brand-accent/10 text-brand-accent text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                    {idx + 1}
+                                  </span>
+                                  <p className="text-sm font-semibold text-brand-text leading-snug">{q.question}</p>
+                                </div>
+                                <span className="text-xs font-mono text-brand-muted shrink-0 bg-brand-surface px-2 py-0.5 rounded border border-brand-border">
+                                  {q.marks || 1} pts
+                                </span>
+                              </div>
+
+                              <div className="pl-7 space-y-2">
+                                <span className="text-[11px] font-semibold text-brand-muted block">Student's Response:</span>
+                                {q.type === 'image' ? (
+                                  studentAnswer ? (
                                     <img 
-                                      src={qAnswer} 
-                                      alt="Work" 
-                                      className="rounded-2xl border border-brand-border w-full max-w-sm object-cover shadow-sm"
+                                      src={studentAnswer} 
+                                      alt="Student answer" 
+                                      className="rounded-lg border border-brand-border max-h-64 object-contain bg-brand-surface"
                                       referrerPolicy="no-referrer"
                                     />
                                   ) : (
-                                    <p className="text-xs font-semibold text-brand-muted">No photo uploaded</p>
-                                  )}
-                                </div>
-                              ) : (
-                                <p className="font-bold text-brand-text italic bg-brand-surface p-4 rounded-xl border border-brand-border/50">{qAnswer || 'No answer provided'}</p>
-                              )}
-
-                              {(() => {
-                                const gradingEntry = selectedSubmission?.submission?.grading?.[q.id];
-                                const isMcq = q.type === 'mcq';
-                                
-                                let marksAwarded: number | null = null;
-                                if (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) {
-                                  marksAwarded = Number(gradingEntry.marks_awarded);
-                                } else if (isMcq) {
-                                  const isCorrect = parseInt(qAnswer) === q.correct_option;
-                                  marksAwarded = isCorrect ? (q.max_marks || q.marks || q.points || 10) : 0;
-                                }
-                                const comment = gradingEntry?.comment || '';
-
-                                return (
-                                  <div className="mt-4 pt-3 border-t border-brand-border/30 space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      {marksAwarded !== null ? (
-                                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest ${
-                                          marksAwarded > 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'
-                                        }`}>
-                                          <Star size={12} />
-                                          Score: {marksAwarded} / {q.max_marks || q.marks || q.points || 10} Pts
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest animate-pulse">
-                                          <Hourglass size={12} />
-                                          Awaiting Grading
-                                        </div>
-                                      )}
-                                    </div>
-                                    {comment && (
-                                      <div className="p-3 bg-brand-surface rounded-xl border border-brand-border/50 mt-2">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-1">Teacher's Question Feedback</p>
-                                        <p className="text-xs font-bold text-brand-text italic">"{comment}"</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                            </>
-                          ) : (
-                            <>
-                              <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Question Details & Answer Key</p>
-                              {q.type === 'mcq' ? (
-                                <div className="space-y-2 mt-2">
-                                  {q.options?.map((opt: string, oIdx: number) => {
-                                    const isCorrectOpt = oIdx === q.correct_option;
-                                    return (
-                                      <div 
-                                        key={oIdx} 
-                                        className={`px-4 py-2 rounded-xl text-sm font-bold border ${isCorrectOpt ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-brand-surface border-brand-border/50 text-brand-muted'}`}
-                                      >
-                                        <span className="mr-2">{oIdx + 1}.</span> {opt} {isCorrectOpt && '✓ (Correct Answer)'}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  <div className="px-4 py-3 bg-brand-surface border border-brand-border rounded-xl text-xs font-medium text-brand-muted leading-relaxed">
-                                    This is an open-ended question requiring a <span className="font-black text-brand-accent uppercase">{q.type === 'photo' ? 'Photo / Image Upload' : 'Written / Text Response'}</span> from the student.
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {selectedExam && examData && examData.questions?.map((q: any, idx: number) => {
-                    const studentAnswer = (selectedExam as any).answers?.[idx] !== undefined
-                      ? (selectedExam as any).answers?.[idx]
-                      : (selectedExam as any).answers?.[String(idx)];
-                    
-                    const gradingEntry = selectedExam.grading?.[idx] !== undefined
-                      ? selectedExam.grading[idx]
-                      : selectedExam.grading?.[String(idx)];
-                    
-                    const isGraded = q.type === 'mcq' || gradingEntry !== undefined;
-                    
-                    const isCorrect = q.type === 'mcq'
-                      ? studentAnswer === q.correct_answer
-                      : (typeof gradingEntry === 'object' && gradingEntry !== null
-                          ? (gradingEntry.correct === true || gradingEntry.correct === 'true')
-                          : false);
-                    
-                    const marksAwarded = typeof gradingEntry === 'object' && gradingEntry !== null
-                      ? (gradingEntry.marks_awarded ?? 0)
-                      : (typeof gradingEntry === 'number' ? gradingEntry : (isCorrect ? q.marks : 0));
-
-                    return (
-                      <div key={idx} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
-                        <div className="flex items-start gap-4 mb-4">
-                          <span className="text-[10px] font-black text-brand-accent bg-brand-accent/10 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">{idx + 1}</span>
-                          <h4 className="font-bold text-sm leading-tight pt-0.5">{q.question}</h4>
-                        </div>
-                        <div className="pl-10 space-y-4">
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Student Response</p>
-                            {q.type === 'image' ? (
-                              <div className="space-y-2">
-                                {studentAnswer ? (
-                                  <img 
-                                    src={studentAnswer} 
-                                    alt="Student's submission" 
-                                    className="rounded-2xl border-2 border-brand-border max-w-full max-h-64 object-contain shadow-sm bg-brand-surface"
-                                    referrerPolicy="no-referrer"
-                                  />
+                                    <p className="text-xs text-brand-muted italic">No image provided</p>
+                                  )
                                 ) : (
-                                  <p className="text-xs font-bold text-brand-muted bg-brand-surface p-4 rounded-xl border border-dashed border-brand-border/50">
-                                    No upload provided
+                                  <div className={`p-2.5 rounded-lg text-xs font-semibold border ${
+                                    isCorrect ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700' : 'bg-red-500/10 border-red-500/20 text-red-700'
+                                  }`}>
+                                    {studentAnswer || 'No response'}
+                                  </div>
+                                )}
+
+                                {q.type === 'mcq' && !isCorrect && (
+                                  <p className="text-xs text-emerald-600 font-medium">
+                                    Correct answer: {q.correct_answer}
                                   </p>
                                 )}
                               </div>
-                            ) : (
-                              <div className={`p-4 rounded-xl text-sm font-bold border-2 ${
-                                q.type === 'mcq' 
-                                  ? isCorrect ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600' : 'bg-red-500/5 border-red-500/20 text-red-600'
-                                  : isGraded 
-                                    ? isCorrect 
-                                      ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600' 
-                                      : 'bg-red-500/5 border-red-500/20 text-red-600'
-                                    : 'bg-brand-surface border-brand-border/50 text-brand-text'
-                              }`}>
-                                {studentAnswer || 'No response'}
-                              </div>
-                            )}
-                          </div>
-                          
-                          {q.type === 'mcq' && (
-                            <div>
-                               <p className="text-[10px] font-black uppercase tracking-widest text-brand-muted mb-2">Correct Solution</p>
-                               <div className="p-4 rounded-xl text-sm font-bold bg-emerald-500/5 border-2 border-emerald-500/20 text-emerald-600">
-                                 {q.correct_answer}
-                               </div>
                             </div>
-                          )}
+                          );
+                        })
+                      ) : (
+                        <p className="text-xs text-brand-muted text-center py-6">No question breakdown available.</p>
+                      )
+                    )}
+                  </div>
+                )}
 
-                          {q.type !== 'mcq' && (
-                            <div className="mt-2 flex items-center gap-2">
-                              {gradingEntry !== undefined ? (
-                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest w-fit ${
-                                  isCorrect ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'
-                                }`}>
-                                  <Star size={12} />
-                                  Marks: {marksAwarded} / {q.marks}
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit animate-pulse">
-                                  <Hourglass size={12} />
-                                  Awaiting Teacher's Grading
-                                </div>
-                              )}
+                {/* TAB: Teacher & Parent Feedback */}
+                {modalTab === 'feedback' && (
+                  <div className="space-y-6">
+                    {/* Teacher feedback box */}
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-semibold text-brand-muted flex items-center gap-1.5">
+                        <Award size={14} className="text-brand-accent" />
+                        Teacher's Feedback & Comments
+                      </h3>
+                      {(selectedSubmission?.submission?.teacher_comment || selectedExam?.teacher_feedback) ? (
+                        <div className="p-4 bg-brand-bg rounded-xl border border-brand-border space-y-3">
+                          <p className="text-sm font-medium text-brand-text italic">
+                            "{selectedSubmission?.submission?.teacher_comment || selectedExam?.teacher_feedback}"
+                          </p>
+
+                          {(selectedSubmission?.submission?.teacher_reply || selectedExam?.teacher_reply) && (
+                            <div className="pt-3 border-t border-brand-border/60">
+                              <span className="text-[11px] font-semibold text-brand-accent block mb-1">Teacher's Reply to your Note:</span>
+                              <p className="text-xs text-brand-text italic">
+                                "{selectedSubmission?.submission?.teacher_reply || selectedExam?.teacher_reply}"
+                              </p>
                             </div>
                           )}
                         </div>
+                      ) : (
+                        <div className="p-4 bg-brand-bg rounded-xl border border-brand-border/60 text-xs text-brand-muted text-center">
+                          No teacher comment has been posted yet.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Parent's Remarks (Editable) */}
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-semibold text-brand-muted flex items-center gap-1.5">
+                        <User size={14} className="text-emerald-600" />
+                        Your Note for the Teacher
+                      </h3>
+                      <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl space-y-3">
+                        <textarea 
+                          placeholder="Add questions or notes for the teacher regarding this work..."
+                          value={modalFeedbackText}
+                          onChange={(e) => setModalFeedbackText(e.target.value)}
+                          className="w-full bg-brand-surface border border-brand-border rounded-xl p-3 text-xs font-medium text-brand-text outline-none focus:border-emerald-500 min-h-[90px] resize-none transition-all"
+                        />
+                        <button 
+                          onClick={() => {
+                            if (selectedSubmission?.submission?.id) {
+                              handleSaveParentFeedback(selectedSubmission.submission.id, 'assignment', true);
+                            } else if (selectedExam?.id) {
+                              handleSaveParentFeedback(selectedExam.id, 'exam', true);
+                            }
+                          }}
+                          disabled={savingFeedback}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          {savingFeedback ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                          <span>{savingFeedback ? 'Saving...' : 'Send Note to Teacher'}</span>
+                        </button>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </motion.div>
           </motion.div>
