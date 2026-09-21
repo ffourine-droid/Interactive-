@@ -2,6 +2,16 @@ import { supabase } from '../lib/supabase';
 
 export const assignmentService = {
   async searchAssignments(grade: string, teacherName?: string, schoolName?: string, title?: string) {
+    const trimmedSchool = schoolName?.trim();
+    const trimmedTeacher = teacherName?.trim();
+    const trimmedTitle = title?.trim();
+
+    // STRICT: No assignments should load before a student inputs their school/teacher information.
+    // This prevents loading all assignments from the database.
+    if (!trimmedSchool && !trimmedTeacher && !trimmedTitle) {
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('assignments')
       .select(`
@@ -22,31 +32,26 @@ export const assignmentService = {
 
     let filtered = data;
 
-    if (teacherName) {
-      const term = teacherName.toLowerCase().trim();
-      if (term) {
-        filtered = filtered.filter((asgn: any) => 
-          asgn.teacher?.name?.toLowerCase().includes(term)
-        );
-      }
+    if (trimmedSchool) {
+      const term = trimmedSchool.toLowerCase();
+      filtered = filtered.filter((asgn: any) => 
+        asgn.teacher?.school_name?.toLowerCase().includes(term) ||
+        (asgn.school_name && asgn.school_name.toLowerCase().includes(term))
+      );
     }
 
-    if (schoolName) {
-      const term = schoolName.toLowerCase().trim();
-      if (term) {
-        filtered = filtered.filter((asgn: any) => 
-          asgn.teacher?.school_name?.toLowerCase().includes(term)
-        );
-      }
+    if (trimmedTeacher) {
+      const term = trimmedTeacher.toLowerCase();
+      filtered = filtered.filter((asgn: any) => 
+        asgn.teacher?.name?.toLowerCase().includes(term)
+      );
     }
 
-    if (title) {
-      const term = title.toLowerCase().trim();
-      if (term) {
-        filtered = filtered.filter((asgn: any) => 
-          asgn.title?.toLowerCase().includes(term)
-        );
-      }
+    if (trimmedTitle) {
+      const term = trimmedTitle.toLowerCase();
+      filtered = filtered.filter((asgn: any) => 
+        asgn.title?.toLowerCase().includes(term)
+      );
     }
 
     return filtered;

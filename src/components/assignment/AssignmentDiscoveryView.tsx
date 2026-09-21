@@ -14,7 +14,9 @@ import {
   ArrowRight,
   HelpCircle,
   FileText,
-  Bookmark
+  Bookmark,
+  AlertCircle,
+  GraduationCap
 } from 'lucide-react';
 import { AssignmentCard, AssignmentItem } from './AssignmentCard';
 
@@ -93,10 +95,16 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
     return true;
   });
 
+  const handleSelectAssignment = (assignmentId: string) => {
+    onSelectAssignment(assignmentId);
+  };
+
+  const isProfileComplete = Boolean(studentName.trim() && searchTeacher.trim() && searchSchool.trim());
+
   return (
     <div className="space-y-5 animate-fade-in pb-16">
       {/* ── STUDENT IDENTITY BANNER ── */}
-      <div className="bg-brand-surface border border-brand-border rounded-3xl p-4 sm:p-5 shadow-xs">
+      <div className="bg-brand-surface border border-brand-border rounded-3xl p-4 sm:p-5 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-brand-accent/15 text-brand-accent flex items-center justify-center font-black text-base shadow-xs shrink-0">
@@ -104,14 +112,14 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
             </div>
             <div className="min-w-0">
               <span className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
-                Student Profile
+                Student Profile & Classroom Details
               </span>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={studentName}
                   onChange={(e) => onStudentNameChange(e.target.value)}
-                  placeholder="Enter your full name"
+                  placeholder="Enter your full name *"
                   className="font-display font-black text-base text-brand-text bg-transparent border-b border-dashed border-brand-border hover:border-brand-accent focus:border-brand-accent outline-none pb-0.5 max-w-[200px]"
                 />
                 <span className="text-[11px] font-bold text-brand-muted bg-brand-bg px-2 py-0.5 rounded-md border border-brand-border">
@@ -125,7 +133,7 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
             <button
               type="button"
               onClick={onRefresh}
-              disabled={loading}
+              disabled={loading || !isProfileComplete}
               className="px-3 py-1.5 rounded-xl border border-brand-border bg-brand-bg hover:bg-brand-surface text-xs font-bold text-brand-muted hover:text-brand-text flex items-center gap-1.5 transition-all disabled:opacity-50"
               title="Refresh assignments list"
             >
@@ -134,6 +142,53 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
             </button>
           </div>
         </div>
+
+        {/* Classroom details required before getting assignments */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-brand-border/60">
+          <div className="relative">
+            <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={14} />
+            <input
+              type="text"
+              value={searchTeacher}
+              onChange={(e) => setSearchTeacher(e.target.value)}
+              placeholder="Teacher's name *"
+              className="w-full pl-8 pr-3 py-2 rounded-xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text placeholder:text-brand-muted/70 transition-all"
+            />
+          </div>
+          <div className="relative">
+            <School className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={14} />
+            <input
+              type="text"
+              value={searchSchool}
+              onChange={(e) => setSearchSchool(e.target.value)}
+              placeholder="School name *"
+              className="w-full pl-8 pr-3 py-2 rounded-xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text placeholder:text-brand-muted/70 transition-all"
+            />
+          </div>
+        </div>
+
+        {!isProfileComplete ? (
+          <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl flex items-center gap-2">
+            <AlertCircle size={15} className="shrink-0" />
+            <span>Please write your full name, teacher's name, and school name above to load assignments for your school.</span>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-brand-border/60">
+            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+              <CheckCircle2 size={13} />
+              <span>Ready to search assignments for {searchSchool}</span>
+            </span>
+            <button
+              type="button"
+              onClick={onSearch}
+              disabled={loading}
+              className="px-4 py-1.5 rounded-xl bg-brand-accent text-white font-bold text-xs shadow-xs hover:brightness-105 active:scale-98 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+              <span>{assignments.length > 0 ? "Refresh School Assignments" : "Load School Assignments"}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── TAB SELECTOR ── */}
@@ -234,11 +289,25 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
           </div>
 
           {/* Assignments List */}
-          {loading ? (
+          {!isProfileComplete ? (
+            <div className="bg-brand-surface border border-brand-border rounded-3xl p-8 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
+                <School size={28} />
+              </div>
+              <div>
+                <h4 className="font-display font-black text-base text-brand-text">
+                  Input Details to Load Assignments
+                </h4>
+                <p className="text-xs text-brand-muted max-w-sm mx-auto mt-1 leading-relaxed">
+                  No assignments will load until you write your name, your teacher's name, and your school name above. This ensures only your searched school's assignments are loaded.
+                </p>
+              </div>
+            </div>
+          ) : loading ? (
             <div className="flex flex-col items-center justify-center py-16 bg-brand-surface border border-brand-border rounded-3xl text-center space-y-3">
               <Loader2 className="animate-spin text-brand-accent" size={32} />
               <p className="text-xs font-bold text-brand-muted">
-                Checking your school and classes for assignments...
+                Loading assignments for {searchSchool}...
               </p>
             </div>
           ) : filteredAssignments.length > 0 ? (
@@ -255,26 +324,35 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
           ) : (
             <div className="bg-brand-surface border border-brand-border rounded-3xl p-8 text-center space-y-3">
               <div className="w-14 h-14 rounded-2xl bg-brand-accent/10 text-brand-accent flex items-center justify-center mx-auto">
-                <CheckCircle2 size={28} />
+                <School size={28} />
               </div>
               <div>
                 <h4 className="font-display font-black text-base text-brand-text">
-                  {statusFilter === 'todo' ? 'All caught up!' : 'No assignments found'}
+                  {assignments.length === 0 ? "No assignments loaded yet" : "No assignments found"}
                 </h4>
                 <p className="text-xs text-brand-muted max-w-xs mx-auto mt-1 leading-relaxed">
-                  {statusFilter === 'todo'
-                    ? 'You have completed all pending homework. You can look up assignments by teacher or school.'
-                    : 'Check your grade setting or search by your teacher’s name using the search tab.'}
+                  {assignments.length === 0
+                    ? `Click below to load assignments for ${searchSchool}.`
+                    : `We couldn't find any assignments for ${searchSchool} (${searchGrade}). Check the spelling of teacher or school name.`}
                 </p>
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={onSearch}
+                  disabled={loading}
+                  className="px-4 py-2 rounded-xl bg-brand-accent text-white font-bold text-xs shadow-xs hover:brightness-105 transition-all flex items-center gap-1.5"
+                >
+                  {loading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+                  <span>{assignments.length === 0 ? "Load School Assignments" : "Search Again"}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('search_all')}
-                  className="px-4 py-2 rounded-xl bg-brand-accent text-white font-bold text-xs shadow-xs hover:brightness-105 transition-all"
+                  className="px-4 py-2 rounded-xl bg-brand-bg border border-brand-border text-brand-text font-bold text-xs hover:bg-brand-surface transition-all"
                 >
-                  Search by Teacher or School →
+                  Advanced Search →
                 </button>
               </div>
             </div>
@@ -367,17 +445,25 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
               </div>
             </div>
 
+            {!isProfileComplete && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>Please enter your name, teacher's name, and school name above before searching.</span>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => {
+                if (!isProfileComplete) return;
                 onSearch();
                 setActiveTab('my_work');
               }}
-              disabled={loading}
-              className="w-full py-3.5 rounded-2xl bg-brand-accent text-white font-black uppercase tracking-wider text-xs shadow-md shadow-brand-accent/20 hover:brightness-105 active:scale-98 transition-all flex items-center justify-center gap-2"
+              disabled={loading || !isProfileComplete}
+              className="w-full py-3.5 rounded-2xl bg-brand-accent text-white font-black uppercase tracking-wider text-xs shadow-md shadow-brand-accent/20 hover:brightness-105 active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
-              <span>Search Database</span>
+              <span>Search School Assignments</span>
             </button>
           </div>
         </div>
@@ -450,9 +536,16 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
                 </div>
               )}
 
+              {(!studentName.trim() || !searchTeacher.trim() || !directSchool.trim()) && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>Please write your name, teacher's name, and school before getting the assignment.</span>
+                </div>
+              )}
+
               <button
                 type="button"
-                disabled={directFindLoading || !directSchool.trim() || !directTitle.trim()}
+                disabled={directFindLoading || !directSchool.trim() || !directTitle.trim() || !studentName.trim() || !searchTeacher.trim()}
                 onClick={() => {
                   if (onDirectSchoolFind) {
                     onDirectSchoolFind(directSchool, directTitle, directGrade);

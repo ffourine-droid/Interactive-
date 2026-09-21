@@ -1285,12 +1285,13 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                           const gradingEntry = selectedSubmission?.submission?.grading?.[q.id];
                           const isMcq = q.type === 'mcq';
                           let marksAwarded: number | null = null;
+                          const qMaxPts = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || 10);
                           if (gradingEntry && gradingEntry.marks_awarded !== null && gradingEntry.marks_awarded !== undefined) {
                             marksAwarded = Number(gradingEntry.marks_awarded);
                           } else if (gradingEntry && gradingEntry.correct !== undefined && gradingEntry.correct !== null) {
-                            marksAwarded = gradingEntry.correct ? (q.max_marks || q.marks || 10) : 0;
+                            marksAwarded = gradingEntry.correct ? qMaxPts : 0;
                           } else if (isMcq && isSubmitted) {
-                            marksAwarded = parseInt(qAnswer) === q.correct_option ? (q.max_marks || q.marks || 10) : 0;
+                            marksAwarded = parseInt(qAnswer) === q.correct_option ? qMaxPts : 0;
                           }
 
                           return (
@@ -1303,7 +1304,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                                   <p className="text-sm font-semibold text-brand-text leading-snug">{q.text}</p>
                                 </div>
                                 <span className="text-xs font-mono text-brand-muted shrink-0 bg-brand-surface px-2 py-0.5 rounded border border-brand-border">
-                                  {q.max_marks || q.marks || 10} pts
+                                  {qMaxPts} pts
                                 </span>
                               </div>
 
@@ -1349,7 +1350,7 @@ export const ParentStudentDashboard: React.FC<ParentStudentDashboardProps> = ({ 
                                 {marksAwarded !== null && (
                                   <div className="pt-2 flex items-center gap-2 text-xs">
                                     <span className={`px-2 py-0.5 rounded font-semibold ${marksAwarded > 0 ? 'bg-emerald-500/10 text-emerald-700' : 'bg-red-500/10 text-red-700'}`}>
-                                      Awarded: {marksAwarded} / {q.max_marks || q.marks || 10} pts
+                                      Awarded: {marksAwarded} / {qMaxPts} pts
                                     </span>
                                     {gradingEntry?.comment && (
                                       <span className="text-brand-muted italic">

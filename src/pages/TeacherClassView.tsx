@@ -169,7 +169,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
 
     const assignment = assignments.find(a => a.id === selectedSubmission.assignment_id);
     const q = assignment?.questions?.find((x: any) => x.id?.toString() === qIdStr);
-    const maxMarks = q?.max_marks || q?.marks || q?.points || 10;
+    const maxMarks = q?.marks !== undefined && q?.marks !== null ? Number(q.marks) : (q?.max_marks || q?.points || 10);
     const marksAwarded = isCorrect ? maxMarks : 0;
 
     // Optimistically update local question state
@@ -290,7 +290,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
           }
           const answer = selectedSubmission.answers?.[q.id];
           const isCorrect = answer !== undefined && parseInt(answer) === q.correct_option;
-          return sum + (isCorrect ? (q.max_marks || q.marks || q.points || 10) : 0);
+          const qMax = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
+          return sum + (isCorrect ? qMax : 0);
         } else {
           const scoreState = questionGrades[q.id]?.score;
           const scoreNum = (scoreState !== undefined && scoreState !== '') ? Number(scoreState) : 0;
@@ -298,7 +299,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
         }
       }, 0);
 
-      const maxTotalMarks = assignment.questions.reduce((sum: number, q: any) => sum + (q.max_marks || q.marks || q.points || 10), 0);
+      const maxTotalMarks = assignment.questions.reduce((sum: number, q: any) => sum + (q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10)), 0);
       const computedPercentage = maxTotalMarks > 0 ? Math.round((runningTotal / maxTotalMarks) * 100) : 0;
       const computedGradeLabel = getGradeLabel(computedPercentage);
 
@@ -787,7 +788,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
     ? assignments.find(a => a.id === selectedSubmission.assignment_id) 
     : null;
 
-  const maxTotalMarks = activeAssignment?.questions?.reduce((sum: number, q: any) => sum + (q.max_marks || q.marks || q.points || 10), 0) || 0;
+  const maxTotalMarks = activeAssignment?.questions?.reduce((sum: number, q: any) => sum + (q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10)), 0) || 0;
 
   const runningTotal = activeAssignment?.questions?.reduce((sum: number, q: any) => {
     if (q.type === 'mcq') {
@@ -797,7 +798,8 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
       }
       const answer = selectedSubmission?.answers?.[q.id];
       const isCorrect = answer !== undefined && parseInt(answer) === q.correct_option;
-      return sum + (isCorrect ? (q.max_marks || q.marks || q.points || 10) : 0);
+      const qMax = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
+      return sum + (isCorrect ? qMax : 0);
     } else {
       const scoreState = questionGrades[q.id]?.score;
       const scoreNum = (scoreState !== undefined && scoreState !== '') ? Number(scoreState) : 0;
@@ -1762,6 +1764,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                   {assignments.find(a => a.id === selectedSubmission.assignment_id)?.questions.map((q: any, idx: number) => {
                     const submissionAnswers = selectedSubmission.answers || {};
                     const qAnswer = submissionAnswers[q.id];
+                    const qPointVal = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
                     return (
                       <div key={q.id} className="bg-brand-bg/50 rounded-3xl p-6 border border-brand-border/50">
                         <div className="flex items-start justify-between gap-4 mb-4">
@@ -1770,7 +1773,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                             <h4 className="font-bold text-sm leading-tight pt-0.5">{q.text}</h4>
                           </div>
                           <span className="text-xs font-black text-brand-muted shrink-0 bg-brand-surface px-2.5 py-1 rounded-lg border border-brand-border/30 font-mono">
-                            {q.max_marks || q.marks || q.points || 10} Pts
+                            {qPointVal} Pts
                           </span>
                         </div>
                         <div className="pl-10">
@@ -1788,7 +1791,7 @@ const TeacherClassView: React.FC<TeacherClassViewProps> = ({ classId, className,
                                 )}
                               </div>
                               <div className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-1">
-                                Auto-Graded: <span className="text-brand-accent">{selectedSubmission.grading?.[q.id]?.marks_awarded ?? (parseInt(qAnswer) === q.correct_option ? (q.max_marks || q.marks || q.points || 10) : 0)}</span> / {q.max_marks || q.marks || q.points || 10} marks
+                                Auto-Graded: <span className="text-brand-accent">{selectedSubmission.grading?.[q.id]?.marks_awarded ?? (parseInt(qAnswer) === q.correct_option ? qPointVal : 0)}</span> / {qPointVal} marks
                               </div>
                             </div>
                           ) : (

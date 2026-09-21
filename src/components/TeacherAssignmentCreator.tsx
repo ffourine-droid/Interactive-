@@ -32,6 +32,7 @@ interface Question {
   text: string;
   options: string[];
   correct_option: number | null;
+  marks?: number;
 }
 
 interface Student {
@@ -76,7 +77,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     due_date: ''
   });
   const [questions, setQuestions] = useState<Question[]>([
-    { id: Math.random().toString(36).substr(2, 9), type: 'mcq', text: '', options: ['', '', '', ''], correct_option: 0 }
+    { id: Math.random().toString(36).substr(2, 9), type: 'mcq', text: '', options: ['', '', '', ''], correct_option: 0, marks: 10 }
   ]);
 
   const subjects = ['Mathematics', 'Science', 'English', 'Kiswahili', 'Social Studies'];
@@ -97,10 +98,11 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
       if (initialData.questions) {
         setQuestions(initialData.questions.map((q: any) => ({
           id: q.id || Math.random().toString(36).substr(2, 9),
-          type: q.type === 'mcq' ? 'mcq' : 'short_answer',
+          type: q.type === 'mcq' ? 'mcq' : (q.type === 'photo' ? 'photo' : 'short_answer'),
           text: q.text || q.question || '',
           options: q.options || ['', '', '', ''],
-          correct_option: q.correct_option !== undefined ? q.correct_option : 0
+          correct_option: q.correct_option !== undefined ? q.correct_option : 0,
+          marks: q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks ? Number(q.max_marks) : 10)
         })));
       }
     }
@@ -126,7 +128,14 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
           subject: data.subject || '',
           grade: data.grade || '',
         }));
-        setQuestions(data.questions);
+        if (data.questions && Array.isArray(data.questions)) {
+          setQuestions(data.questions.map((q: any) => ({
+            ...q,
+            marks: q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks ? Number(q.max_marks) : 10)
+          })));
+        } else if (data.questions) {
+          setQuestions(data.questions);
+        }
         showToast("Assignment data loaded successfully!", "success");
         setShowImport(false);
       } else {
@@ -338,7 +347,7 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
   const addQuestion = () => {
     setQuestions([
       ...questions,
-      { id: Math.random().toString(36).substr(2, 9), type: 'mcq', text: '', options: ['', '', '', ''], correct_option: 0 }
+      { id: Math.random().toString(36).substr(2, 9), type: 'mcq', text: '', options: ['', '', '', ''], correct_option: 0, marks: 10 }
     ]);
   };
 
@@ -421,6 +430,11 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
     setLoading(true);
     try {
       const resolvedClassId = form.class_id ? form.class_id : null;
+      const totalMarks = questions.reduce((sum, q) => sum + (Number(q.marks) > 0 ? Number(q.marks) : 10), 0);
+      const formattedQuestions = questions.map(q => ({
+        ...q,
+        marks: Number(q.marks) > 0 ? Number(q.marks) : 10
+      }));
 
       const { data, error } = await supabase.rpc('teacher_create_assignment', {
         p_teacher_id: teacherId,
@@ -430,9 +444,9 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
         p_class_id: resolvedClassId,
         p_class_name: form.class_name,
         p_due_date: new Date(form.due_date).toISOString(),
-        p_questions: questions,
-        p_total_marks: 100,
-        p_passing_score: 50,
+        p_questions: formattedQuestions,
+        p_total_marks: totalMarks || 100,
+        p_passing_score: Math.round((totalMarks || 100) * 0.5),
         p_allow_late: false
       });
 
@@ -744,7 +758,12 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
 
         <div className="lg:col-span-2 space-y-6">
           <div className="flex items-center justify-between px-4">
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted">Questions Builder ({questions.length})</h2>
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-xs font-black uppercase tracking-[0.2em] text-brand-muted">Questions Builder ({questions.length})</h2>
+              <span className="text-[10px] font-bold text-brand-accent bg-brand-accent/10 px-2 py-0.5 rounded-md border border-brand-accent/20">
+                Total: {questions.reduce((sum, q) => sum + (Number(q.marks) || 10), 0)} Marks
+              </span>
+            </div>
             <button 
               onClick={addQuestion}
               className="flex items-center gap-2 text-brand-accent font-black tracking-widest text-[10px] uppercase hover:opacity-80 transition-opacity"
@@ -781,28 +800,47 @@ export const TeacherAssignmentCreator: React.FC<{ onBack?: () => void, preSelect
                       <span className="font-bold text-sm text-brand-text">Question {idx + 1}</span>
                     </div>
                     
-                    <div className="flex bg-brand-bg p-1 rounded-xl border border-brand-border">
-                      <button 
-                        onClick={() => updateQuestion(q.id, { type: 'mcq' })}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'mcq' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
-                      >
-                        <LayoutDashboard size={10} />
-                        MCQ
-                      </button>
-                      <button 
-                        onClick={() => updateQuestion(q.id, { type: 'short_answer' })}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'short_answer' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
-                      >
-                        <Type size={10} />
-                        Short
-                      </button>
-                      <button 
-                        onClick={() => updateQuestion(q.id, { type: 'photo' })}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'photo' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
-                      >
-                        <ImageIcon size={10} />
-                        Photo
-                      </button>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {/* Marks input */}
+                      <div className="flex items-center gap-1.5 bg-brand-bg px-2.5 py-1 rounded-xl border border-brand-border">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">Marks:</label>
+                        <input 
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={q.marks ?? 10}
+                          onChange={e => {
+                            const val = parseInt(e.target.value);
+                            updateQuestion(q.id, { marks: isNaN(val) ? 0 : Math.max(0, val) });
+                          }}
+                          className="w-14 bg-brand-surface border border-brand-border rounded-lg px-2 py-0.5 text-xs font-black text-brand-accent text-center outline-none focus:border-brand-accent"
+                        />
+                        <span className="text-[10px] font-bold text-brand-muted">pts</span>
+                      </div>
+
+                      <div className="flex bg-brand-bg p-1 rounded-xl border border-brand-border">
+                        <button 
+                          onClick={() => updateQuestion(q.id, { type: 'mcq' })}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'mcq' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
+                        >
+                          <LayoutDashboard size={10} />
+                          MCQ
+                        </button>
+                        <button 
+                          onClick={() => updateQuestion(q.id, { type: 'short_answer' })}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'short_answer' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
+                        >
+                          <Type size={10} />
+                          Short
+                        </button>
+                        <button 
+                          onClick={() => updateQuestion(q.id, { type: 'photo' })}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${q.type === 'photo' ? 'bg-brand-accent text-white' : 'text-brand-muted hover:text-brand-text'}`}
+                        >
+                          <ImageIcon size={10} />
+                          Photo
+                        </button>
+                      </div>
                     </div>
                   </div>
 

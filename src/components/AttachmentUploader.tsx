@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Paperclip, X, FileText, Image, FileCode, AlertCircle } from 'lucide-react';
+import { Paperclip, X, FileText, Image, FileCode, AlertCircle, Camera, FolderOpen } from 'lucide-react';
 
 interface AttachmentUploaderProps {
   files: File[];
@@ -16,6 +16,7 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
   maxSizeMB = 10,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,15 +117,14 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
 
   return (
     <div className="w-full space-y-3" id="attachment-uploader">
-      {/* DRAG AND DROP AREA */}
+      {/* DRAG AND DROP AREA WITH TAKE PHOTO & GET FROM FILES OPTIONS */}
       {files.length < maxFiles && (
         <div
           onDragEnter={handleDrag}
           onDragOver={handleDrag}
           onDragLeave={handleDrag}
           onDrop={handleDrop}
-          onClick={triggerFileInput}
-          className={`relative w-full border border-dashed rounded-xl p-3 flex flex-col items-center justify-center cursor-pointer transition-all ${
+          className={`relative w-full border border-dashed rounded-xl p-3.5 flex flex-col items-center justify-center transition-all ${
             dragActive
               ? 'border-[#FF6B35] bg-[#FF6B35]/5 scale-[0.99]'
               : 'border-brand-border hover:border-[#FF6B35]/50 bg-brand-surface/50'
@@ -138,9 +138,38 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
             accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.pptx,.ppt,.docx,.doc"
             onChange={handleChange}
           />
-          <div className="flex items-center gap-2 text-brand-muted text-[11px] font-bold">
-            <Paperclip size={14} className="text-[#FF6B35]" />
-            <span>Attach file (e.g. PDF, slides, homework images, Max 10MB)</span>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*"
+            capture="environment"
+            onChange={handleChange}
+          />
+
+          <div className="flex flex-wrap items-center justify-center gap-2 w-full">
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              className="px-3 py-1.5 rounded-lg bg-brand-bg hover:bg-brand-surface border border-brand-border hover:border-[#FF6B35] text-brand-text text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-2xs"
+            >
+              <Camera size={13} className="text-[#FF6B35]" />
+              <span>Take Photo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={triggerFileInput}
+              className="px-3 py-1.5 rounded-lg bg-brand-bg hover:bg-brand-surface border border-brand-border hover:border-[#FF6B35] text-brand-text text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-2xs"
+            >
+              <FolderOpen size={13} className="text-[#FF6B35]" />
+              <span>Get from Files</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1 text-brand-muted text-[10px] font-medium mt-2">
+            <Paperclip size={11} className="text-brand-muted/70" />
+            <span>Or drag and drop files here (JPG, PNG, PDF, Max 10MB)</span>
           </div>
         </div>
       )}

@@ -12,7 +12,9 @@ import {
   ArrowLeft, 
   Loader2, 
   AlertCircle,
-  Sparkles
+  Sparkles,
+  User,
+  GraduationCap
 } from "lucide-react";
 
 const GRADES = [
@@ -32,14 +34,25 @@ export default function StudentFindAssignment({ onBack }: StudentFindAssignmentP
   const [submission, setSubmission] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const studentName = currentStudent?.name || (() => {
+  const [studentName, setStudentName] = useState(() => currentStudent?.name || (() => {
     try {
       const s = localStorage.getItem('azilearn_student');
-      return s ? JSON.parse(s).name || 'Student' : 'Student';
+      const parsed = s ? JSON.parse(s) : null;
+      return parsed?.name || '';
     } catch {
-      return 'Student';
+      return '';
     }
-  })();
+  })());
+  const [teacherName, setTeacherName] = useState('');
+  const [schoolName, setSchoolName] = useState(() => currentStudent?.school_name || (() => {
+    try {
+      const s = localStorage.getItem('azilearn_student');
+      const parsed = s ? JSON.parse(s) : null;
+      return parsed?.school_name || '';
+    } catch {
+      return '';
+    }
+  })());
 
   const handleSubmitAssignment = async (
     submittedAnswers: Record<string, any>,
@@ -184,8 +197,17 @@ export default function StudentFindAssignment({ onBack }: StudentFindAssignmentP
         <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6">
           <div className="w-full max-w-md">
             <SearchForm
-              onFound={(a) => {
+              initialStudentName={studentName}
+              initialTeacherName={teacherName}
+              initialSchoolName={schoolName}
+              onFound={(a, sName, tName, scName) => {
                 setAssignment(a);
+                if (sName) setStudentName(sName);
+                if (tName) setTeacherName(tName);
+                if (scName) setSchoolName(scName);
+                try {
+                  if (sName) sessionStorage.setItem('azilearn_student_name', sName);
+                } catch {}
                 setAnswers({});
                 setStep("take");
               }}
@@ -226,13 +248,18 @@ export default function StudentFindAssignment({ onBack }: StudentFindAssignmentP
 }
 
 interface SearchFormProps {
-  onFound: (assignment: any) => void;
+  onFound: (assignment: any, studentName: string, teacherName: string, schoolName: string) => void;
   onBack?: () => void;
+  initialStudentName?: string;
+  initialTeacherName?: string;
+  initialSchoolName?: string;
 }
 
-function SearchForm({ onFound, onBack }: SearchFormProps) {
+function SearchForm({ onFound, onBack, initialStudentName = "", initialTeacherName = "", initialSchoolName = "" }: SearchFormProps) {
   const { currentStudent } = useStudent();
-  const [schoolName, setSchoolName] = useState(() => currentStudent?.school_name || "");
+  const [studentName, setStudentName] = useState(() => initialStudentName || currentStudent?.name || "");
+  const [teacherName, setTeacherName] = useState(() => initialTeacherName || "");
+  const [schoolName, setSchoolName] = useState(() => initialSchoolName || currentStudent?.school_name || "");
   const [title, setTitle] = useState("");
   const [grade, setGrade] = useState(() => currentStudent?.grade || GRADES[6]);
   const [error, setError] = useState("");
@@ -240,6 +267,23 @@ function SearchForm({ onFound, onBack }: SearchFormProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!studentName.trim()) {
+      setError("Please enter your name before getting the assignment.");
+      return;
+    }
+    if (!teacherName.trim()) {
+      setError("Please enter your teacher's name before getting the assignment.");
+      return;
+    }
+    if (!schoolName.trim()) {
+      setError("Please enter your school name before getting the assignment.");
+      return;
+    }
+    if (!title.trim()) {
+      setError("Please enter the assignment title.");
+      return;
+    }
+
     setError("");
     setLoading(true);
 
@@ -261,7 +305,7 @@ function SearchForm({ onFound, onBack }: SearchFormProps) {
       setError(response?.message || "No assignment found matching those details.");
       return;
     }
-    onFound(response.assignment);
+    onFound(response.assignment, studentName.trim(), teacherName.trim(), schoolName.trim());
   }
 
   return (
@@ -274,14 +318,49 @@ function SearchForm({ onFound, onBack }: SearchFormProps) {
           Find Your School Assignment
         </h1>
         <p className="text-xs text-brand-muted max-w-xs mx-auto leading-relaxed">
-          Enter your school name and the exact assignment title given by your teacher.
+          Enter your name, your teacher's name, school and assignment title to get your assignment.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Student Name */}
         <div className="space-y-1">
           <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
-            School Name
+            Your Full Name *
+          </label>
+          <div className="relative">
+            <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+            <input
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              required
+              placeholder="e.g. Samuel Kiprono"
+              className="w-full pl-10 pr-3.5 py-3 rounded-2xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Teacher's Name */}
+        <div className="space-y-1">
+          <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
+            Teacher's Name *
+          </label>
+          <div className="relative">
+            <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+            <input
+              value={teacherName}
+              onChange={(e) => setTeacherName(e.target.value)}
+              required
+              placeholder="e.g. Mr. Otieno / Ms. Sarah"
+              className="w-full pl-10 pr-3.5 py-3 rounded-2xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text transition-all"
+            />
+          </div>
+        </div>
+
+        {/* School Name */}
+        <div className="space-y-1">
+          <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
+            School Name *
           </label>
           <div className="relative">
             <School className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
@@ -295,6 +374,7 @@ function SearchForm({ onFound, onBack }: SearchFormProps) {
           </div>
         </div>
 
+        {/* Grade Level */}
         <div className="space-y-1">
           <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
             Grade Level
@@ -315,9 +395,10 @@ function SearchForm({ onFound, onBack }: SearchFormProps) {
           </div>
         </div>
 
+        {/* Assignment Title */}
         <div className="space-y-1">
           <label className="text-[10px] font-black uppercase tracking-wider text-brand-muted">
-            Assignment Title
+            Assignment Title *
           </label>
           <div className="relative">
             <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
@@ -340,18 +421,18 @@ function SearchForm({ onFound, onBack }: SearchFormProps) {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !studentName.trim() || !teacherName.trim() || !schoolName.trim() || !title.trim()}
           className="w-full py-4 rounded-2xl bg-brand-accent text-white font-black uppercase tracking-wider text-xs shadow-lg shadow-brand-accent/20 hover:brightness-105 active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {loading ? (
             <>
               <Loader2 className="animate-spin" size={16} />
-              <span>Searching Records...</span>
+              <span>Verifying & Finding Assignment...</span>
             </>
           ) : (
             <>
               <Search size={16} />
-              <span>Find Assignment</span>
+              <span>Get Assignment</span>
             </>
           )}
         </button>

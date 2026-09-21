@@ -331,7 +331,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 question_id: q.id,
                 question_text: q.text || q.question || 'Question',
                 question_type: q.type || 'short_answer',
-                max_marks: q.max_marks || Math.round(100 / (questionsList.length || 1)) || 10,
+                max_marks: q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || Math.round(100 / (questionsList.length || 1)) || 10),
                 student_answer: studentAnswer
               };
             });
@@ -429,10 +429,19 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           throw new Error("Submission not found");
         }
 
+        let qMarks = 10;
+        try {
+          const asgn = assignments.find((a: any) => a.id === sub.assignment_id);
+          const qObj = asgn?.questions?.find((q: any) => (q.id || q.question_id) === questionId);
+          if (qObj) {
+            qMarks = qObj.marks !== undefined && qObj.marks !== null ? Number(qObj.marks) : (qObj.max_marks || 10);
+          }
+        } catch {}
+
         const currentGrading = { ...(sub.grading || {}) };
         currentGrading[questionId] = {
           correct: isCorrect,
-          marks_awarded: isCorrect ? 10 : 0,
+          marks_awarded: isCorrect ? qMarks : 0,
           comment: enteredComment || null
         };
 
@@ -2464,9 +2473,9 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           {q.type === 'multiple_choice' ? 'Multiple Choice' : q.type === 'photo' ? 'Photo Submission' : 'Short Answer'}
                         </span>
                       </div>
-                      {q.max_marks && (
+                      {(q.marks !== undefined || q.max_marks !== undefined) && (
                         <span className="text-[10px] font-bold text-brand-muted">
-                          {q.max_marks} marks
+                          {q.marks ?? q.max_marks} marks
                         </span>
                       )}
                     </div>

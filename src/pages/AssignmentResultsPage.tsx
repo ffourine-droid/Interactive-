@@ -97,7 +97,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
     setGradingQuestionId(qIdStr);
 
     const q = assignment?.questions?.find((x: any) => x.id?.toString() === qIdStr);
-    const maxMarks = q?.max_marks || q?.marks || q?.points || 10;
+    const maxMarks = q?.marks !== undefined && q?.marks !== null ? Number(q.marks) : (q?.max_marks || q?.points || 10);
     const marksAwarded = isCorrect ? maxMarks : 0;
 
     // Optimistically update question grades state
@@ -334,7 +334,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
     }
   };
 
-  const maxTotalMarks = assignment?.questions?.reduce((sum: number, q: any) => sum + (q.max_marks || q.marks || q.points || 10), 0) || 0;
+  const maxTotalMarks = assignment?.questions?.reduce((sum: number, q: any) => sum + (q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10)), 0) || 0;
 
   const openSubmission = async (sub: any) => {
     let freshSub = sub;
@@ -383,7 +383,8 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
       }
       const answer = selectedSubmission?.answers?.[q.id];
       const isCorrect = answer !== undefined && parseInt(answer) === q.correct_option;
-      return sum + (isCorrect ? (q.max_marks || q.marks || q.points || 10) : 0);
+      const qMax = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
+      return sum + (isCorrect ? qMax : 0);
     } else {
       const scoreState = questionGrades[q.id]?.score;
       const scoreNum = (scoreState !== undefined && scoreState !== '') ? Number(scoreState) : 0;
@@ -713,9 +714,10 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                   {assignment.questions.map((q: any, idx: number) => {
                     const submissionAnswers = selectedSubmission?.answers || {};
                     const qAnswer = submissionAnswers[q.id];
+                    const qPointVal = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
                     const currentGrade = questionGrades[q.id];
                     const isQuestionGrading = gradingQuestionId === q.id.toString();
-                    const isMarkedCorrect = currentGrade?.is_correct === true || Number(currentGrade?.score) === (q.max_marks || q.marks || q.points || 10);
+                    const isMarkedCorrect = currentGrade?.is_correct === true || Number(currentGrade?.score) === qPointVal;
                     const isMarkedIncorrect = currentGrade?.is_correct === false || currentGrade?.score === 0;
 
                     return (
@@ -730,7 +732,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                             </div>
                           </div>
                           <span className="text-xs font-black text-brand-muted shrink-0 bg-brand-bg px-2.5 py-1 rounded-lg border border-brand-border/30 font-mono">
-                            {q.max_marks || q.marks || q.points || 10} Pts
+                            {qPointVal} Pts
                           </span>
                         </div>
                         <div className="pl-12">
@@ -765,7 +767,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                                 )}
                               </div>
                               <div className="text-[10px] font-black uppercase tracking-widest text-brand-muted mt-1">
-                                Auto-Graded: <span className="text-brand-accent">{selectedSubmission.grading?.[q.id]?.marks_awarded ?? (parseInt(qAnswer) === q.correct_option ? (q.max_marks || q.marks || q.points || 10) : 0)}</span> / {q.max_marks || q.marks || q.points || 10} marks
+                                Auto-Graded: <span className="text-brand-accent">{selectedSubmission.grading?.[q.id]?.marks_awarded ?? (parseInt(qAnswer) === q.correct_option ? qPointVal : 0)}</span> / {qPointVal} marks
                               </div>
                             </div>
                           ) : (
@@ -793,7 +795,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                                     ) : (
                                       <CheckCircle2 size={14} className={isMarkedCorrect ? 'text-white' : 'text-emerald-500'} />
                                     )}
-                                    Correct (+{q.max_marks || q.marks || q.points || 10})
+                                    Correct (+{qPointVal})
                                   </button>
                                   <button
                                     type="button"
@@ -823,7 +825,7 @@ export default function AssignmentResultsPage({ assignmentId, onBack }: Assignme
                                       ? 'bg-red-500/10 text-red-600' 
                                       : 'bg-brand-surface text-brand-muted border border-brand-border'
                                   }`}>
-                                    {isMarkedCorrect ? (q.max_marks || q.marks || q.points || 10) : isMarkedIncorrect ? 0 : '—'} / {q.max_marks || q.marks || q.points || 10}
+                                    {isMarkedCorrect ? qPointVal : isMarkedIncorrect ? 0 : '—'} / {qPointVal}
                                   </span>
                                 </div>
                               </div>

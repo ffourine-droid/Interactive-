@@ -135,13 +135,18 @@ export const parseQuestions = (questionsData: any): Question[] => {
       : (typeStr.includes('photo') || typeStr.includes('image') || typeStr.includes('upload')) ? 'photo'
       : 'short_answer';
 
+    const questionMarks = q.marks !== undefined && q.marks !== null 
+      ? Number(q.marks) 
+      : (q.max_marks !== undefined && q.max_marks !== null ? Number(q.max_marks) : (Number(q.points) || 10));
+
     return {
       id: q.id || `q_${idx}`,
       text: q.text || q.question || q.prompt || q.question_text || `Question ${idx + 1}`,
       type: normalizedType,
       options: Array.isArray(opts) ? opts : [],
       correct_option: correctOpt,
-      max_marks: Number(q.max_marks || q.marks || q.points || 10) || 10
+      marks: questionMarks,
+      max_marks: questionMarks
     };
   });
 };
@@ -663,7 +668,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
     parsedQuestions.forEach((q, idx) => {
       const qId = q.id || `q_${idx}`;
-      const defaultMax = q.max_marks || q.marks || q.points || 10;
+      const defaultMax = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
       const studentAns = extractStudentAnswer(submission.answers, q, idx);
 
       if (q.type === 'mcq') {
@@ -702,7 +707,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
     const parsedQuestions = parseQuestions(activeAssignmentForModal.questions);
     const q = parsedQuestions.find((x, idx) => (x.id || `q_${idx}`) === qId);
-    const maxMarks = q?.max_marks || q?.marks || q?.points || 10;
+    const maxMarks = q?.marks !== undefined && q?.marks !== null ? Number(q.marks) : (q?.max_marks || q?.points || 10);
     const marksAwarded = isCorrect ? maxMarks : 0;
     const currentComment = questionGrades[qId]?.comment || '';
 
@@ -797,7 +802,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
     parsedQuestions.forEach((q, idx) => {
       const qId = q.id || `q_${idx}`;
-      const qMax = q.max_marks || q.marks || q.points || 10;
+      const qMax = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
       maxScore += qMax;
 
       const gradeEntry = questionGrades[qId];
@@ -823,7 +828,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
 
       parsedQuestions.forEach((q, idx) => {
         const qId = q.id || `q_${idx}`;
-        const defaultMax = q.max_marks || q.marks || q.points || 10;
+        const defaultMax = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
         const entry = questionGrades[qId];
         const scoreVal = (entry && entry.score !== '') ? Number(entry.score) : 0;
         
@@ -1440,7 +1445,7 @@ export const TeacherBroadcastMarking: React.FC<TeacherBroadcastMarkingProps> = (
                 <div className="space-y-6">
                   {parseQuestions(activeAssignmentForModal.questions).map((q, qIdx) => {
                     const qId = q.id || `q_${qIdx}`;
-                    const qMax = q.max_marks || q.marks || q.points || 10;
+                    const qMax = q.marks !== undefined && q.marks !== null ? Number(q.marks) : (q.max_marks || q.points || 10);
                     const studentAns = extractStudentAnswer(activeSubmission.answers, q, qIdx);
                     const currentGrade = questionGrades[qId] || { score: '', comment: '' };
                     const isMarkedCorrect = currentGrade.is_correct === true || (currentGrade.is_correct === undefined && currentGrade.score !== '' && Number(currentGrade.score) > 0);

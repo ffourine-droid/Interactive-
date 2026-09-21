@@ -20,6 +20,7 @@ import {
   Check
 } from 'lucide-react';
 import { PhotoZoomModal } from './PhotoZoomModal';
+import { StudentPhotoInput } from './StudentPhotoInput';
 import { AssignmentScratchpad } from './AssignmentScratchpad';
 import { getDueStatusInfo } from './AssignmentCard';
 
@@ -164,6 +165,31 @@ export const StudentAssignmentTaking: React.FC<StudentAssignmentTakingProps> = (
     setFilePreviews(prev => ({ ...prev, [questionId]: previewUrl }));
     setFiles(prev => ({ ...prev, [questionId]: file }));
     handleAnswerChange(questionId, file.name, false);
+  };
+
+  const handleSelectPhotoFile = (questionId: string, file: File) => {
+    const previewUrl = URL.createObjectURL(file);
+    setFilePreviews(prev => ({ ...prev, [questionId]: previewUrl }));
+    setFiles(prev => ({ ...prev, [questionId]: file }));
+    handleAnswerChange(questionId, file.name, false);
+  };
+
+  const handleRemovePhoto = (questionId: string) => {
+    setFiles(prev => {
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
+    setFilePreviews(prev => {
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
+    setAnswers(prev => {
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
   };
 
   // Handle Question Skip
@@ -447,7 +473,7 @@ export const StudentAssignmentTaking: React.FC<StudentAssignmentTakingProps> = (
 
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase tracking-wider bg-brand-bg border border-brand-border px-2.5 py-1 rounded-lg text-brand-muted font-mono">
-                    {currentQuestion.max_marks || currentQuestion.marks || currentQuestion.points || 10} Pts
+                    {currentQuestion.marks !== undefined && currentQuestion.marks !== null ? currentQuestion.marks : (currentQuestion.max_marks || currentQuestion.points || 10)} Pts
                   </span>
 
                   {skippedQuestions.has(currentQuestion.id) ? (
@@ -533,90 +559,16 @@ export const StudentAssignmentTaking: React.FC<StudentAssignmentTakingProps> = (
 
                 {/* 3. Photo Upload Work */}
                 {currentQuestion.type === 'photo' && (
-                  <div className="space-y-3">
-                    {files[currentQuestion.id] || filePreviews[currentQuestion.id] ? (
-                      <div className="p-4 bg-emerald-500/5 border-2 border-emerald-500/20 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 w-full sm:w-auto">
-                          {filePreviews[currentQuestion.id] && (
-                            <img
-                              src={filePreviews[currentQuestion.id]}
-                              alt="Thumbnail"
-                              className="w-16 h-16 rounded-xl object-cover border border-emerald-500/30 cursor-pointer shadow-xs"
-                              onClick={() => setPreviewZoomImage(filePreviews[currentQuestion.id])}
-                            />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 block">
-                              Work Attached
-                            </span>
-                            <p className="text-xs font-bold text-brand-text truncate">
-                              {files[currentQuestion.id]?.name || 'Photo Work'}
-                            </p>
-                            <p className="text-[10px] text-brand-muted">
-                              {files[currentQuestion.id] ? `${Math.round(files[currentQuestion.id].size / 1024)} KB` : 'Ready'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                          {filePreviews[currentQuestion.id] && (
-                            <button
-                              type="button"
-                              onClick={() => setPreviewZoomImage(filePreviews[currentQuestion.id])}
-                              className="px-3 py-1.5 rounded-xl border border-brand-border bg-brand-surface text-xs font-bold text-brand-text hover:bg-brand-bg flex items-center gap-1.5 transition-colors"
-                            >
-                              <Eye size={13} />
-                              Preview
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFiles(prev => {
-                                const next = { ...prev };
-                                delete next[currentQuestion.id];
-                                return next;
-                              });
-                              setFilePreviews(prev => {
-                                const next = { ...prev };
-                                delete next[currentQuestion.id];
-                                return next;
-                              });
-                              setAnswers(prev => {
-                                const next = { ...prev };
-                                delete next[currentQuestion.id];
-                                return next;
-                              });
-                            }}
-                            className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-colors"
-                            title="Remove photo"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="w-full flex flex-col items-center justify-center gap-3 py-8 border-2 border-dashed border-brand-border hover:border-brand-accent/50 rounded-2xl cursor-pointer bg-brand-bg/50 hover:bg-brand-accent/5 transition-all group">
-                        <div className="w-12 h-12 rounded-2xl bg-brand-accent/10 text-brand-accent flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs">
-                          <Camera size={24} />
-                        </div>
-                        <div className="text-center space-y-0.5">
-                          <p className="text-xs font-bold text-brand-text group-hover:text-brand-accent transition-colors">
-                            Snap or Upload Photo of Written Work
-                          </p>
-                          <p className="text-[10px] text-brand-muted font-medium">
-                            Take a photo with your phone camera or choose from gallery
-                          </p>
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={(e) => handlePhotoUpload(currentQuestion.id, e)}
-                        />
-                      </label>
-                    )}
+                  <div className="pt-1">
+                    <StudentPhotoInput
+                      id={`photo-input-${currentQuestion.id}`}
+                      file={files[currentQuestion.id]}
+                      previewUrl={filePreviews[currentQuestion.id]}
+                      onSelectFile={(f) => handleSelectPhotoFile(currentQuestion.id, f)}
+                      onRemove={() => handleRemovePhoto(currentQuestion.id)}
+                      onZoomPreview={(url) => setPreviewZoomImage(url)}
+                      compact={false}
+                    />
                   </div>
                 )}
               </div>
@@ -715,7 +667,7 @@ export const StudentAssignmentTaking: React.FC<StudentAssignmentTakingProps> = (
 
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-black uppercase text-brand-muted bg-brand-bg px-2 py-0.5 rounded-md border border-brand-border">
-                        {q.max_marks || q.marks || q.points || 10} Pts
+                        {q.marks !== undefined && q.marks !== null ? q.marks : (q.max_marks || q.points || 10)} Pts
                       </span>
                       {isSkipped ? (
                         <span className="text-[9px] font-black uppercase text-amber-700 bg-amber-500/10 px-2 py-0.5 rounded-md">
@@ -779,38 +731,16 @@ export const StudentAssignmentTaking: React.FC<StudentAssignmentTakingProps> = (
 
                   {/* Photo upload */}
                   {q.type === 'photo' && (
-                    <div>
-                      {files[q.id] || filePreviews[q.id] ? (
-                        <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <Camera size={16} className="text-emerald-600" />
-                            <span className="font-bold text-emerald-700">{files[q.id]?.name || 'Work attached'}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFiles(prev => { const n = { ...prev }; delete n[q.id]; return n; });
-                              setFilePreviews(prev => { const n = { ...prev }; delete n[q.id]; return n; });
-                              setAnswers(prev => { const n = { ...prev }; delete n[q.id]; return n; });
-                            }}
-                            className="text-rose-500 hover:text-rose-700 font-bold"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="w-full flex items-center justify-center gap-2 p-4 border border-dashed border-brand-border rounded-xl cursor-pointer hover:bg-brand-bg text-xs font-bold text-brand-muted hover:text-brand-accent">
-                          <Camera size={16} />
-                          <span>Attach Photo of Handwritten Work</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="hidden"
-                            onChange={(e) => handlePhotoUpload(q.id, e)}
-                          />
-                        </label>
-                      )}
+                    <div className="pt-1">
+                      <StudentPhotoInput
+                        id={`photo-input-list-${q.id}`}
+                        file={files[q.id]}
+                        previewUrl={filePreviews[q.id]}
+                        onSelectFile={(f) => handleSelectPhotoFile(q.id, f)}
+                        onRemove={() => handleRemovePhoto(q.id)}
+                        onZoomPreview={(url) => setPreviewZoomImage(url)}
+                        compact={true}
+                      />
                     </div>
                   )}
 

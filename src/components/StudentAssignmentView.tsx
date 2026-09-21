@@ -138,8 +138,12 @@ export const StudentAssignmentView: React.FC<{
   }, [currentStudent, isInitialized]);
 
   useEffect(() => {
+    // STRICT: No assignment should load before a student puts their information (name, teacher, school).
+    // This prevents loading all assignments from the database.
     if (step === 'entry' && isInitialized && !preSelectedAssignmentId) {
-      fetchAssignments();
+      if (studentName.trim() && searchTeacher.trim() && searchSchool.trim()) {
+        fetchAssignments();
+      }
     }
   }, [step, isInitialized, preSelectedAssignmentId]);
 
@@ -150,27 +154,22 @@ export const StudentAssignmentView: React.FC<{
   }, [preSelectedAssignmentId, step]);
 
   const fetchAssignments = async () => {
+    // STRICT: No assignment should load before a student puts their information.
+    // This enables the app to load only the searched school assignment instead of all assignments in the database.
+    if (!studentName.trim() || !searchTeacher.trim() || !searchSchool.trim()) {
+      setAssignments([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const sId = currentStudent?.student_id || studentId;
-      const hasSearchFilters = searchTeacher.trim() || searchSchool.trim() || searchTitle.trim();
-      
-      // If student id exists and no explicit search filter is active, fetch registered student's assignments
-      if (sId && sId.length === 36 && !hasSearchFilters) { 
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('student_get_assignments', {
-          p_student_id: sId
-        });
-
-        if (!rpcErr && rpcRes && rpcRes.success) {
-          setAssignments(rpcRes.assignments || []);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Explicit search or fallback with filters
+      // Search only for the searched school (and teacher if provided)
       const data = await assignmentService.searchAssignments(searchGrade, searchTeacher, searchSchool, searchTitle);
       setAssignments(data || []);
+      if (!data || data.length === 0) {
+        showToast(`No assignments found for ${searchSchool.trim()} (${searchGrade}).`, "info");
+      }
     } catch (err: any) {
       showToast(err.message || "Failed to load assignments.", "error");
     } finally {
@@ -179,6 +178,19 @@ export const StudentAssignmentView: React.FC<{
   };
 
   const handleDirectSchoolFind = async (school: string, title: string, grade: string) => {
+    if (!studentName.trim()) {
+      showToast("Please write your name before getting the assignment.", "error");
+      return;
+    }
+    if (!searchTeacher.trim()) {
+      showToast("Please write your teacher's name before getting the assignment.", "error");
+      return;
+    }
+    if (!school.trim()) {
+      showToast("Please write your school name before getting the assignment.", "error");
+      return;
+    }
+
     setDirectFindLoading(true);
     setDirectFindError(null);
     try {
@@ -207,7 +219,15 @@ export const StudentAssignmentView: React.FC<{
 
   const handleJoinAssignment = async (id: string) => {
     if (!studentName.trim()) {
-      showToast("Please enter your name first.", "error");
+      showToast("Please write your name before getting the assignment.", "error");
+      return;
+    }
+    if (!searchTeacher.trim()) {
+      showToast("Please write your teacher's name before getting the assignment.", "error");
+      return;
+    }
+    if (!searchSchool.trim()) {
+      showToast("Please write your school before getting the assignment.", "error");
       return;
     }
 
