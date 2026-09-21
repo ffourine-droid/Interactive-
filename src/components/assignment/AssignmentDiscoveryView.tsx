@@ -16,7 +16,8 @@ import {
   FileText,
   Bookmark,
   AlertCircle,
-  GraduationCap
+  GraduationCap,
+  ChevronDown
 } from 'lucide-react';
 import { AssignmentCard, AssignmentItem } from './AssignmentCard';
 
@@ -79,6 +80,13 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
   const [directTitle, setDirectTitle] = useState('');
   const [directGrade, setDirectGrade] = useState(searchGrade || 'Grade 7');
 
+  // Keep directGrade in sync with searchGrade
+  React.useEffect(() => {
+    if (searchGrade) {
+      setDirectGrade(searchGrade);
+    }
+  }, [searchGrade]);
+
   // Extract distinct subjects for quick pills
   const availableSubjects = Array.from(new Set(assignments.map(a => a.subject).filter(Boolean)));
 
@@ -122,9 +130,22 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
                   placeholder="Enter your full name *"
                   className="font-display font-black text-base text-brand-text bg-transparent border-b border-dashed border-brand-border hover:border-brand-accent focus:border-brand-accent outline-none pb-0.5 max-w-[200px]"
                 />
-                <span className="text-[11px] font-bold text-brand-muted bg-brand-bg px-2 py-0.5 rounded-md border border-brand-border">
-                  {searchGrade}
-                </span>
+                <div className="relative inline-flex items-center">
+                  <select
+                    id="student-profile-grade-select"
+                    value={searchGrade}
+                    onChange={(e) => setSearchGrade(e.target.value)}
+                    className="text-[11px] font-bold text-brand-accent bg-brand-bg pl-2 pr-6 py-1 rounded-lg border border-brand-border hover:border-brand-accent focus:border-brand-accent outline-none appearance-none cursor-pointer shadow-2xs transition-colors"
+                    title="Switch your Grade level"
+                  >
+                    {GRADES.map((g) => (
+                      <option key={g} value={g} className="bg-brand-surface text-brand-text font-bold">
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-1.5 text-brand-muted pointer-events-none" />
+                </div>
               </div>
             </div>
           </div>
@@ -144,7 +165,7 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
         </div>
 
         {/* Classroom details required before getting assignments */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-brand-border/60">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-brand-border/60">
           <div className="relative">
             <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={14} />
             <input
@@ -165,6 +186,23 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
               className="w-full pl-8 pr-3 py-2 rounded-xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text placeholder:text-brand-muted/70 transition-all"
             />
           </div>
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={14} />
+            <select
+              id="student-classroom-grade-select"
+              value={searchGrade}
+              onChange={(e) => setSearchGrade(e.target.value)}
+              className="w-full pl-8 pr-7 py-2 rounded-xl bg-brand-bg border border-brand-border focus:border-brand-accent outline-none text-xs font-semibold text-brand-text appearance-none cursor-pointer transition-all"
+              title="Select Grade Level"
+            >
+              {GRADES.map(g => (
+                <option key={g} value={g} className="bg-brand-surface text-brand-text font-bold">
+                  {g}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-muted pointer-events-none" />
+          </div>
         </div>
 
         {!isProfileComplete ? (
@@ -176,7 +214,7 @@ export const AssignmentDiscoveryView: React.FC<AssignmentDiscoveryViewProps> = (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-brand-border/60">
             <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
               <CheckCircle2 size={13} />
-              <span>Ready to search assignments for {searchSchool}</span>
+              <span>Ready to search assignments for {searchSchool} ({searchGrade})</span>
             </span>
             <button
               type="button"

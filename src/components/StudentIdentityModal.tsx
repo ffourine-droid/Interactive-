@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, ArrowRight, X, Loader2, BookOpen, GraduationCap, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from './Toast';
@@ -21,10 +21,29 @@ export const StudentIdentityModal: React.FC<StudentIdentityModalProps> = ({
   classId = null
 }) => {
   const { showToast } = useToast();
-  const { identifyStudent } = useStudent();
+  const { identifyStudent, currentStudent } = useStudent();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
-  const [selectedGrade, setSelectedGrade] = useState(grade);
+  const [selectedGrade, setSelectedGrade] = useState(() => {
+    if (grade && grade !== 'Grade 7') return grade;
+    if (currentStudent?.grade) return currentStudent.grade;
+    try {
+      const studentStr = localStorage.getItem('azilearn_student');
+      if (studentStr) {
+        const parsed = JSON.parse(studentStr);
+        if (parsed.grade) return parsed.grade;
+      }
+    } catch {}
+    return grade || 'Grade 7';
+  });
+
+  useEffect(() => {
+    if (grade && grade !== 'Grade 7') {
+      setSelectedGrade(grade);
+    } else if (currentStudent?.grade) {
+      setSelectedGrade(currentStudent.grade);
+    }
+  }, [grade, currentStudent?.grade]);
   
   // Modal sub-steps: 'INPUT' | 'NOT_FOUND' | 'PICKER'
   const [modalStep, setModalStep] = useState<'INPUT' | 'NOT_FOUND' | 'PICKER'>('INPUT');

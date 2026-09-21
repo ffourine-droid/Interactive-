@@ -20,6 +20,7 @@ interface StudentContextType {
   identifyStudent: (name: string, grade: string) => Promise<Student>;
   logoutStudent: () => void;
   refreshStudent: () => Promise<void>;
+  updateStudentGrade: (grade: string) => void;
 }
 
 const StudentContext = createContext<StudentContextType | undefined>(undefined);
@@ -133,6 +134,41 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch {}
   }, [currentStudent?.name, currentStudent?.class_id, currentStudent?.grade]);
 
+  const updateStudentGrade = useCallback((newGrade: string) => {
+    if (!newGrade) return;
+    setCurrentStudent(prev => {
+      const updated: Student = prev ? {
+        ...prev,
+        grade: newGrade
+      } : {
+        student_id: 'guest-' + Math.random().toString(36).substring(2, 9),
+        name: '',
+        grade: newGrade,
+        school_name: '',
+        class_id: null,
+        index_number: '',
+        total_xp: 0
+      };
+
+      try {
+        const cached = localStorage.getItem('azilearn_student');
+        const parsed = cached ? JSON.parse(cached) : {};
+        localStorage.setItem('azilearn_student', JSON.stringify({
+          ...parsed,
+          id: updated.student_id,
+          name: updated.name || parsed.name || '',
+          grade: newGrade,
+          school_name: updated.school_name || parsed.school_name || '',
+          class_id: updated.class_id || parsed.class_id || null
+        }));
+      } catch (e) {
+        console.warn('Failed to update student grade in storage:', e);
+      }
+
+      return updated;
+    });
+  }, []);
+
   return (
     <StudentContext.Provider value={{
       currentStudent,
@@ -141,7 +177,8 @@ export const StudentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsIdentityModalOpen,
       identifyStudent,
       logoutStudent,
-      refreshStudent
+      refreshStudent,
+      updateStudentGrade
     }}>
       {children}
     </StudentContext.Provider>

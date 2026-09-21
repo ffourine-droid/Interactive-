@@ -163,6 +163,8 @@ function AppContent() {
                 onBack={() => setCurrentPage('home')} 
                 onExamsClick={() => setCurrentPage('student-exams')}
                 preSelectedAssignmentId={currentPageProps?.preSelectedAssignmentId}
+                initialGrade={selectedClass || undefined}
+                onGradeChange={(grade) => setSelectedClass(grade)}
               />
             </motion.div>
           </Suspense>

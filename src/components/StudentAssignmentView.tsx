@@ -39,9 +39,11 @@ interface Assignment {
 export const StudentAssignmentView: React.FC<{ 
   onBack: () => void, 
   onExamsClick?: () => void,
-  preSelectedAssignmentId?: string 
-}> = ({ onBack, onExamsClick, preSelectedAssignmentId }) => {
-  const { currentStudent } = useStudent();
+  preSelectedAssignmentId?: string,
+  initialGrade?: string,
+  onGradeChange?: (grade: string) => void
+}> = ({ onBack, onExamsClick, preSelectedAssignmentId, initialGrade, onGradeChange }) => {
+  const { currentStudent, updateStudentGrade } = useStudent();
   const [step, setStep] = useState<'entry' | 'taking' | 'success'>('entry');
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchSchool, setSearchSchool] = useState(() => {
@@ -71,6 +73,7 @@ export const StudentAssignmentView: React.FC<{
   });
 
   const [searchGrade, setSearchGrade] = useState(() => {
+    if (initialGrade) return initialGrade;
     if (currentStudent?.grade) return currentStudent.grade;
     try {
       const studentStr = localStorage.getItem('azilearn_student');
@@ -118,7 +121,11 @@ export const StudentAssignmentView: React.FC<{
       if (currentStudent) {
         setStudentName(currentStudent.name || '');
         setStudentId(currentStudent.student_id || null);
-        setSearchGrade(currentStudent.grade || 'Grade 7');
+        if (initialGrade) {
+          setSearchGrade(initialGrade);
+        } else if (currentStudent.grade) {
+          setSearchGrade(currentStudent.grade);
+        }
         setSearchSchool(currentStudent.school_name || '');
         setIsInitialized(true);
       } else {
@@ -128,14 +135,61 @@ export const StudentAssignmentView: React.FC<{
             const parsed = JSON.parse(studentStr);
             setStudentName(parsed.name || '');
             setStudentId(parsed.id || null);
-            setSearchGrade(parsed.grade || 'Grade 7');
+            if (initialGrade) {
+              setSearchGrade(initialGrade);
+            } else if (parsed.grade) {
+              setSearchGrade(parsed.grade);
+            }
             setSearchSchool(parsed.school_name || '');
           } catch {}
+        } else if (initialGrade) {
+          setSearchGrade(initialGrade);
         }
         setIsInitialized(true);
       }
     }
-  }, [currentStudent, isInitialized]);
+  }, [currentStudent, isInitialized, initialGrade]);
+
+  useEffect(() => {
+    if (initialGrade && initialGrade !== searchGrade) {
+      setSearchGrade(initialGrade);
+    }
+  }, [initialGrade]);
+
+  const handleGradeChange = (newGrade: string) => {
+    if (!newGrade) return;
+    setSearchGrade(newGrade);
+    if (updateStudentGrade) {
+      updateStudentGrade(newGrade);
+    }
+    if (onGradeChange) {
+      onGradeChange(newGrade);
+    }
+    try {
+      const studentStr = localStorage.getItem('azilearn_student');
+      const parsed = studentStr ? JSON.parse(studentStr) : {};
+      parsed.grade = newGrade;
+      localStorage.setItem('azilearn_student', JSON.stringify(parsed));
+    } catch {}
+
+    // If teacher and school are filled, re-query assignments for this newly selected grade immediately!
+    if (studentName.trim() && searchTeacher.trim() && searchSchool.trim()) {
+      setLoading(true);
+      assignmentService.searchAssignments(newGrade, searchTeacher, searchSchool, searchTitle)
+        .then((data) => {
+          setAssignments(data || []);
+          if (!data || data.length === 0) {
+            showToast(`No assignments found for ${searchSchool.trim()} (${newGrade}).`, "info");
+          }
+        })
+        .catch((err: any) => {
+          showToast(err.message || "Failed to load assignments.", "error");
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  };
 
   useEffect(() => {
     // STRICT: No assignment should load before a student puts their information (name, teacher, school).
@@ -765,7 +819,7 @@ export const StudentAssignmentView: React.FC<{
           searchSchool={searchSchool}
           setSearchSchool={setSearchSchool}
           searchGrade={searchGrade}
-          setSearchGrade={setSearchGrade}
+          setSearchGrade={handleGradeChange}
           onSearch={fetchAssignments}
           onDirectSchoolFind={handleDirectSchoolFind}
           directFindLoading={directFindLoading}

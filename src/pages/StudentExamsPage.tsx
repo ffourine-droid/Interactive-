@@ -19,24 +19,28 @@ interface StudentExamsPageProps {
 
 export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7', classId }: StudentExamsPageProps) {
   const { showToast } = useToast();
-  const { currentStudent, setIsIdentityModalOpen } = useStudent();
+  const { currentStudent, setIsIdentityModalOpen, updateStudentGrade } = useStudent();
   const [loading, setLoading] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [attempts, setAttempts] = useState<Record<string, ExamAttempt>>({});
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchSchool, setSearchSchool] = useState('');
   const [searchCode, setSearchCode] = useState('');
-  const [searchGrade, setSearchGrade] = useState(grade);
+  const [searchGrade, setSearchGrade] = useState(() => {
+    return currentStudent?.grade || grade;
+  });
   const [filter, setFilter] = useState('all');
   const [pendingExamId, setPendingExamId] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
   // Initialize searchGrade from student grade once when loaded
   useEffect(() => {
-    if (currentStudent?.grade) {
+    if (grade && grade !== 'Grade 7') {
+      setSearchGrade(grade);
+    } else if (currentStudent?.grade) {
       setSearchGrade(currentStudent.grade);
     }
-  }, [currentStudent?.grade]);
+  }, [grade, currentStudent?.grade]);
 
   useEffect(() => {
     fetchExams();
@@ -169,7 +173,11 @@ export default function StudentExamsPage({ onBack, onStartExam, grade = 'Grade 7
               <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted/40 group-focus-within:text-brand-accent transition-colors" size={18} />
               <select
                 value={searchGrade}
-                onChange={e => setSearchGrade(e.target.value)}
+                onChange={e => {
+                  const g = e.target.value;
+                  setSearchGrade(g);
+                  if (updateStudentGrade) updateStudentGrade(g);
+                }}
                 className="w-full bg-brand-surface border border-brand-border rounded-2xl py-4 pl-12 pr-4 text-sm font-bold focus:border-brand-accent outline-none transition-all appearance-none text-brand-text"
               >
                 {['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => (

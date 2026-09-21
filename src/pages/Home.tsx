@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, FlaskConical, Loader2, AlertCircle, 
-  ChevronLeft, ChevronRight, Settings, Clock, 
+  ChevronLeft, ChevronRight, ChevronDown, Settings, Clock, 
   FileText, PlayCircle, Mic2, X, Download, 
   BarChart3, Plus, Moon, Sun, Trash2, Smartphone, 
   ExternalLink, CheckCircle2, XCircle, MoreHorizontal,
@@ -99,7 +99,7 @@ export default function Home({
   const lastRequestId = useRef(0);
   const { showToast } = useToast();
 
-  const { currentStudent: studentObj, logoutStudent } = useStudent();
+  const { currentStudent: studentObj, logoutStudent, updateStudentGrade } = useStudent();
   const student = studentObj ? {
     id: studentObj.student_id,
     name: studentObj.name,
@@ -114,6 +114,9 @@ export default function Home({
 
   const handleClassSelect = (grade: string) => {
     setSelectedClass(grade);
+    if (updateStudentGrade) {
+      updateStudentGrade(grade);
+    }
     setCategory(null);
     setHasSearched(false);
     setSearchQuery('');
@@ -771,9 +774,24 @@ export default function Home({
                     >
                       <ChevronLeft size={14} />
                     </button>
-                    <div>
-                      <h2 className="text-base font-black tracking-tight leading-none">{selectedClass}</h2>
-                      <p className="text-[8px] font-black text-brand-muted uppercase tracking-wider whitespace-nowrap">Study Materials</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="relative inline-flex items-center">
+                        <select
+                          id="home-class-header-select"
+                          value={selectedClass || 'Grade 7'}
+                          onChange={(e) => handleClassSelect(e.target.value)}
+                          className="font-black text-sm tracking-tight text-brand-text bg-brand-bg/70 hover:bg-brand-bg border border-brand-border/80 hover:border-brand-accent rounded-lg pl-2 pr-6 py-0.5 outline-none cursor-pointer appearance-none transition-colors"
+                          title="Switch Grade Level"
+                        >
+                          {['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => (
+                            <option key={g} value={g} className="bg-brand-surface text-brand-text font-bold">
+                              {g}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown size={12} className="absolute right-1.5 text-brand-muted pointer-events-none" />
+                      </div>
+                      <p className="text-[8px] font-black text-brand-muted uppercase tracking-wider whitespace-nowrap mt-0.5">Study Materials</p>
                     </div>
                   </div>
 
